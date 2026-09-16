@@ -1,0 +1,13 @@
+﻿vendor/
+node_modules/
+.env
+*.tmp
+*.bak
+~$*
+.DS_Store
+Thumbs.db
+storage/logs/*.log
+storage/cache/*
+00-input/
+reference/
+.osp/
