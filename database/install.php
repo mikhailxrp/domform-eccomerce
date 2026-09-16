@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 /**
  * Установка БД — создание таблиц.
- * Запускать один раз через браузер: /install-temp.php
- * После выполнения — удалить install-temp.php из public/
+ * Запускать один раз из консоли: php database/install.php
  *
  * Схема соответствует .docs/database.md — при добавлении своей таблицы
  * сначала опиши её там, потом продублируй сюда в порядке зависимостей
@@ -26,7 +25,36 @@ $pdo->exec("
         password_hash VARCHAR(255) NOT NULL,
         phone         VARCHAR(20) NULL,
         role          ENUM('customer', 'manager', 'admin') NOT NULL DEFAULT 'customer',
+        is_blocked    TINYINT(1) NOT NULL DEFAULT 0,
         created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS remember_tokens (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        user_id    INT NOT NULL,
+        selector   CHAR(24) NOT NULL UNIQUE,
+        token_hash CHAR(64) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_remember_tokens_user (user_id),
+        CONSTRAINT fk_remember_tokens_user
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS password_resets (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        user_id    INT NOT NULL,
+        token_hash CHAR(64) NOT NULL UNIQUE,
+        expires_at DATETIME NOT NULL,
+        used_at    DATETIME NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_password_resets_user (user_id),
+        CONSTRAINT fk_password_resets_user
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
@@ -51,9 +79,11 @@ $pdo->exec("
         slug        VARCHAR(220) NOT NULL UNIQUE,
         description TEXT NULL,
         is_active   TINYINT(1) NOT NULL DEFAULT 1,
+        is_featured TINYINT(1) NOT NULL DEFAULT 0,
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_products_active (is_active),
+        KEY idx_products_featured (is_featured),
         FULLTEXT KEY ft_products_name_description (name, description)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
@@ -258,6 +288,30 @@ $pdo->exec("
         KEY idx_payment_logs_order (order_id),
         CONSTRAINT fk_payment_logs_order
             FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS content_pages (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        slug       VARCHAR(60) NOT NULL UNIQUE,
+        title      VARCHAR(200) NOT NULL,
+        body       TEXT NOT NULL,
+        image_path VARCHAR(255) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS banners (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        image_path VARCHAR(255) NOT NULL,
+        title      VARCHAR(200) NULL,
+        link       VARCHAR(255) NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        is_active  TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_banners_active_sort (is_active, sort_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
