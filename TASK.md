@@ -1,112 +1,75 @@
 # Current Task
 
 ## Фаза
-Phase 0 — Фундамент (`.docs/phases/phase-0.md`, Таск 1)
+Phase 0 — Фундамент (`.docs/phases/phase-0.md`, Таск 2)
 
 ## Задача
-Привести `database/install.php` в соответствие с `.docs/database.md`
-(4 пропущенных ревью изменения + 2 новые таблицы для `FR-AUTH-003/004`)
-и добавить `database/seed.php`, создающий первого Администратора из `.env`.
+Развернуть базовый layout витрины на движке роутера/шаблонов проекта,
+используя вёрстку и статику купленной темы (`00-input/design/index.html`),
+без единой правки бизнес-логики.
 
 ## Scope — что трогаем
 
-- [x] `database/install.php` — изменить:
-  - `users`: `+ is_blocked TINYINT(1) NOT NULL DEFAULT 0` (`ADR-025`)
-  - `products`: `+ is_featured TINYINT(1) NOT NULL DEFAULT 0`
-    + `KEY idx_products_featured (is_featured)` (`ADR-024`)
-  - новые таблицы сразу после `users`: `remember_tokens`, `password_resets`
-  - новые таблицы в конце: `content_pages` (`ADR-022`), `banners` (`ADR-023`)
-    — структура строго по `database.md`
-  - docblock: запуск через CLI `php database/install.php`, не
-    «`/install-temp.php` через браузер»
-- [x] `.docs/database.md` — изменить: разделы `password_resets` и
-  `remember_tokens` в том же формате, что остальные (колонка | тип |
-  назначение, индексы, WHY), карта связей (`users` ──< обе,
-  `ON DELETE CASCADE`)
-- [x] `.docs/planning-log.md` — изменить: `ADR-027` (`password_resets`),
-  `ADR-028` (`remember_tokens`, selector/validator вместо одного токена)
-- [x] `database/seed.php` — создать: читает `ADMIN_NAME` / `ADMIN_EMAIL` /
-  `ADMIN_PASSWORD` через `env()`, валидирует (email, пароль ≥ 8),
-  `password_hash()`, вставляет `role='admin'`, `phone NULL`; если email
-  уже есть — сообщение и выход без изменений
-- [x] `.env.example` — изменить: блок `ADMIN_*` (пустые значения),
-  `MAIL_DRIVER=log`
+- [x] `public/assets/{css,js,img,fonts}` — создать: перенос
+      `00-input/design/assets/` (jQuery, `main.js`/`plugins.js`, стили,
+      шрифты, картинки) + пустой `public/assets/js/app.js` под свой код
+      (IIFE-заглушка). Каталог `scss/` из темы не переносился —
+      исходники SCSS не используются рантаймом (проект без сборщиков) и
+      ничем не подключаются
+- [x] `src/Views/layout/header.php` — создать: `<head>` (локальные
+      `<link>`, без CDN), шапка/меню темы, ссылки «Вход»/«Регистрация»
+      (пока без учёта состояния логина — появится в Таске 3/4)
+- [x] `src/Views/layout/footer.php` — создать: подвал темы, подключение
+      JS в порядке jQuery → plugins → main.js → app.js
+- [x] `src/Views/components/flash.php` — создать: рендер
+      `getFlash('success')` / `getFlash('error')` (обе функции уже есть
+      в `src/Core/functions.php`)
+- [x] `src/Controllers/HomeController.php` — создать: `index()`, только
+      `render('home', [...])`
+- [x] `src/Views/home.php` — создать: каркас Главной по `index.html`
+      (шапка/футер + пустая секция под контент — сами блоки «Хиты
+      продаж»/отзывы это Фаза 6)
 
-### Структура новых таблиц
-
-`password_resets`
-
-| Колонка | Тип | Назначение |
-|---|---|---|
-| id | INT PK AUTO_INCREMENT | |
-| user_id | INT NOT NULL, FK → users.id, ON DELETE CASCADE | |
-| token_hash | CHAR(64) NOT NULL UNIQUE | sha256 от случайного токена (32 байта) — по нему ищем; сам токен только в ссылке письма |
-| expires_at | DATETIME NOT NULL | created + 60 мин |
-| used_at | DATETIME NULL | одноразовость: заполнен = ссылка недействительна |
-| created_at | TIMESTAMP DEFAULT NOW | |
-
-Индексы: `UNIQUE(token_hash)`, `INDEX(user_id)`
-
-`remember_tokens`
-
-| Колонка | Тип | Назначение |
-|---|---|---|
-| id | INT PK AUTO_INCREMENT | |
-| user_id | INT NOT NULL, FK → users.id, ON DELETE CASCADE | |
-| selector | CHAR(24) NOT NULL UNIQUE | публичная часть cookie — по ней ищем строку |
-| token_hash | CHAR(64) NOT NULL | sha256 секретной части cookie; сравнение через `hash_equals()` |
-| expires_at | DATETIME NOT NULL | created + 30 дней |
-| created_at | TIMESTAMP DEFAULT NOW | |
-
-Индексы: `UNIQUE(selector)`, `INDEX(user_id)`
-
-Допущение: `token_hash` — `sha256`, не `password_hash()`: токены —
-32 случайных байта, bcrypt для них избыточен и не позволил бы искать по
-`UNIQUE`-индексу.
+`config/routes.php` не меняем — маршрут `GET /` уже указывает на
+`HomeController::index`.
 
 ## Out of scope — не трогаем
 
-- `src/Models/*`, `src/Controllers/*`, `src/Views/*`,
-  `src/Services/Mailer.php` — Таски 2–5 этой фазы
-- `src/Core/*`, `config/*`, `public/*` — не трогаем
-- Механизм миграций / `ALTER TABLE` для уже развёрнутой старой схемы —
-  не заводим: `install.php` рассчитан на чистую БД, старую (если
-  создавали) дропнуть вручную
-- Тестовые данные каталога (категории/товары/варианты) — фикстуры Фазы 1
-- Реальный `.env` — заполняется вручную, в репозиторий не попадает
-- Остальные таблицы в `install.php` — не менять, даже если что-то
-  захочется «поправить попутно»
+- `AuthController`, `login.php`, `register.php` — Таск 3, даже если
+  экраны есть в теме
+- Роли/`requireRole`, Remember me — Таск 4
+- Восстановление пароля — Таск 5
+- Реальное состояние логина в шапке (проверка `currentUser()`) —
+  появится вместе с Auth в Таске 3/4; сейчас шапка статична
+- Контент блоков Главной (товары, отзывы, баннеры со скидками) — Фазы
+  1/6
+- `database/*`, `src/Models/*` — эта задача не касается БД
+- Каталог/карточка товара/другие страницы темы (`shop-grid`,
+  `product-details`, `cart`, `checkout` и т.д.) — свои фазы
 
 ## Definition of Done
 
-- [x] На чистой БД `php database/install.php` завершается «✅ Таблицы
-      созданы успешно»; второй запуск подряд — тоже без ошибок
-- [x] `SHOW TABLES` — 18 таблиц: 14 существующих + `remember_tokens`,
-      `password_resets`, `content_pages`, `banners` (в момент написания
-      таска ошибочно посчитано 12 существующих — их 14, итог 18, не 16;
-      проверено фактическим запуском против БД)
-- [x] `SHOW CREATE TABLE users` содержит `is_blocked`; `products` —
-      `is_featured` и индекс `idx_products_featured`
-- [x] `SHOW CREATE TABLE` для 4 новых таблиц совпадает с `database.md` по
-      колонкам, типам, FK и индексам
-- [x] `php database/seed.php` с заполненными `ADMIN_*` → в `users` одна
-      строка `role='admin'`, `password_hash` начинается с `$2y$`,
-      `phone` NULL, `is_blocked` 0
-- [x] Повторный `seed.php` → сообщение «уже существует», строк
-      по-прежнему одна
-- [x] `seed.php` с `ADMIN_PASSWORD` короче 8 символов или невалидным
-      email — отказ с понятным сообщением, строка не создана
-- [x] `seed.php` без `ADMIN_*` в `.env` — понятная ошибка `env()`, не
-      PHP-warning
-- [x] `grep -r "ADMIN_PASSWORD"` по репозиторию находит только
-      `.env.example` и `seed.php` (чтение переменной) — пароля в
-      репозитории нет
-- [x] `database.md` и `install.php` описывают одинаковые 18 таблиц
-      (ручная сверка по списку)
-- [x] `.docs/planning-log.md` — добавлены `ADR-027`, `ADR-028`
-- [x] Проверить `.docs/dod-global.md` (применимы: «Данные» → запись в
-      БД; «Код» → нет PHP-ошибок и warnings) — `composer test` зелёный
-      (18/18), `storage/logs/app.log` без новых записей после прогона
+- [x] `/` открывается без ошибок в консоли браузера и без новых записей
+      в `storage/logs/app.log` — проверено `php -S` + `curl`: HTTP 200,
+      `app.log` не создан/не пополнился. Сама консоль браузера (JS)
+      требует ручной проверки — не проверялась, инструментов браузера
+      в этой сессии нет
+- [x] `grep -r "http" src/Views/layout/header.php
+      src/Views/layout/footer.php` не находит внешних `<link>`/`<script>`
+      (всё из `public/assets/`) — проверено, внешних ссылок нет; все
+      подключённые ассеты (`style.css`, `main.js`, `jquery`, `app.js`,
+      `logo.png`) отдают 200 с локального сервера
+- [ ] Мобильное off-canvas меню темы открывается/закрывается (jQuery +
+      `main.js` подключены и работают) — **не проверено**: нужна ручная
+      проверка в браузере (JS-интерактивность не тестируется curl'ом)
+- [ ] Вёрстка не ломается на 320px (ручная проверка в DevTools) — **не
+      проверено**, нужен браузер
+- [x] Переход на несуществующий URL (`/qwerty123`) отдаёт 404 через
+      `dispatch()`, не белый экран/PHP-warning — проверено `curl`: HTTP 404
+- [ ] Проверить `.docs/dod-global.md` (применимо: раздел «UI», часть
+      «Код» — нет ошибок в консоли/логах) — серверная часть чистая
+      (пусто в `app.log`), пункты про консоль/вёрстку требуют ручной
+      проверки в браузере
 
 ## Важные правила
 - Следовать `CLAUDE.md`
