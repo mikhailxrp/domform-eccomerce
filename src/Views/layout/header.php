@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 /** @var string|null $title */
 
-$pageTitle = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
+$pageTitle  = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
+$isLoggedIn = isAuthenticated();
+$userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -69,8 +71,18 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' — ДомФорм' : '
                         <div class="dropdown">
                             <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
                             <ul class="dropdown-menu dropdown-profile">
-                                <li><a href="/login">Вход</a></li>
-                                <li><a href="/register">Регистрация</a></li>
+                                <?php if ($isLoggedIn): ?>
+                                    <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>
+                                    <li>
+                                        <form method="post" action="/logout">
+                                            <?= csrfField() ?>
+                                            <button type="submit" class="dropdown-item">Выход</button>
+                                        </form>
+                                    </li>
+                                <?php else: ?>
+                                    <li><a href="/login">Вход</a></li>
+                                    <li><a href="/register">Регистрация</a></li>
+                                <?php endif; ?>
                             </ul>
                         </div>
 
@@ -109,8 +121,18 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' — ДомФорм' : '
                             <div class="dropdown">
                                 <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
                                 <ul class="dropdown-menu dropdown-profile">
-                                    <li><a href="/login">Вход</a></li>
-                                    <li><a href="/register">Регистрация</a></li>
+                                    <?php if ($isLoggedIn): ?>
+                                        <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>
+                                        <li>
+                                            <form method="post" action="/logout">
+                                                <?= csrfField() ?>
+                                                <button type="submit" class="dropdown-item">Выход</button>
+                                            </form>
+                                        </li>
+                                    <?php else: ?>
+                                        <li><a href="/login">Вход</a></li>
+                                        <li><a href="/register">Регистрация</a></li>
+                                    <?php endif; ?>
                                 </ul>
                             </div>
                             <a class="action" href="#">

@@ -5,10 +5,10 @@ declare(strict_types=1);
 /** @var string $title */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
-include ROOT_PATH . '/src/Views/components/flash.php';
 ?>
 
 <main>
+    <?php include ROOT_PATH . '/src/Views/components/flash.php'; ?>
     <!-- Slider Section Start -->
     <div class="section slider-section">
         <div class="slider-shape"></div>

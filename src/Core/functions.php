@@ -94,7 +94,7 @@ function requireAuth(): void
 function redirectIfAuthenticated(): void
 {
     if (isAuthenticated()) {
-        redirect('/dashboard');
+        redirect('/');
     }
 }
 
