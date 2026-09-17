@@ -6,6 +6,8 @@ namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Models/RememberToken.php';
+require_once ROOT_PATH . '/src/Models/PasswordReset.php';
+require_once ROOT_PATH . '/src/Services/Mailer.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 
 class AuthController
@@ -15,6 +17,14 @@ class AuthController
      * данные» (вход) — иначе перебором узнают, кто зарегистрирован.
      */
     private const AUTH_ERROR = 'Неверный email или пароль.';
+
+    /**
+     * Один и тот же ответ для любого email — тем же принципом, что
+     * AUTH_ERROR: существование аккаунта не раскрывается.
+     */
+    private const FORGOT_GENERIC_MESSAGE = 'Если такой email зарегистрирован, мы отправили на него ссылку для восстановления пароля.';
+
+    private const RESET_LINK_INVALID_MESSAGE = 'Ссылка недействительна или устарела.';
 
     public function showLogin(): void
     {
@@ -153,5 +163,95 @@ class AuthController
 
         setFlash('success', 'Вы вышли из аккаунта.');
         redirect('/');
+    }
+
+    public function showForgot(): void
+    {
+        redirectIfAuthenticated();
+        render('auth/forgot', [
+            'title'  => 'Восстановление пароля',
+            'old'    => [],
+            'errors' => [],
+        ]);
+    }
+
+    public function forgot(): void
+    {
+        requireCsrf();
+
+        if (tooManyAttempts('forgot', 3, 60)) {
+            setFlash('error', 'Слишком много попыток. Попробуйте через минуту.');
+            redirect('/forgot-password');
+        }
+
+        $email = mb_strtolower(trim((string) input('email')), 'UTF-8');
+
+        if (!validateEmail($email)) {
+            render('auth/forgot', [
+                'title'  => 'Восстановление пароля',
+                'old'    => ['email' => $email],
+                'errors' => ['email' => true],
+            ]);
+            return;
+        }
+
+        hitRateLimit('forgot');
+
+        $user = findUserByEmail($email);
+        if ($user !== null) {
+            $token    = createPasswordReset((int) $user['id']);
+            $resetUrl = rtrim(APP_URL, '/') . '/reset-password/' . $token;
+            $body     = renderEmailBody('password-reset', [
+                'userName' => $user['name'],
+                'resetUrl' => $resetUrl,
+            ]);
+            sendMail($user['email'], 'Восстановление пароля — ДомФорм', $body);
+        }
+
+        setFlash('success', self::FORGOT_GENERIC_MESSAGE);
+        redirect('/forgot-password');
+    }
+
+    public function showReset(string $token): void
+    {
+        if (findValidPasswordReset($token) === null) {
+            setFlash('error', self::RESET_LINK_INVALID_MESSAGE);
+            redirect('/forgot-password');
+        }
+
+        render('auth/reset', [
+            'title'  => 'Новый пароль',
+            'token'  => $token,
+            'errors' => [],
+        ]);
+    }
+
+    public function reset(string $token): void
+    {
+        requireCsrf();
+
+        $reset = findValidPasswordReset($token);
+        if ($reset === null) {
+            setFlash('error', self::RESET_LINK_INVALID_MESSAGE);
+            redirect('/forgot-password');
+        }
+
+        $password = (string) input('password');
+
+        if (!validatePassword($password)) {
+            render('auth/reset', [
+                'title'  => 'Новый пароль',
+                'token'  => $token,
+                'errors' => ['password' => true],
+            ]);
+            return;
+        }
+
+        updateUserPasswordHash((int) $reset['user_id'], password_hash($password, PASSWORD_DEFAULT));
+        markPasswordResetUsed((int) $reset['id']);
+        deleteRememberTokens((int) $reset['user_id']);
+
+        setFlash('success', 'Пароль изменён. Войдите с новым паролем.');
+        redirect('/login');
     }
 }

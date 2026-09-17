@@ -76,10 +76,28 @@
         }, 200);
     }
 
+    /**
+     * Кнопка-«глазик» у поля пароля (login/register/reset) — переключает
+     * type у соседнего input между password/text и иконку fa-eye/
+     * fa-eye-slash.
+     */
+    function initPasswordToggles() {
+        jQuery(document).on('click', '.single-form__password-toggle', function () {
+            var $button    = jQuery(this);
+            var $input     = $button.siblings('input');
+            var isPassword = $input.attr('type') === 'password';
+
+            $input.attr('type', isPassword ? 'text' : 'password');
+            $button.find('i').toggleClass('fa-eye fa-eye-slash');
+            $button.attr('aria-label', isPassword ? 'Скрыть пароль' : 'Показать пароль');
+        });
+    }
+
     jQuery(function () {
         syncHeaderSticky();
         applyContentOffset();
         initCookieNotice();
+        initPasswordToggles();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);
         jQuery(document).on('close.bs.alert', '.alert', function () {

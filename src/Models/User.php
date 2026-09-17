@@ -56,3 +56,9 @@ function createUser(string $name, string $email, string $passwordHash, string $p
         throw $e;
     }
 }
+
+function updateUserPasswordHash(int $userId, string $passwordHash): void
+{
+    $stmt = getPdo()->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
+    $stmt->execute(['password_hash' => $passwordHash, 'id' => $userId]);
+}

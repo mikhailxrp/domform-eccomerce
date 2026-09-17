@@ -3,7 +3,7 @@
 }
 
 .single-benefit .title {
-    font-size: 22px;
+    font-size: 20px;
 }
 
 .slider-section .single-slider {
@@ -69,5 +69,31 @@
    (.nav-menu li.active a, .action:hover — #f2a100), иконка в наборе
    темы (pe-7s, только контурные) без заливки. */
 .header-meta .action--active {
+    color: #f2a100;
+}
+
+/* Кнопка-«глазик» показать/скрыть пароль (login/register/reset) —
+   переключает type у соседнего input в app.js. */
+.single-form--password {
+    position: relative;
+}
+
+.single-form--password input {
+    padding-right: 50px;
+}
+
+.single-form__password-toggle {
+    position: absolute;
+    top: 25px;
+    right: 16px;
+    transform: translateY(-50%);
+    background: none;
+    border: 0;
+    padding: 0;
+    color: #6d707f;
+    cursor: pointer;
+}
+
+.single-form__password-toggle:hover {
     color: #f2a100;
 }

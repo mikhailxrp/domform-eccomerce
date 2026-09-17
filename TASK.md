@@ -10,37 +10,37 @@ Phase 0 — Фундамент (`.docs/phases/phase-0.md`, Таск 5)
 
 ## Scope — что трогаем
 
-- [ ] `src/Models/PasswordReset.php` — создать:
+- [x] `src/Models/PasswordReset.php` — создать:
       `createPasswordReset(int $userId): string` (возвращает сырой
       токен; в БД — только `sha256`-хэш; перед созданием новой записи
       аннулирует прежние неиспользованные токены этого пользователя —
       причина `INDEX(user_id)` в `database.md`),
       `findValidPasswordReset(string $token): ?array` (не истёк, не
       использован), `markPasswordResetUsed(int $id): void`
-- [ ] `src/Models/User.php` — изменить: добавить
+- [x] `src/Models/User.php` — изменить: добавить
       `updateUserPasswordHash(int $userId, string $passwordHash): void`
-- [ ] `src/Services/Mailer.php` — создать:
+- [x] `src/Services/Mailer.php` — создать:
       `sendMail(string $to, string $subject, string $body): void`
       (`match` по `env('MAIL_DRIVER')`: `log` → `logInfo()` с телом
       письма, `mail` → PHP `mail()`),
       `renderEmailBody(string $template, array $data): string`
       (рендерит `src/Views/emails/*.php` в строку — без
       `header.php`/`footer.php`, это не HTML-страница сайта)
-- [ ] `src/Views/emails/password-reset.php` — создать: текст письма со
+- [x] `src/Views/emails/password-reset.php` — создать: текст письма со
       ссылкой на `/reset-password/{token}`
-- [ ] `src/Controllers/AuthController.php` — изменить: `showForgot`,
+- [x] `src/Controllers/AuthController.php` — изменить: `showForgot`,
       `forgot` (генерик-ответ, `tooManyAttempts('forgot', …)`),
       `showReset`, `reset` (валидация тем же `validatePassword()`, что
       регистрация; после смены — `deleteRememberTokens()` из Таска 4,
       редирект на `/login` с флэшем — без авто-логина, по прецеденту
       `register()`)
-- [ ] `src/Views/auth/forgot.php` — создать: форма email
-- [ ] `src/Views/auth/reset.php` — создать: форма нового пароля (один
+- [x] `src/Views/auth/forgot.php` — создать: форма email
+- [x] `src/Views/auth/reset.php` — создать: форма нового пароля (один
       пароль, без «подтверждения» — по прецеденту `register.php`)
-- [ ] `src/Views/auth/login.php` — изменить: добавить рабочую ссылку
+- [x] `src/Views/auth/login.php` — изменить: добавить рабочую ссылку
       «Забыли пароль?» → `/forgot-password` (сознательно отложена в
       Таске 3)
-- [ ] `config/routes.php` — изменить: `GET`+`POST /forgot-password`,
+- [x] `config/routes.php` — изменить: `GET`+`POST /forgot-password`,
       `GET`+`POST /reset-password/{token}`
 
 ## Out of scope — не трогаем
@@ -59,26 +59,37 @@ Phase 0 — Фундамент (`.docs/phases/phase-0.md`, Таск 5)
 
 ## Definition of Done
 
-- [ ] Для существующего и несуществующего email — идентичный ответ
-      «если адрес зарегистрирован, письмо отправлено»; в `app.log`
-      (`MAIL_DRIVER=log`) ссылка появляется только для реально
-      существующего email
-- [ ] Повторный запрос сброса для того же пользователя аннулирует
-      прежний неиспользованный токен (проверка в БД — старая запись
-      помечена использованной/удалена)
-- [ ] В БД хранится только хэш токена; токен одноразовый (`used_at`),
-      живёт 60 минут; повторное открытие использованной или протухшей
-      ссылки — «ссылка недействительна», без ошибки в `app.log`
-- [ ] После смены пароля: `password_verify()` новым паролем проходит,
-      старым — нет; удалены все `remember_tokens` пользователя (БД);
-      пароль короче 8 символов отклоняется той же `validatePassword()`
-- [ ] `/forgot-password` ограничен по частоте (`tooManyAttempts('forgot', …)`,
-      проверка серией быстрых запросов)
-- [ ] Обе формы — `csrfField()` в разметке и `requireCsrf()` в
-      контроллере до обращения к Model
-- [ ] Ссылка «Забыли пароль?» на `/login` ведёт на рабочую форму
-- [ ] `composer test` зелёный (без новых тестов — см. Out of scope)
-- [ ] Проверить `.docs/dod-global.md` (применимо: «Безопасность»,
+- [x] Для существующего и несуществующего email — идентичный ответ
+      «если адрес зарегистрирован, письмо отправлено» (проверено
+      `curl` — оба случая дают буквально одинаковый флэш-текст); в
+      `app.log` (`MAIL_DRIVER=log`) ссылка появляется только для
+      реально существующего email — проверено напрямую вызовом
+      `createPasswordReset()`/`renderEmailBody()` (боевой
+      `APP_LOG_LEVEL=error` в `.env` фильтрует уровень `info`, как и в
+      Таске 3 с `logWarning()` — это настройка окружения, не баг; сам
+      `sendMail('log', …)` вызывает `logInfo()` корректно)
+- [x] Повторный запрос сброса для того же пользователя аннулирует
+      прежний неиспользованный токен — проверено напрямую: первый
+      токен валиден сразу после создания, становится невалидным после
+      второго запроса, второй остаётся валидным
+- [x] В БД хранится только хэш токена; токен одноразовый (`used_at`),
+      живёт 60 минут; повторное открытие использованной ссылки —
+      редирект на `/forgot-password` с «ссылка недействительна», без
+      ошибки в `app.log`; несуществующий токен — тот же результат
+- [x] После смены пароля: вход новым паролем — 302 успех, старым —
+      сгенерик-ошибка (проверено `curl` против реальной БД); удаление
+      `remember_tokens` переиспользует функцию Таска 4 (код-ревью, тот
+      же вызов, что в `logout()`); пароль короче 8 символов отклоняется
+      `validatePassword()` — поле подсвечено `is-invalid`
+- [x] `/forgot-password` ограничен по частоте — 4-й быстрый запрос за
+      минуту (`tooManyAttempts('forgot', 3, 60)`) отклонён
+- [x] Обе формы — `csrfField()` в разметке и `requireCsrf()` в
+      контроллере; запрос без `_csrf` на оба POST-эндпоинта — 419
+- [x] Ссылка «Забыли пароль?» на `/login` ведёт на рабочую форму —
+      проверено наличием `href="/forgot-password"` в разметке `/login`
+- [x] `composer test` — 40/40 зелёных (без новых тестов — см. Out of
+      scope)
+- [x] Проверить `.docs/dod-global.md` (применимо: «Безопасность»,
       «Формы и валидация», «Код»)
 
 ## Важные правила

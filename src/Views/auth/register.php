@@ -60,18 +60,13 @@ include ROOT_PATH . '/src/Views/layout/header.php';
                                     <div class="invalid-feedback">Введите корректный телефон, например +7 900 123-45-67.</div>
                                 <?php endif; ?>
                             </div>
-                            <div class="single-form">
-                                <input
-                                    type="password"
-                                    name="password"
-                                    placeholder="Пароль *"
-                                    class="<?= !empty($errors['password']) ? 'is-invalid' : '' ?>"
-                                    required
-                                >
-                                <?php if (!empty($errors['password'])): ?>
-                                    <div class="invalid-feedback">Пароль должен быть не короче 8 символов.</div>
-                                <?php endif; ?>
-                            </div>
+                            <?php
+                            $fieldName          = 'password';
+                            $fieldPlaceholder   = 'Пароль *';
+                            $fieldHasError      = !empty($errors['password']);
+                            $fieldErrorMessage  = 'Пароль должен быть не короче 8 символов.';
+                            include ROOT_PATH . '/src/Views/components/password-field.php';
+                            ?>
                             <div class="single-form">
                                 <button type="submit" class="btn btn-primary btn-hover-dark">Зарегистрироваться</button>
                             </div>

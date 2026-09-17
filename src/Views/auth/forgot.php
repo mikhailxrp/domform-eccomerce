@@ -15,10 +15,11 @@ include ROOT_PATH . '/src/Views/layout/header.php';
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-6">
-                    <!-- Login Start -->
+                    <!-- Forgot Password Start -->
                     <div class="login-register-wrapper">
-                        <h4 class="title">Вход в аккаунт</h4>
-                        <form method="post" action="/login" novalidate>
+                        <h4 class="title">Восстановление пароля</h4>
+                        <p>Укажите email, указанный при регистрации — мы отправим на него ссылку для восстановления пароля.</p>
+                        <form method="post" action="/forgot-password" novalidate>
                             <?= csrfField() ?>
                             <div class="single-form">
                                 <input
@@ -30,28 +31,16 @@ include ROOT_PATH . '/src/Views/layout/header.php';
                                     required
                                 >
                                 <?php if (!empty($errors['email'])): ?>
-                                    <div class="invalid-feedback">Проверьте email.</div>
+                                    <div class="invalid-feedback">Введите корректный email.</div>
                                 <?php endif; ?>
                             </div>
-                            <?php
-                            $fieldName          = 'password';
-                            $fieldPlaceholder   = 'Пароль *';
-                            $fieldHasError      = !empty($errors['password']);
-                            $fieldErrorMessage  = 'Проверьте пароль.';
-                            include ROOT_PATH . '/src/Views/components/password-field.php';
-                            ?>
                             <div class="single-form">
-                                <input type="checkbox" id="remember" name="remember" value="1">
-                                <label for="remember"><span></span> Запомнить меня</label>
-                            </div>
-                            <div class="single-form">
-                                <button type="submit" class="btn btn-primary btn-hover-dark">Войти</button>
+                                <button type="submit" class="btn btn-primary btn-hover-dark">Отправить ссылку</button>
                             </div>
                         </form>
-                        <p><a href="/forgot-password">Забыли пароль?</a></p>
-                        <p>Нет аккаунта? <a href="/register">Зарегистрироваться</a>.</p>
+                        <p><a href="/login">Вернуться ко входу</a>.</p>
                     </div>
-                    <!-- Login End -->
+                    <!-- Forgot Password End -->
                 </div>
             </div>
         </div>
