@@ -114,6 +114,7 @@ shared-хостинге разлогинивает раньше, чем ожид
 | parent_id | INT NULL, FK → categories.id, ON DELETE SET NULL | подкатегории; NULL = корневая. Бизнес-правило «не более 2 уровней вложенности» (раздел 6.1 ТЗ) проверяется в Model при создании — не выражается CHECK-ограничением над самоссылкой |
 | name | VARCHAR(150) NOT NULL | |
 | slug | VARCHAR(160) NOT NULL UNIQUE | для человекопонятных URL |
+| description | TEXT NULL | текст под заголовком листинга категории (`FR-CAT-008`); колонки не было в схеме, найдено при планировании Фазы 1 (`ADR-029`) |
 | sort_order | INT NOT NULL DEFAULT 0 | порядок в меню |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
@@ -149,6 +150,25 @@ shared-хостинге разлогинивает раньше, чем ожид
 - `INDEX(is_featured)` — отбор блока «Хиты продаж» Главной (`FR-HOME-004`),
   тот же паттерн, что `INDEX(is_showroom_sample)` у `product_variants`
 - `FULLTEXT(name, description)` — поиск; `LIKE '%...%'` не использует индекс
+
+---
+
+### `product_specs` _(новая — `ADR-030`)_
+
+Таблица характеристик и размеров Товара (`FR-CARD-005`) — произвольный
+список пар «название — значение» на уровне Товара, не Варианта: размеры
+и форма общие для всех Вариантов, материал/механизм уже хранятся на
+`product_variants` отдельными колонками (не дублируются здесь).
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| product_id | INT NOT NULL, FK → products.id, ON DELETE CASCADE | |
+| name | VARCHAR(100) NOT NULL | название характеристики («Ширина», «Глубина», «Форма») |
+| value | VARCHAR(255) NOT NULL | значение как текст — формат/единицы не унифицируются (раздел 8 не читался) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок строк в таблице характеристик |
+
+**Индексы:** `INDEX(product_id)`
 
 ---
 
@@ -518,6 +538,7 @@ categories (1)
 products (1)
   ├──< product_categories (1:N, ON DELETE CASCADE)
   ├──< product_variants (1:N, ON DELETE CASCADE)
+  ├──< product_specs (1:N, ON DELETE CASCADE)
   ├──< reviews (1:N, ON DELETE CASCADE)
   └──< favorites (1:N, ON DELETE CASCADE)
 

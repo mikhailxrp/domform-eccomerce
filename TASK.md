@@ -1,96 +1,67 @@
 # Current Task
 
 ## Фаза
-Phase 0 — Фундамент (`.docs/phases/phase-0.md`, Таск 5)
+Phase 1 — Каталог и карточка товара (`.docs/phases/phase-1.md`, Таск 1)
 
 ## Задача
-`FR-AUTH-003`: Покупатель с экрана входа указывает email, получает
-одноразовую ссылку (в `app.log` локально / письмом на проде) и
-устанавливает новый пароль — без раскрытия, зарегистрирован ли email.
+`php database/install.php` содержит `categories.description` и таблицу
+`product_specs` (1:1 с `database.md`); `php database/seed-catalog.php`
+наполняет БД тестовым каталогом, достаточным для проверки всех кейсов
+фазы (`_status.md`: «каталог на данных, занесённых напрямую в БД»).
 
 ## Scope — что трогаем
 
-- [x] `src/Models/PasswordReset.php` — создать:
-      `createPasswordReset(int $userId): string` (возвращает сырой
-      токен; в БД — только `sha256`-хэш; перед созданием новой записи
-      аннулирует прежние неиспользованные токены этого пользователя —
-      причина `INDEX(user_id)` в `database.md`),
-      `findValidPasswordReset(string $token): ?array` (не истёк, не
-      использован), `markPasswordResetUsed(int $id): void`
-- [x] `src/Models/User.php` — изменить: добавить
-      `updateUserPasswordHash(int $userId, string $passwordHash): void`
-- [x] `src/Services/Mailer.php` — создать:
-      `sendMail(string $to, string $subject, string $body): void`
-      (`match` по `env('MAIL_DRIVER')`: `log` → `logInfo()` с телом
-      письма, `mail` → PHP `mail()`),
-      `renderEmailBody(string $template, array $data): string`
-      (рендерит `src/Views/emails/*.php` в строку — без
-      `header.php`/`footer.php`, это не HTML-страница сайта)
-- [x] `src/Views/emails/password-reset.php` — создать: текст письма со
-      ссылкой на `/reset-password/{token}`
-- [x] `src/Controllers/AuthController.php` — изменить: `showForgot`,
-      `forgot` (генерик-ответ, `tooManyAttempts('forgot', …)`),
-      `showReset`, `reset` (валидация тем же `validatePassword()`, что
-      регистрация; после смены — `deleteRememberTokens()` из Таска 4,
-      редирект на `/login` с флэшем — без авто-логина, по прецеденту
-      `register()`)
-- [x] `src/Views/auth/forgot.php` — создать: форма email
-- [x] `src/Views/auth/reset.php` — создать: форма нового пароля (один
-      пароль, без «подтверждения» — по прецеденту `register.php`)
-- [x] `src/Views/auth/login.php` — изменить: добавить рабочую ссылку
-      «Забыли пароль?» → `/forgot-password` (сознательно отложена в
-      Таске 3)
-- [x] `config/routes.php` — изменить: `GET`+`POST /forgot-password`,
-      `GET`+`POST /reset-password/{token}`
+- [x] `database/install.php` — изменить: `categories.description TEXT
+      NULL`; таблица `product_specs` (`id`, `product_id` FK →
+      `products.id` ON DELETE CASCADE, `name VARCHAR(100)`, `value
+      VARCHAR(255)`, `sort_order INT DEFAULT 0`, `INDEX(product_id)`)
+- [x] `.docs/database.md` — изменить: колонка `categories.description`,
+      раздел `product_specs`, карта связей
+- [x] `.docs/planning-log.md` — изменить: `ADR-029`
+      (`categories.description`), `ADR-030` (`product_specs`)
+- [x] `database/seed-catalog.php` — создать: 6 категорий в 2 уровня (по
+      брифу), ~12 товаров, у части — 2–3 Варианта с разной ценой и
+      сроком (ткань / экокожа), `variant_images` с `color` и
+      `is_swatch` (пути на фото темы), ровно один
+      `is_showroom_sample = 1`, один товар в двух категориях
+      (`is_primary` у одной), `product_specs`; идемпотентно —
+      повторный запуск не дублирует
+- [x] `composer.json` — изменить: скрипт `seed:catalog`
 
 ## Out of scope — не трогаем
 
-- Поле «Подтверждение пароля» — по прецеденту `register.php`
-- Смена пароля из личного кабинета (по факту логина) — другая фаза
-  (личный кабинет — Фаза 7)
-- Реальный SMTP/сторонний провайдер почты — только `PHP mail()`/лог,
-  так решено в `phase-0.md`
-- `database/install.php` / `.docs/database.md` — таблица
-  `password_resets` уже развёрнута Таском 1
-- Новые unit-тесты — все функции `PasswordReset.php`/`Mailer.php`
-  трогают БД/IO, по правилу `php.md` не юнит-тестируются (тот же
-  прецедент, что `User.php`/`RememberToken.php` без тестов)
-- Каталог/корзина/чекаут — другие фазы
+- Таски 2–5 Фазы 1 (листинг каталога, фильтры без перезагрузки,
+  карточка товара, поиск) — отдельные таски после этого
+- Обработчик `POST /cart/add` и сама корзина — Фаза 2
+- CRUD товаров/вариантов для Менеджера/Администратора — Фаза 4; в этом
+  таске данные заносятся напрямую сидами
+- Реальная загрузка фото в `public/uploads/products/` — Фаза 4; сиды
+  используют существующие пути на фото темы
+  (`public/assets/images/product/*.jpg`)
+- Скидки (`product_variants.discount_percent`), отзывы, избранное —
+  Фазы 6/7, схемы не касаются `categories`/`product_specs`
+- Любые Controllers/Views/routes — эта фаза начинает их только с
+  Таска 2
 
 ## Definition of Done
 
-- [x] Для существующего и несуществующего email — идентичный ответ
-      «если адрес зарегистрирован, письмо отправлено» (проверено
-      `curl` — оба случая дают буквально одинаковый флэш-текст); в
-      `app.log` (`MAIL_DRIVER=log`) ссылка появляется только для
-      реально существующего email — проверено напрямую вызовом
-      `createPasswordReset()`/`renderEmailBody()` (боевой
-      `APP_LOG_LEVEL=error` в `.env` фильтрует уровень `info`, как и в
-      Таске 3 с `logWarning()` — это настройка окружения, не баг; сам
-      `sendMail('log', …)` вызывает `logInfo()` корректно)
-- [x] Повторный запрос сброса для того же пользователя аннулирует
-      прежний неиспользованный токен — проверено напрямую: первый
-      токен валиден сразу после создания, становится невалидным после
-      второго запроса, второй остаётся валидным
-- [x] В БД хранится только хэш токена; токен одноразовый (`used_at`),
-      живёт 60 минут; повторное открытие использованной ссылки —
-      редирект на `/forgot-password` с «ссылка недействительна», без
-      ошибки в `app.log`; несуществующий токен — тот же результат
-- [x] После смены пароля: вход новым паролем — 302 успех, старым —
-      сгенерик-ошибка (проверено `curl` против реальной БД); удаление
-      `remember_tokens` переиспользует функцию Таска 4 (код-ревью, тот
-      же вызов, что в `logout()`); пароль короче 8 символов отклоняется
-      `validatePassword()` — поле подсвечено `is-invalid`
-- [x] `/forgot-password` ограничен по частоте — 4-й быстрый запрос за
-      минуту (`tooManyAttempts('forgot', 3, 60)`) отклонён
-- [x] Обе формы — `csrfField()` в разметке и `requireCsrf()` в
-      контроллере; запрос без `_csrf` на оба POST-эндпоинта — 419
-- [x] Ссылка «Забыли пароль?» на `/login` ведёт на рабочую форму —
-      проверено наличием `href="/forgot-password"` в разметке `/login`
-- [x] `composer test` — 40/40 зелёных (без новых тестов — см. Out of
-      scope)
-- [x] Проверить `.docs/dod-global.md` (применимо: «Безопасность»,
-      «Формы и валидация», «Код»)
+- [x] `install.php` выполняется дважды подряд без ошибок; `SHOW CREATE
+      TABLE categories` / `product_specs` совпадают с `database.md` по
+      колонкам, типам, FK и индексам (ручная сверка) — проверено
+      против `mikhail700.beget.tech`; MySQL 8.4 там не поддерживает
+      `ADD COLUMN IF NOT EXISTS`, добавление колонки на уже
+      развёрнутую с Фазы 0 таблицу `categories` сделано проверкой
+      через `information_schema.COLUMNS` перед `ALTER`
+- [x] `seed-catalog.php` дважды подряд — без дублей (`COUNT(*)` не
+      растёт) — сверено по всем 6 таблицам каталога до/после
+- [x] В данных есть: Вариант-образец (`SOFA-VERONA-ECO`); цвет со
+      `is_swatch = 1` без реального фото («Коричневый» того же
+      Варианта); товар в 2 категориях («Осло» — Диваны + Кровати);
+      товар с `mechanism_type = NULL` (6 Вариантов); категория с
+      заполненным `description` (Диваны, Кровати); неактивный товар
+      (`is_active = 0`, «Шкаф «Классик»») для проверки скрытия
+- [x] Ровно одна `is_primary = 1` на товар в `product_categories`
+- [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
 - Следовать `CLAUDE.md`

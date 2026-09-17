@@ -60,17 +60,31 @@ $pdo->exec("
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS categories (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        parent_id  INT NULL,
-        name       VARCHAR(150) NOT NULL,
-        slug       VARCHAR(160) NOT NULL UNIQUE,
-        sort_order INT NOT NULL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        parent_id   INT NULL,
+        name        VARCHAR(150) NOT NULL,
+        slug        VARCHAR(160) NOT NULL UNIQUE,
+        description TEXT NULL,
+        sort_order  INT NOT NULL DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         KEY idx_categories_parent (parent_id),
         CONSTRAINT fk_categories_parent
             FOREIGN KEY (parent_id) REFERENCES categories (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
+
+// Таблица уже могла быть развёрнута до ADR-029 (Фаза 0), когда колонки
+// description ещё не было — ADD COLUMN не идемпотентен сам по себе,
+// поэтому проверяем через information_schema перед ALTER.
+$columnExists = $pdo->prepare('
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = :column
+');
+$columnExists->execute(['table' => 'categories', 'column' => 'description']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE categories ADD COLUMN description TEXT NULL AFTER slug;');
+}
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS products (
@@ -85,6 +99,19 @@ $pdo->exec("
         KEY idx_products_active (is_active),
         KEY idx_products_featured (is_featured),
         FULLTEXT KEY ft_products_name_description (name, description)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS product_specs (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        name       VARCHAR(100) NOT NULL,
+        value      VARCHAR(255) NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        KEY idx_product_specs_product (product_id),
+        CONSTRAINT fk_product_specs_product
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
