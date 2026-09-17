@@ -97,3 +97,15 @@
 .single-form__password-toggle:hover {
     color: #f2a100;
 }
+
+/* Счётчик «N из M товаров» над каталогом — тема делает весь текст
+   капсом (uppercase от text-transform ломает читаемость русского
+   текста) и не выделяет цифры размером, только цветом (span уже
+   жёлтый из style.css). */
+.shop-top-bar .shop-text p {
+    text-transform: none;
+}
+
+.shop-top-bar .shop-text p span {
+    font-size: 1.2em;
+}

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 /** @var string|null $title */
 
-$pageTitle  = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
-$isLoggedIn = isAuthenticated();
-$userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
+require_once ROOT_PATH . '/src/Models/Category.php';
+
+$pageTitle         = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
+$isLoggedIn        = isAuthenticated();
+$userName          = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
+$catalogCategories = getCategoryTree();
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -47,7 +50,25 @@ $userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
                     <div class="header-menu">
                         <ul class="nav-menu">
                             <li><a href="/">Главная</a></li>
-                            <li><a href="#">Каталог</a></li>
+                            <li>
+                                <a href="/catalog">Каталог</a>
+                                <?php if ($catalogCategories !== []): ?>
+                                    <ul class="mega-sub-menu">
+                                        <?php foreach ($catalogCategories as $rootCategory): ?>
+                                            <li>
+                                                <a href="/catalog/<?= e($rootCategory['slug']) ?>" class="menu-title"><?= e($rootCategory['name']) ?></a>
+                                                <?php if ($rootCategory['children'] !== []): ?>
+                                                    <ul class="menu-item">
+                                                        <?php foreach ($rootCategory['children'] as $childCategory): ?>
+                                                            <li><a href="/catalog/<?= e($childCategory['slug']) ?>"><?= e($childCategory['name']) ?></a></li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php endif; ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            </li>
                             <li><a href="#">О компании</a></li>
                             <li><a href="#">Доставка и оплата</a></li>
                             <li><a href="#">Контакты</a></li>
@@ -169,7 +190,25 @@ $userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
             <nav>
                 <ul class="nav-menu">
                     <li><a href="/">Главная</a></li>
-                    <li><a href="#">Каталог</a></li>
+                    <li>
+                        <a href="/catalog">Каталог</a>
+                        <?php if ($catalogCategories !== []): ?>
+                            <ul class="mega-sub-menu">
+                                <?php foreach ($catalogCategories as $rootCategory): ?>
+                                    <li>
+                                        <a href="/catalog/<?= e($rootCategory['slug']) ?>" class="menu-title"><?= e($rootCategory['name']) ?></a>
+                                        <?php if ($rootCategory['children'] !== []): ?>
+                                            <ul class="menu-item">
+                                                <?php foreach ($rootCategory['children'] as $childCategory): ?>
+                                                    <li><a href="/catalog/<?= e($childCategory['slug']) ?>"><?= e($childCategory['name']) ?></a></li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </li>
                     <li><a href="#">О компании</a></li>
                     <li><a href="#">Доставка и оплата</a></li>
                     <li><a href="#">Контакты</a></li>

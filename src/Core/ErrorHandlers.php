@@ -45,3 +45,14 @@ function renderErrorResponse(): void
         echo '<h1>Что-то пошло не так</h1><p>Попробуйте позже.</p>';
     }
 }
+
+/**
+ * 404 внутри контроллера (несуществующий slug и т.п.) — тот же ответ,
+ * что уже отдаёт Router на неизвестный маршрут (`Router::dispatch()`).
+ */
+function abort404(): void
+{
+    http_response_code(404);
+    echo '404 Not Found';
+    exit;
+}

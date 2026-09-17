@@ -10,6 +10,8 @@ declare(strict_types=1);
 return [
     'GET' => [
         '/'                        => ['HomeController', 'index'],
+        '/catalog'                 => ['CatalogController', 'index'],
+        '/catalog/{slug}'          => ['CatalogController', 'category'],
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],

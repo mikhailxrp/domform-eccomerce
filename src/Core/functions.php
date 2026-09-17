@@ -149,6 +149,16 @@ function e(string $value): string
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * `$price` — строка DECIMAL из БД (PDO без emulated prepares отдаёт
+ * DECIMAL как строку). Приведение к int — обычный string-to-int парсинг
+ * PHP, не через float (`php.md`: деньги никогда не float).
+ */
+function formatPrice(string $price): string
+{
+    return number_format((int) $price, 0, ',', ' ') . ' ₽';
+}
+
 function input(string $key, mixed $default = ''): mixed
 {
     return $_POST[$key] ?? $_GET[$key] ?? $default;

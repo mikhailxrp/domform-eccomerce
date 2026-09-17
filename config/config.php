@@ -21,5 +21,8 @@ define('LOG_DIR',       env('LOG_DIR',       ROOT_PATH . '/storage/logs'));
 define('LOG_FILE',      env('LOG_FILE',      'app.log'));
 define('APP_LOG_LEVEL', env('APP_LOG_LEVEL', 'error'));
 
+// Каталог (`.docs/phases/phase-1.md`, «Решения фазы»)
+define('CATALOG_PER_PAGE', 12);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';
