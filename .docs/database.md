@@ -241,7 +241,9 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | sort_order | INT NOT NULL DEFAULT 0 | |
 | is_main | TINYINT(1) NOT NULL DEFAULT 0 | главное фото карточки |
 
-**Индексы:** `INDEX(product_variant_id)`
+**Индексы:**
+- `INDEX(product_variant_id)`
+- `INDEX(color)` — фильтр каталога по цвету (`FR-CAT-003`, `ADR-031`)
 
 ---
 

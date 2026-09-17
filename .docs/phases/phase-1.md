@@ -67,9 +67,9 @@
 | --- | ----------------------------------------------------------------- | ----------- |
 | 1   | Схема под каталог + сиды каталога                                 | ✅ Завершён |
 | 2   | Листинг каталога: категории, сортировка, пагинация, мини-карточка | ✅ Завершён |
-| 3   | Фильтры без перезагрузки, пустое состояние, плитка/список         | ⏳ Ожидает |
-| 4   | Карточка товара с выбором Варианта                                | ⏳ Ожидает |
-| 5   | Поиск с подсказками                                               | ⏳ Ожидает |
+| 3   | Фильтры без перезагрузки, пустое состояние, плитка/список         | ✅ Завершён |
+| 4   | Карточка товара с выбором Варианта                                | ⏳ Ожидает  |
+| 5   | Поиск с подсказками                                               | ⏳ Ожидает  |
 
 ---
 
@@ -108,7 +108,7 @@
 **Definition of Done:**
 
 - [ ] `install.php` выполняется дважды подряд без ошибок; `SHOW CREATE
-      TABLE categories` / `product_specs` совпадают с `database.md` по
+    TABLE categories` / `product_specs` совпадают с `database.md` по
       колонкам, типам, FK и индексам (ручная сверка)
 - [ ] `seed-catalog.php` дважды подряд — без дублей (`COUNT(*)` не
       растёт)
@@ -143,12 +143,12 @@
 - `src/Models/Category.php` — создать: `getCategoryTree()`,
   `findCategoryBySlug()`, `getCategoryPath()` (для крошек)
 - `src/Models/Product.php` — создать: `getCatalogProducts(array
-  $filters, string $sort, int $page, int $perPage)`,
+$filters, string $sort, int $page, int $perPage)`,
   `countCatalogProducts(array $filters)` — минимальная цена активных
   Вариантов, главное фото, список материалов/цветов; только
   `is_active = 1` с ≥ 1 активным Вариантом
 - `src/Core/Pagination.php` — создать: чистая `buildPagination(int
-  $total, int $page, int $perPage): array` (номера страниц,
+$total, int $page, int $perPage): array` (номера страниц,
   prev/next, нормализация `page` < 1 / > max)
 - `tests/Unit/PaginationTest.php` — создать
 - `src/Controllers/CatalogController.php` — создать: `index()`,
@@ -185,7 +185,13 @@
 
 ## Таск 3 — Фильтры без перезагрузки, пустое состояние, плитка/список
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен против реальной БД
+(`mikhail700.beget.tech`): все фильтры (цена/категория/цвет/наличие),
+пагинация с сохранением фильтров, пустое состояние и сброс проверены
+`curl`; клиентская часть (`fetch`/`pushState`/`popstate`, плитка/список
+через `sessionStorage`) синтаксически проверена (`node --check`), но не
+воспроизведена в браузере — нет браузера в сессии (детали —
+`dev-log.md`, 17.09.2026)
 
 **Цель таска:**
 Сайдбар с 4 фильтрами (`FR-CAT-002/003`): цена (`ion.rangeSlider`
@@ -255,10 +261,10 @@
 
 - `src/Models/Product.php` — изменить: `findProductBySlug()`,
   `getProductVariants(int $productId)`, `getVariantImages(array
-  $variantIds)`, `getProductSpecs(int $productId)`,
+$variantIds)`, `getProductSpecs(int $productId)`,
   `getRelatedProducts(int $productId, int $categoryId, int $limit)`
 - `src/Controllers/ProductController.php` — создать: `show(string
-  $slug)` (404 для неактивного / несуществующего)
+$slug)` (404 для неактивного / несуществующего)
 - `src/Views/product/show.php` — создать (по `SCR-03`; без вкладки
   «Reviews», без «Кредит/рассрочка», без «Наличие на складе»)
 - `src/Views/components/variant-selector.php` — создать: данные
@@ -294,7 +300,7 @@
       неактивных
 - [ ] Неактивный товар → 404; весь вывод через `e()`, JSON Вариантов —
       `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
-      JSON_HEX_QUOT)`
+    JSON_HEX_QUOT)`
 - [ ] Проверить `.docs/dod-global.md`
 
 ---
@@ -312,7 +318,7 @@
 **Что нужно создать/изменить:**
 
 - `src/Models/Product.php` — изменить: `searchProducts(string $q,
-  string $sort, int $page, int $perPage)`, `countSearchProducts()`,
+string $sort, int $page, int $perPage)`, `countSearchProducts()`,
   `suggestProducts(string $q, int $limit)`
 - `src/Core/CatalogFilters.php` — изменить: чистая
   `normalizeSearchQuery(string $q): string` (обрезка, экранирование

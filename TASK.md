@@ -1,119 +1,111 @@
 # Current Task
 
 ## Фаза
-Phase 1 — Каталог и карточка товара (`.docs/phases/phase-1.md`, Таск 2)
+Phase 1 — Каталог и карточка товара (`.docs/phases/phase-1.md`, Таск 3)
 
 ## Задача
-`/catalog` и `/catalog/{slug}` показывают сетку товаров по макету
-`SCR-02` с хлебными крошками, описанием категории, сортировкой
-(новизна / цена ↑ / цена ↓) и пагинацией; мини-карточка — фото,
-название, «от X ₽», материал/цвет текстом, кнопка «В корзину».
-Сайдбар с фильтрами — отдельный Таск 3, здесь не строится.
+Сайдбар с 4 фильтрами (цена, категория, цвет, «В наличии» =
+`is_showroom_sample`) применяется через `fetch` без перезагрузки
+страницы, состояние — в URL («назад»/«вперёд» браузера восстанавливают
+фильтры); пустое состояние «Ничего не найдено» + «Сбросить фильтры»;
+переключатель плитка/список на `sessionStorage`.
 
 ## Scope — что трогаем
 
-- [x] `src/Models/Category.php` — создать: `getCategoryTree()`,
-      `findCategoryBySlug()`, `getCategoryPath()` (для хлебных крошек)
-- [x] `src/Models/Product.php` — создать: `getCatalogProducts(array
-      $filters, string $sort, int $page, int $perPage)`,
-      `countCatalogProducts(array $filters)` — минимальная цена
-      активных Вариантов, главное фото, список материалов/цветов;
-      только `is_active = 1` с ≥ 1 активным Вариантом
-- [x] `src/Core/Pagination.php` — создать: чистая `buildPagination(int
-      $total, int $page, int $perPage): array` (номера страниц,
-      prev/next, нормализация `page` < 1 / > max) + `buildPaginationUrl()`
-      (генерация ссылок пагинации, тоже чистая функция)
-- [x] `tests/Unit/PaginationTest.php` — создать
-- [x] `src/Controllers/CatalogController.php` — создать: `index()`,
-      `category(string $slug)` (404 на неизвестный slug)
-- [x] `src/Views/catalog/index.php` — создать (по
-      `shop-grid-left-sidebar.html`)
-- [x] `src/Views/components/product-card.php`,
-      `components/breadcrumbs.php`, `components/pagination.php` —
-      создать
-- [x] `config/routes.php` — изменить: `/catalog`, `/catalog/{slug}`
-- [x] `src/Views/layout/header.php` — изменить: пункт «Каталог» и
-      корневые категории из БД в меню (десктоп + off-canvas)
+- [x] `src/Core/CatalogFilters.php` — создать: чистая
+      `normalizeCatalogFilters(array $query): array` (границы цены,
+      whitelist сортировки, int-приведение id категорий, обрезка
+      цветов), `buildCatalogQueryString(array $filters): string`
+- [x] `tests/Unit/CatalogFiltersTest.php` — создать
+- [x] `src/Models/Product.php` — изменить: фильтры в
+      `getCatalogProducts()` / `countCatalogProducts()`
+      (`category_ids`/`colors`/`price_min`/`price_max`/`in_stock`,
+      общий `buildCatalogFilterConditions()` — список и счётчик не
+      могут разойтись по условиям); `getFilterOptions(?int
+      $categoryId)` — min/max цена, список цветов
+- [x] `src/Controllers/CatalogController.php` — изменить: при
+      `X-Requested-With: fetch` рендерит только фрагмент
+      (`components/catalog-grid`); категория из пути `/catalog/{slug}`
+      всегда перекрывает чекбоксы (см. Out of scope)
+- [x] `src/Views/components/catalog-sidebar.php`,
+      `components/catalog-grid.php` (фрагмент: счётчик + сортировка +
+      плитка/список + пагинация или пустое состояние),
+      `components/empty-state.php` — создать
+- [x] `src/Views/catalog/index.php` — изменить: подключить компоненты
+      (сайдбар статичен, `#catalog-results` — то, что подменяет fetch)
+- [x] `public/assets/js/app.js`, `public/assets/css/app.css` —
+      изменить: `fetch` + `pushState`/`popstate`, переключатель вида
+      через Bootstrap Tab API + `sessionStorage`, `[aria-busy]` —
+      состояние загрузки
 
-Не было в исходном плане, добавлено по ходу (мелкие зависимости
-перечисленных выше файлов, не отдельная функциональность):
-- [x] `config/config.php` — изменить: константа `CATALOG_PER_PAGE = 12`
-      (`phase-1.md`, «Решения фазы» — товаров на страницу)
-- [x] `src/Core/ErrorHandlers.php` — изменить: `abort404()` — тот же
-      404-ответ, что уже отдаёт `Router::dispatch()` на неизвестный
-      маршрут, вызывается из `CatalogController::category()`
-- [x] `src/Core/functions.php` — изменить: `formatPrice()` — «от X ₽»
-      на мини-карточке без float (`php.md`)
-- [x] `tests/bootstrap.php` — изменить: подключить `Pagination.php`
-      для `PaginationTest`
-
-Правки по ручному ревью пользователя после сдачи Таска (скриншот
-`/catalog`):
-- [x] `src/Views/catalog/index.php` — изменить: цифры счётчика «N из M
-      товаров» обёрнуты в `<span>` (нужно для цветовой/размерной
-      акцентировки — тот же `<span>`, что уже был в разметке темы)
-- [x] `public/assets/css/app.css` — изменить: `.shop-top-bar .shop-text
-      p` — убран `text-transform: uppercase` (ломал читаемость
-      русского текста), `span` — крупнее на `1.2em`
-- [x] `src/Views/components/product-card.php` — изменить: фото
-      карточки — заглушка из набора темы `assets/images/product/
-      product-01…13.jpg` (детерминированно по id товара), не реальный
-      `$product['image_path']` из БД; без фиксированного `width`/
-      `height` — размер естественный, как в теме (`width: 100%` из
-      `style.css`)
-- ~~`public/assets/images/placeholder-product.svg` — серая заглушка
-  270×303~~ — пользователь уточнил задачу (неверно понял «заглушки»
-  как отдельную картинку фиксированного размера вместо фото из
-  набора темы), файл удалён, `width`/`height` из `<img>` убраны
+Не было в исходном плане, добавлено по ходу (необходимые зависимости
+перечисленного выше, не отдельная функциональность):
+- [x] `src/Views/components/product-card.php` — изменить: второй режим
+      разметки (`$viewMode` grid/list) — без этого переключатель
+      плитка/список (сам по себе часть Scope Таска 3) нечем было бы
+      наполнить
+- [x] `src/Core/Request.php` — изменить: `isFetchRequest()` — тот же
+      паттерн, что `isPost()`/`isGet()`, читает
+      `X-Requested-With: fetch`
+- [x] `tests/bootstrap.php` — изменить: подключить
+      `CatalogFilters.php` для `CatalogFiltersTest`
+- [x] `database/install.php`, `.docs/database.md`,
+      `.docs/planning-log.md` (`ADR-031`) — изменить:
+      `INDEX(color)` на `variant_images` — новый фильтруемый запрос
+      (цвет) требует индекса по `dod-global.md`, идемпотентно через
+      `information_schema` (тот же приём, что `categories.description`
+      в Таске 1)
 
 ## Out of scope — не трогаем
 
-- Сайдбар фильтров (цена/категория/цвет/«В наличии»), фильтрация без
-  перезагрузки, пустое состояние, переключатель плитка/список —
-  Таск 3 Фазы 1
 - Карточка товара (`/product/{slug}`), выбор Варианта — Таск 4
 - Поиск и подсказки (`/search`) — Таск 5
-- Обработчик `POST /cart/add` и сама корзина — Фаза 2; на мини-карточке
-  форма `POST /cart/add` (`variant_id` самого дешёвого активного
-  Варианта, `color`, `quantity`) уже рендерится по решению
-  `phase-1.md` («Кнопка «В корзину»» — тот же паттерн, что применится
-  и на карточке товара в Таске 4), но обработчик маршрута появится
-  только в Фазе 2 — сейчас сабмит даст 404
+- Обработчик `POST /cart/add` и сама корзина — Фаза 2
 - CRUD категорий/товаров для Менеджера/Администратора — Фаза 4
 - Скидки, отзывы, избранное — Фазы 6/7
+- Чекбоксы категории в сайдбаре на `/catalog/{slug}` — виджет
+  показывается только на `/catalog`; на странице категории она уже
+  зафиксирована путём (осознанное упрощение — иначе пришлось бы
+  различать «фильтр не тронут» и «пользователь снял единственную
+  галочку» у чекбоксов в обычной GET-форме, а это не требуется ни одним
+  пунктом DoD)
 
 ## Definition of Done
 
-- [x] Неактивный товар и товар без активных Вариантов не показываются;
-      несуществующий slug → 404 через `ErrorHandlers` — проверено
-      `curl` против реальной БД: 11 активных из 12 сидов, `/catalog/
-      does-not-exist` → 404
-- [x] Товар из двух категорий виден в обеих; крошки строятся по
-      `is_primary` — «Осло» найден и в `/catalog/divany`, и в
-      `/catalog/krovati`
-- [x] Сортировка и страница — в query (`?sort=price_asc&page=2`), F5
-      сохраняет; неизвестный `sort` → сортировка по умолчанию, не
-      ошибка
-- [x] Хлебные крошки: Главная → родительская → текущая категория, все
-      звенья кликабельны; описание категории — под заголовком —
-      проверено на `/catalog/divany`: Главная → Мягкая мебель → Диваны
-- [x] Более 12 товаров → есть номера страниц; `page=999` → последняя
-      страница или пустой список без ошибки — проверено временным
-      понижением `CATALOG_PER_PAGE` до 3 (11 товаров → 4 страницы),
-      `page=999` корректно откатывается на последнюю; константа
-      возвращена на 12 после проверки
-- [x] На странице нет числа «в наличии» и иконки «в избранное»
-      (`BR-004`, `ADR-017`); иконка «лупа» ведёт на карточку — grep по
-      выдаче не находит `pe-7s-like`/«в наличии»
-- [x] Меню «Каталог» в шапке ведёт на реальные категории — все 6 в
-      выпадающем меню (десктоп + off-canvas), ссылки рабочие
-- [x] `composer test` зелёный, включая `PaginationTest` — 49/49 (было
-      40, +9 новых)
-- [x] Проверить `.docs/dod-global.md` (индексы под новые запросы,
-      пагинация) — `idx_products_active`, `idx_variants_product`,
-      `idx_variant_images_variant` уже покрывают новые запросы;
-      `storage/logs/app.log` не создан за всю сессию проверки —
-      PHP-ошибок и warning'ов не было
+- [x] Смена фильтра → URL обновлён без перезагрузки; F5 воспроизводит
+      ту же выдачу; «назад» восстанавливает предыдущие фильтры и
+      чекбоксы в сайдбаре — серверная часть (fetch-фрагмент, query,
+      pre-checked чекбоксы) проверена `curl`; сам `pushState`/
+      `popstate` в `app.js` — синтаксически проверен (`node --check`),
+      не воспроизведён руками (нет браузера в сессии)
+- [x] Комбинация без результата → «Ничего не найдено» + «Сбросить
+      фильтры»; после сброса — полный список Категории — проверено
+      `curl`: `price_min=999999&price_max=999999` → пустое состояние,
+      `catalog-reset-link` ведёт на `/catalog` или `/catalog/divany`
+      (путь без query) в зависимости от страницы
+- [x] «В наличии» отбирает только товары с Вариантом-образцом (1–2
+      позиции на сидах) — `in_stock=1` → 1 из 1
+- [x] Фильтр цены по диапазону Вариантов: товар с Вариантом за 30 000
+      и 45 000 попадает в диапазон 40 000–50 000 — `divan-verona`
+      (30000/45000) найден в `price_min=40000&price_max=50000`
+- [x] Вид плитка/список переживает переход между страницами каталога,
+      но не новую вкладку — `sessionStorage` в `app.js`; серверная
+      часть (обе разметки — `single-product`/`single-product-02` —
+      рендерятся одновременно в двух `tab-pane`) проверена `curl`, сам
+      переход между вкладками — нет браузера в сессии
+- [x] Без JS форма сайдбара отправляется обычным GET и даёт ту же
+      выдачу — форма `method="get"`, все поля — обычные `name`/
+      `value`, `sort` через HTML `form="catalog-filter-form"`;
+      проверено `curl` без заголовка `X-Requested-With`
+- [x] `page` сбрасывается на 1 при смене фильтров — форма сайдбара не
+      содержит поле `page`, сервер по умолчанию отдаёт страницу 1
+- [x] Нет собственных глобальных переменных в `app.js` (IIFE) — все
+      новые функции/константы объявлены внутри существующего IIFE
+- [x] `composer test` зелёный, включая `CatalogFiltersTest` — 63/63
+      (было 49, +14 новых)
+- [x] Проверить `.docs/dod-global.md` — индекс `idx_variant_images_color`
+      добавлен под новый фильтр (`ADR-031`); `storage/logs/app.log` не
+      создан за всю сессию проверки — ошибок и warning'ов не было
 
 ## Важные правила
 - Следовать `CLAUDE.md`

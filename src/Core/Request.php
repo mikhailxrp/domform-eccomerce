@@ -27,3 +27,13 @@ function isGet(): bool
 {
     return requestMethod() === 'GET';
 }
+
+/**
+ * Фрагмент вместо полной страницы — конвенция каталога (`phase-1.md`,
+ * «Решения фазы»): без отдельного JSON API, тот же Controller отдаёт
+ * кусок HTML по заголовку `X-Requested-With: fetch` из `app.js`.
+ */
+function isFetchRequest(): bool
+{
+    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
+}

@@ -109,3 +109,28 @@
 .shop-top-bar .shop-text p span {
     font-size: 1.2em;
 }
+
+/* Состояние загрузки при fetch-подмене #catalog-results (Таск 3) —
+   тема не даёт визуального признака «идёт запрос». */
+#catalog-results[aria-busy="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* «Ничего не найдено» — своя BEM-компонента, тема не даёт готового
+   пустого состояния для каталога. */
+.empty-state {
+    padding: 60px 0;
+    text-align: center;
+}
+
+.empty-state__title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.catalog-reset-link {
+    display: inline-block;
+    margin-top: 16px;
+}

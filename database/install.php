@@ -161,10 +161,24 @@ $pdo->exec("
         sort_order          INT NOT NULL DEFAULT 0,
         is_main             TINYINT(1) NOT NULL DEFAULT 0,
         KEY idx_variant_images_variant (product_variant_id),
+        KEY idx_variant_images_color (color),
         CONSTRAINT fk_variant_images_variant
             FOREIGN KEY (product_variant_id) REFERENCES product_variants (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
+
+// Таблица уже могла быть развёрнута до ADR-031 (Фаза 0/Таск 1 Фазы 1),
+// когда индекса по color ещё не было — та же идемпотентная проверка
+// через information_schema, что и для categories.description (Таск 1).
+$indexExists = $pdo->prepare('
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND INDEX_NAME = :index_name
+');
+$indexExists->execute(['table' => 'variant_images', 'index_name' => 'idx_variant_images_color']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE variant_images ADD INDEX idx_variant_images_color (color);');
+}
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS reviews (
