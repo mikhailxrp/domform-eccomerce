@@ -93,8 +93,9 @@ function requireAuth(): void
 
 function redirectIfAuthenticated(): void
 {
-    if (isAuthenticated()) {
-        redirect('/');
+    $user = currentUser();
+    if ($user !== null) {
+        redirect(homeUrlForRole($user['role']));
     }
 }
 
@@ -185,6 +186,135 @@ function requireCsrf(): void
         http_response_code(419);
         exit('419 Неверный CSRF-токен. Обновите страницу и попробуйте снова.');
     }
+}
+
+// ─── Роли и текущий пользователь ────────────────────────────────────────
+// currentUser()/roleAllowed() читают только $_SESSION (id/name/role туда
+// кладутся при логине и авто-входе по remember-cookie) — без похода в БД,
+// чтобы requireRole() было дёшево вызывать на каждый защищённый маршрут.
+
+function currentUser(): ?array
+{
+    ensureSessionStarted();
+    $userId = normalizeUserId($_SESSION['user_id'] ?? null);
+    if ($userId === null) {
+        return null;
+    }
+    return [
+        'id'   => $userId,
+        'name' => (string) ($_SESSION['user_name'] ?? ''),
+        'role' => (string) ($_SESSION['user_role'] ?? ''),
+    ];
+}
+
+function roleAllowed(array $allowedRoles, ?string $role): bool
+{
+    return $role !== null && $role !== '' && in_array($role, $allowedRoles, true);
+}
+
+function requireRole(array $roles): void
+{
+    $user = currentUser();
+    if ($user === null) {
+        redirect('/login');
+    }
+    if (!roleAllowed($roles, $user['role'])) {
+        http_response_code(403);
+        exit('403 Доступ запрещён.');
+    }
+}
+
+/**
+ * Куда попадает пользователь после входа / при обращении к /login-
+ * /register уже авторизованным: Покупатель — на `/` (личный кабинет,
+ * Фаза 7), Менеджер/Администратор — в Панель управления (`phase-0.md`,
+ * «Решения фазы»).
+ */
+function homeUrlForRole(?string $role): string
+{
+    return roleAllowed(['manager', 'admin'], $role) ? '/admin' : '/';
+}
+
+// ─── Remember me ────────────────────────────────────────────────────────
+// Отдельная cookie (selector:validator), не продление cookie сессии — см.
+// `database.md` (ADR-028) и `.docs/phases/phase-0.md`.
+
+function setRememberCookie(string $selector, string $validator, int $expiresAt): void
+{
+    setcookie('remember_token', $selector . ':' . $validator, [
+        'expires'  => $expiresAt,
+        'path'     => '/',
+        'secure'   => defined('APP_ENV') && APP_ENV === 'production',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+
+function clearRememberCookie(): void
+{
+    setcookie('remember_token', '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'secure'   => defined('APP_ENV') && APP_ENV === 'production',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    unset($_COOKIE['remember_token']);
+}
+
+/**
+ * Авто-вход по remember-cookie, если пользователь ещё не в сессии.
+ * Любая аномалия (нет cookie, битый формат, просроченный/несуществующий
+ * selector, неверный validator, заблокированный пользователь) —
+ * молчаливый no-op с очисткой cookie, никогда не бросает ошибку.
+ */
+function attemptRememberLogin(): void
+{
+    if (isAuthenticated()) {
+        return;
+    }
+
+    $cookie = $_COOKIE['remember_token'] ?? null;
+    if (!is_string($cookie) || $cookie === '') {
+        return;
+    }
+
+    if (!str_contains($cookie, ':')) {
+        clearRememberCookie();
+        return;
+    }
+
+    [$selector, $validator] = explode(':', $cookie, 2);
+    if ($selector === '' || $validator === '') {
+        clearRememberCookie();
+        return;
+    }
+
+    require_once ROOT_PATH . '/src/Models/RememberToken.php';
+    require_once ROOT_PATH . '/src/Models/User.php';
+
+    $token = findRememberToken($selector);
+    if ($token === null || strtotime((string) $token['expires_at']) < time()) {
+        clearRememberCookie();
+        return;
+    }
+
+    if (!hash_equals($token['token_hash'], hash('sha256', $validator))) {
+        clearRememberCookie();
+        return;
+    }
+
+    $user = findUserById((int) $token['user_id']);
+    if ($user === null || (int) $user['is_blocked'] === 1) {
+        deleteRememberTokens((int) $token['user_id']);
+        clearRememberCookie();
+        return;
+    }
+
+    regenerateSession();
+    $_SESSION['user_id']   = (int) $user['id'];
+    $_SESSION['user_name'] = $user['name'];
+    $_SESSION['user_role'] = $user['role'];
 }
 
 // ─── Rate limiting ──────────────────────────────────────────────────────

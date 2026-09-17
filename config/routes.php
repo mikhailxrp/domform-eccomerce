@@ -12,6 +12,7 @@ return [
         '/'         => ['HomeController', 'index'],
         '/login'    => ['AuthController', 'showLogin'],
         '/register' => ['AuthController', 'showRegister'],
+        '/admin'    => ['AdminController', 'index'],
     ],
     'POST' => [
         '/login'    => ['AuthController', 'login'],

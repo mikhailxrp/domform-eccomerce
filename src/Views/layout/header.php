@@ -69,7 +69,7 @@ $userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
                         </div>
 
                         <div class="dropdown">
-                            <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
+                            <a class="action<?= $isLoggedIn ? ' action--active' : '' ?>" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
                             <ul class="dropdown-menu dropdown-profile">
                                 <?php if ($isLoggedIn): ?>
                                     <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>
@@ -119,7 +119,7 @@ $userName   = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
                     <div class="col">
                         <div class="header-meta">
                             <div class="dropdown">
-                                <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
+                                <a class="action<?= $isLoggedIn ? ' action--active' : '' ?>" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-user"></i></a>
                                 <ul class="dropdown-menu dropdown-profile">
                                     <?php if ($isLoggedIn): ?>
                                         <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>

@@ -46,6 +46,10 @@ include ROOT_PATH . '/src/Views/layout/header.php';
                                 <?php endif; ?>
                             </div>
                             <div class="single-form">
+                                <input type="checkbox" id="remember" name="remember" value="1">
+                                <label for="remember"><span></span> Запомнить меня</label>
+                            </div>
+                            <div class="single-form">
                                 <button type="submit" class="btn btn-primary btn-hover-dark">Войти</button>
                             </div>
                         </form>

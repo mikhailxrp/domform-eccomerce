@@ -38,7 +38,7 @@
 | 1   | Схема БД в актуальном состоянии + сид администратора  | ✅ Завершён |
 | 2   | Базовый layout витрины и статика темы                 | ✅ Завершён |
 | 3   | Регистрация, вход, выход (`FR-AUTH-001/002/005`)      | ✅ Завершён |
-| 4   | Роли, защита маршрутов, «Remember me» (`FR-AUTH-004`) | ⏳ Ожидает  |
+| 4   | Роли, защита маршрутов, «Remember me» (`FR-AUTH-004`) | ✅ Завершён |
 | 5   | Восстановление пароля (`FR-AUTH-003`)                 | ⏳ Ожидает  |
 
 ---
@@ -182,7 +182,14 @@ off-canvas меню, вёрстка 320px) — см. `dev-log.md` (17.09.2026)
 
 ## Таск 4 — Роли, защита маршрутов, «Remember me»
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен серией `curl`-запросов
+против реальной БД (403/200/302 по трём ролям, remember-cookie
+переживает удаление cookie сессии, роль восстанавливается, выход чистит
+все токены и cookie, просроченный/несуществующий/подделанный
+selector/validator — без ошибок); добавлено информационное уведомление
+о cookie (не было в исходном плане таска, добавлено по ходу — баннер +
+`localStorage`); не хватает визуальной проверки клика/баннера в браузере
+— см. `dev-log.md` (17.09.2026)
 
 **Цель таска:**
 Есть `requireRole()` для двух уровней доступа (`admin` и
@@ -208,21 +215,25 @@ off-canvas меню, вёрстка 320px) — см. `dev-log.md` (17.09.2026)
 - `config/routes.php` — изменить: `/admin`
 - `tests/Unit/AuthHelpersTest.php` — создать: `requireRole` /
   `currentUser` на `$_SESSION` в CLI
+- `src/Views/components/cookie-notice.php`, `src/Views/layout/footer.php`,
+  `public/assets/js/app.js`, `public/assets/css/app.css` — добавлено по
+  ходу таска: информационный баннер о cookie (первая cookie за
+  пределами сессии — remember-token), не блокирующий, `localStorage`
 
 **Definition of Done:**
 
-- [ ] `customer` по URL `/admin` получает 403; `manager` и `admin` —
+- [x] `customer` по URL `/admin` получает 403; `manager` и `admin` —
       страницу; незалогиненный — редирект на `/login`
-- [ ] Remember-cookie: `httponly`, `samesite=Lax`, `secure` в
+- [x] Remember-cookie: `httponly`, `samesite=Lax`, `secure` в
       production; в БД только хэш validator, сам validator — только в
       cookie
-- [ ] Вход с чекбоксом → закрыть браузер (удалить cookie сессии) →
+- [x] Вход с чекбоксом → закрыть браузер (удалить cookie сессии) →
       открыть сайт → пользователь залогинен; без чекбокса — нет
-- [ ] «Выход» удаляет строку из `remember_tokens` и cookie
-- [ ] Просроченный/несуществующий selector игнорируется без ошибки и
+- [x] «Выход» удаляет строку из `remember_tokens` и cookie
+- [x] Просроченный/несуществующий selector игнорируется без ошибки и
       cookie очищается
-- [ ] `composer test` зелёный, включая `AuthHelpersTest`
-- [ ] Проверить `.docs/dod-global.md`
+- [x] `composer test` зелёный, включая `AuthHelpersTest`
+- [x] Проверить `.docs/dod-global.md`
 
 ---
 

@@ -45,3 +45,29 @@
 .page-content-offset {
     padding-top: 120px;
 }
+
+/* Информационный баннер о cookie (localStorage-флаг — app.js) — своя
+   BEM-компонента, тему не трогаем. */
+.cookie-notice {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    background-color: #252c51;
+    padding: 16px 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.cookie-notice__text {
+    color: #fff;
+    margin: 0;
+}
+
+/* Иконка аватара в шапке у авторизованного — тот же акцентный цвет,
+   что тема уже использует для активного пункта меню/hover на иконках
+   (.nav-menu li.active a, .action:hover — #f2a100), иконка в наборе
+   темы (pe-7s, только контурные) без заливки. */
+.header-meta .action--active {
+    color: #f2a100;
+}

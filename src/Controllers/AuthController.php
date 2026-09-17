@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/User.php';
+require_once ROOT_PATH . '/src/Models/RememberToken.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 
 class AuthController
@@ -59,9 +60,19 @@ class AuthController
         regenerateSession();
         $_SESSION['user_id']   = (int) $user['id'];
         $_SESSION['user_name'] = $user['name'];
+        $_SESSION['user_role'] = $user['role'];
+
+        if (input('remember') === '1') {
+            $token = createRememberToken((int) $user['id']);
+            setRememberCookie(
+                $token['selector'],
+                $token['validator'],
+                time() + REMEMBER_TOKEN_TTL_DAYS * 24 * 60 * 60
+            );
+        }
 
         setFlash('success', 'Вы вошли в аккаунт.');
-        redirect('/');
+        redirect(homeUrlForRole($user['role']));
     }
 
     public function showRegister(): void
@@ -131,7 +142,13 @@ class AuthController
     {
         requireCsrf();
 
-        unset($_SESSION['user_id'], $_SESSION['user_name']);
+        $user = currentUser();
+        if ($user !== null) {
+            deleteRememberTokens($user['id']);
+        }
+        clearRememberCookie();
+
+        unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_role']);
         regenerateSession();
 
         setFlash('success', 'Вы вышли из аккаунта.');
