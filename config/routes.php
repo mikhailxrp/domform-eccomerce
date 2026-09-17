@@ -9,13 +9,18 @@ declare(strict_types=1);
 
 return [
     'GET' => [
-        '/'         => ['HomeController', 'index'],
-        '/login'    => ['AuthController', 'showLogin'],
-        '/register' => ['AuthController', 'showRegister'],
+        '/'                        => ['HomeController', 'index'],
+        '/login'                   => ['AuthController', 'showLogin'],
+        '/register'                => ['AuthController', 'showRegister'],
+        '/admin'                   => ['AdminController', 'index'],
+        '/forgot-password'         => ['AuthController', 'showForgot'],
+        '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],
     'POST' => [
-        '/login'    => ['AuthController', 'login'],
-        '/register' => ['AuthController', 'register'],
-        '/logout'   => ['AuthController', 'logout'],
+        '/login'                   => ['AuthController', 'login'],
+        '/register'                => ['AuthController', 'register'],
+        '/logout'                  => ['AuthController', 'logout'],
+        '/forgot-password'         => ['AuthController', 'forgot'],
+        '/reset-password/{token}'  => ['AuthController', 'reset'],
     ],
 ];

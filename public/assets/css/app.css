@@ -1,0 +1,99 @@
+.header-menu ul li a {
+    font-size: 12px;
+}
+
+.single-benefit .title {
+    font-size: 20px;
+}
+
+.slider-section .single-slider {
+    height: 100vh;
+}
+
+.slider-content .title {
+    font-size: 56px;
+}
+
+@media only screen and (max-width: 767px) {
+    .slider-content .title {
+        font-size: 32px;
+    }
+}
+
+.header-search {
+    margin-bottom: 20px;
+}
+
+/* Тема считала ширину кнопки под короткий английский текст
+   (Login/Register, 160px) — русские подписи в неё не влезают
+   и обрезаются (overflow: hidden у .btn). */
+.login-register-wrapper .single-form .btn {
+    width: auto;
+    min-width: 160px;
+}
+
+/* .header-area/.header-mobile у темы — всегда position: absolute
+   (оверлей поверх верха страницы, рассчитан на высокий hero-блок под
+   собой — на Главной эту роль играет .slider-section). На страницах
+   без такого блока (Вход/Регистрация) и на плашке уведомлений контент
+   без отступа прячется под хедером — и хуже: сам хедер, оставаясь
+   поверх (z-index: 99), перехватывает клики по кнопке закрытия внутри
+   перекрытой области. Точную высоту (она разная на разных брейкпоинтах
+   и зависит от контента хедера) подставляет app.js через реальный
+   outerHeight() — здесь только запасное значение на момент до его
+   запуска. */
+.page-content-offset {
+    padding-top: 120px;
+}
+
+/* Информационный баннер о cookie (localStorage-флаг — app.js) — своя
+   BEM-компонента, тему не трогаем. */
+.cookie-notice {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    background-color: #252c51;
+    padding: 16px 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.cookie-notice__text {
+    color: #fff;
+    margin: 0;
+}
+
+/* Иконка аватара в шапке у авторизованного — тот же акцентный цвет,
+   что тема уже использует для активного пункта меню/hover на иконках
+   (.nav-menu li.active a, .action:hover — #f2a100), иконка в наборе
+   темы (pe-7s, только контурные) без заливки. */
+.header-meta .action--active {
+    color: #f2a100;
+}
+
+/* Кнопка-«глазик» показать/скрыть пароль (login/register/reset) —
+   переключает type у соседнего input в app.js. */
+.single-form--password {
+    position: relative;
+}
+
+.single-form--password input {
+    padding-right: 50px;
+}
+
+.single-form__password-toggle {
+    position: absolute;
+    top: 25px;
+    right: 16px;
+    transform: translateY(-50%);
+    background: none;
+    border: 0;
+    padding: 0;
+    color: #6d707f;
+    cursor: pointer;
+}
+
+.single-form__password-toggle:hover {
+    color: #f2a100;
+}

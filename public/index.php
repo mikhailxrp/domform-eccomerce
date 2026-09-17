@@ -31,6 +31,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 ensureSessionStarted();
+attemptRememberLogin();
 
 $routes = loadRoutes(ROOT_PATH . '/config/routes.php');
 dispatch($routes);

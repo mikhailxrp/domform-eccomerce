@@ -58,6 +58,54 @@ M:N связи Товар↔Категория, а не 1:N. Оставить с
 
 ---
 
+### `password_resets` _(новая — `ADR-027`)_
+
+Восстановление пароля (`FR-AUTH-003`) — Покупатель, забывший пароль,
+получает по email одноразовую ссылку со сроком действия, без участия
+Менеджера/Администратора.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| user_id | INT NOT NULL, FK → users.id, ON DELETE CASCADE | |
+| token_hash | CHAR(64) NOT NULL UNIQUE | sha256 от случайного токена (32 байта из `random_bytes`) — в БД хранится только хэш, сам токен уходит только в ссылку письма, как пароль |
+| expires_at | DATETIME NOT NULL | момент создания + 60 минут |
+| used_at | DATETIME NULL | одноразовость — заполнено после успешной смены пароля, повторное открытие той же ссылки отклоняется |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `UNIQUE(token_hash)` — поиск по токену из ссылки;
+`INDEX(user_id)` — аннулирование прежних запросов при новом
+
+---
+
+### `remember_tokens` _(новая — `ADR-028`)_
+
+«Запомнить меня» (`FR-AUTH-004`) — вход сохраняется между визитами на
+устройстве дольше, чем живёт cookie сессии (без этого GC сессий на
+shared-хостинге разлогинивает раньше, чем ожидает Покупатель).
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| user_id | INT NOT NULL, FK → users.id, ON DELETE CASCADE | |
+| selector | CHAR(24) NOT NULL UNIQUE | публичная часть значения cookie — по ней ищем строку без сканирования таблицы |
+| token_hash | CHAR(64) NOT NULL | sha256 секретной части cookie; сравнение — `hash_equals()`, не `===` (защита от timing-атаки) |
+| expires_at | DATETIME NOT NULL | момент создания + 30 дней |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `UNIQUE(selector)` — поиск токена при авто-входе;
+`INDEX(user_id)` — удаление всех токенов пользователя при выходе/смене
+пароля
+
+> Токен cookie хранится как пара `selector:secret`, не единой строкой —
+> `selector` ищет строку по индексу, `secret` (в БД — только его хэш)
+> сверяется через `hash_equals()`. Один `token_hash` без `selector`
+> заставил бы перебирать все строки таблицы, сравнивая хэши, либо искать
+> по самому хэшу — тот же класс утечки по времени сравнения, которого
+> избегает пара selector/validator.
+
+---
+
 ### `categories`
 
 | Колонка | Тип | Назначение |
@@ -459,7 +507,9 @@ M:N вместо 1:N: «Товар может входить в нескольк
 users (1)
   ├──< orders (1:N, ON DELETE SET NULL)
   ├──< cart_items (1:N, ON DELETE CASCADE)
-  └──< favorites (1:N, ON DELETE CASCADE)
+  ├──< favorites (1:N, ON DELETE CASCADE)
+  ├──< password_resets (1:N, ON DELETE CASCADE)
+  └──< remember_tokens (1:N, ON DELETE CASCADE)
 
 categories (1)
   ├──< categories (self, parent_id, ON DELETE SET NULL)
