@@ -197,6 +197,113 @@ function bindCatalogFilterParams(PDOStatement $stmt, array $params): void
 }
 
 /**
+ * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
+ * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
+ * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный
+ * Товар не находится вовсе — тот же результат, что и несуществующий
+ * slug, контроллеру не нужно различать эти два случая для 404.
+ */
+function findProductBySlug(string $slug): ?array
+{
+    $stmt = getPdo()->prepare('
+        SELECT
+            p.id, p.name, p.slug, p.description,
+            c.id AS category_id, c.parent_id AS category_parent_id,
+            c.name AS category_name, c.slug AS category_slug
+        FROM products p
+        INNER JOIN product_categories pc ON pc.product_id = p.id AND pc.is_primary = 1
+        INNER JOIN categories c ON c.id = pc.category_id
+        WHERE p.slug = :slug AND p.is_active = 1
+        LIMIT 1
+    ');
+    $stmt->execute(['slug' => $slug]);
+    $product = $stmt->fetch();
+
+    return $product !== false ? $product : null;
+}
+
+function getProductVariants(int $productId): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT id, sku, material, mechanism_type, price, production_time, is_showroom_sample
+        FROM product_variants
+        WHERE product_id = :product_id AND is_active = 1
+        ORDER BY price ASC, id ASC
+    ');
+    $stmt->execute(['product_id' => $productId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Плоский список фото по нескольким Вариантам сразу — группировка по
+ * `product_variant_id` (для JSON селектора Варианта) остаётся на
+ * Controller, здесь только сырые строки.
+ */
+function getVariantImages(array $variantIds): array
+{
+    if ($variantIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
+    $stmt         = getPdo()->prepare("
+        SELECT product_variant_id, color, is_swatch, path, sort_order, is_main
+        FROM variant_images
+        WHERE product_variant_id IN ({$placeholders})
+        ORDER BY product_variant_id, sort_order, id
+    ");
+    $stmt->execute($variantIds);
+
+    return $stmt->fetchAll();
+}
+
+function getProductSpecs(int $productId): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT name, value
+        FROM product_specs
+        WHERE product_id = :product_id
+        ORDER BY sort_order ASC, id ASC
+    ');
+    $stmt->execute(['product_id' => $productId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Тот же формат строки, что и `getCatalogProducts()` (через
+ * `attachCheapestVariant()`) — «Похожие товары» рендерятся тем же
+ * `product-card.php`, без второго шаблона мини-карточки.
+ */
+function getRelatedProducts(int $productId, int $categoryId, int $limit): array
+{
+    $pdo = getPdo();
+
+    $stmt = $pdo->prepare('
+        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        INNER JOIN product_categories pc ON pc.product_id = p.id AND pc.category_id = :category_id
+        WHERE p.is_active = 1 AND p.id != :product_id
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+    ');
+    $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
+    $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    if ($products === []) {
+        return [];
+    }
+
+    return attachCheapestVariant($pdo, $products);
+}
+
+/**
  * Добавляет к каждому Товару данные самого дешёвого активного Варианта
  * (id/материал/цвет/фото) одним батч-запросом — без N+1 на страницу
  * каталога.

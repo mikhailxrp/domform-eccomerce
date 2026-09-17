@@ -9,10 +9,14 @@
         return $header.length ? $header.outerHeight() : 0;
     }
 
+    /** Небольшой запас сверх точной высоты хедера — иначе контент начинается
+        ровно в притык к нему, без визуального «воздуха». */
+    var CONTENT_OFFSET_GAP = 24;
+
     function applyContentOffset() {
         var height = currentHeaderHeight();
         if (height > 0) {
-            jQuery('.page-content-offset').css('padding-top', height + 'px');
+            jQuery('.page-content-offset').css('padding-top', (height + CONTENT_OFFSET_GAP) + 'px');
         }
     }
 
@@ -275,6 +279,153 @@
         });
     }
 
+    /**
+     * Карточка товара (Таск 4) — переключение Варианта/цвета на клиенте
+     * без похода на сервер: данные всех Вариантов уже в разметке
+     * (`data-variants`, JSON). Миниатюры под главным фото — визуальный
+     * выбор цвета (`#product-thumbnails`, живёт в колонке с фото, а не
+     * внутри `.product-variant-selector` в колонке описания — оба
+     * читают одни и те же `data-variants`).
+     */
+    function initProductVariantSelector() {
+        var $root = jQuery('.product-variant-selector');
+        if (!$root.length) {
+            return;
+        }
+
+        var variants = [];
+        try {
+            variants = JSON.parse($root.attr('data-variants') || '[]');
+        } catch (e) {
+            variants = [];
+        }
+
+        var $thumbnails   = jQuery('#product-thumbnails');
+        var $colorName    = jQuery('#product-color-name');
+        var $mechanism    = $root.find('.product-variant-selector__mechanism');
+        var $leadTime     = $root.find('.product-variant-selector__lead-time');
+        var $variantInput = $root.find('.product-variant-selector__variant-input');
+        var $colorInput   = $root.find('.product-variant-selector__color-input');
+        var $hint         = $root.find('.product-variant-selector__hint');
+        var $price        = jQuery('#product-price');
+        var $mainImage    = jQuery('#product-main-image');
+
+        var preselected        = parseInt($root.attr('data-preselected'), 10);
+        var selectedVariantId  = isNaN(preselected) ? null : preselected;
+
+        function findVariant(variantId) {
+            for (var i = 0; i < variants.length; i++) {
+                if (variants[i].id === variantId) {
+                    return variants[i];
+                }
+            }
+            return null;
+        }
+
+        /** Точное совпадение по цвету, иначе первое фото Варианта — своя фотка есть не у каждого цвета. */
+        function findImage(variant, color) {
+            if (!variant || !variant.images.length) {
+                return null;
+            }
+            for (var i = 0; i < variant.images.length; i++) {
+                if (variant.images[i].color === color) {
+                    return variant.images[i];
+                }
+            }
+            return variant.images[0];
+        }
+
+        /** Миниатюры принадлежат текущему Варианту — при смене материала перестраиваем весь ряд. */
+        function renderThumbnails(variant) {
+            if (!$thumbnails.length) {
+                return;
+            }
+            $thumbnails.empty();
+
+            var seen = {};
+            variant.images.forEach(function (image) {
+                if (!image.color || seen[image.color]) {
+                    return;
+                }
+                seen[image.color] = true;
+                jQuery('<button type="button" class="details-gallery-thumbs__item"><img></button>')
+                    .attr('data-color', image.color)
+                    .find('img').attr('src', image.path).attr('alt', image.color)
+                    .end()
+                    .appendTo($thumbnails);
+            });
+
+            $thumbnails.attr('hidden', Object.keys(seen).length < 2);
+        }
+
+        function renderVariant(variantId, preferredColor) {
+            var variant = findVariant(variantId);
+            if (!variant) {
+                return;
+            }
+            selectedVariantId = variantId;
+
+            $root.find('.product-variant-selector__option[data-variant-id]').removeClass('active');
+            $root.find('.product-variant-selector__option[data-variant-id="' + variantId + '"]').addClass('active');
+
+            renderThumbnails(variant);
+
+            var image = findImage(variant, preferredColor);
+            var selectedColor = image ? image.color : null;
+
+            $thumbnails.children('.details-gallery-thumbs__item').removeClass('active');
+            if (selectedColor) {
+                $thumbnails.find('.details-gallery-thumbs__item[data-color="' + selectedColor + '"]').addClass('active');
+            }
+
+            if (image && $mainImage.length) {
+                $mainImage.attr('src', image.path).attr('alt', variant.material);
+            }
+
+            if ($price.length) {
+                $price.text(variant.price_formatted);
+            }
+
+            if ($colorName.length) {
+                $colorName.text(selectedColor || '');
+            }
+
+            $mechanism.text(variant.mechanism_type ? 'Механизм: ' + variant.mechanism_type : '').attr('hidden', !variant.mechanism_type);
+
+            if (variant.is_showroom_sample) {
+                $leadTime.html('<strong>Выставочный образец</strong> — готов к выдаче.');
+            } else {
+                $leadTime.html(
+                    'Срок изготовления: <strong>' + variant.production_time + '</strong>. Товар изготавливается под заказ.'
+                );
+            }
+
+            $variantInput.val(variantId);
+            $colorInput.val(selectedColor || '');
+            $hint.attr('hidden', true);
+        }
+
+        $root.on('click', '.product-variant-selector__option[data-variant-id]', function () {
+            renderVariant(parseInt(jQuery(this).attr('data-variant-id'), 10), null);
+        });
+
+        jQuery(document).on('click', '#product-thumbnails .details-gallery-thumbs__item', function () {
+            var variantId = selectedVariantId !== null ? selectedVariantId : (variants[0] ? variants[0].id : null);
+            renderVariant(variantId, jQuery(this).attr('data-color'));
+        });
+
+        $root.on('submit', '.product-variant-selector__cart-form', function (event) {
+            if (!selectedVariantId) {
+                event.preventDefault();
+                $hint.removeAttr('hidden');
+            }
+        });
+
+        if (selectedVariantId !== null) {
+            renderVariant(selectedVariantId, null);
+        }
+    }
+
     jQuery(function () {
         syncHeaderSticky();
         applyContentOffset();
@@ -284,6 +435,7 @@
         initCatalogPriceSlider();
         initCatalogFilters();
         applyStoredCatalogView();
+        initProductVariantSelector();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);
         jQuery(document).on('close.bs.alert', '.alert', function () {
