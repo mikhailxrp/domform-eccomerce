@@ -132,6 +132,7 @@ $pdo->exec("
         KEY idx_variants_product (product_id),
         KEY idx_variants_price (price),
         KEY idx_variants_showroom (is_showroom_sample),
+        KEY idx_variants_material (material),
         CONSTRAINT fk_variants_product
             FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -178,6 +179,15 @@ $indexExists->execute(['table' => 'variant_images', 'index_name' => 'idx_variant
 
 if ((int) $indexExists->fetchColumn() === 0) {
     $pdo->exec('ALTER TABLE variant_images ADD INDEX idx_variant_images_color (color);');
+}
+
+// Та же идемпотентная проверка для `product_variants.material` — индекс
+// под префиксный поиск `LIKE 'q%'` (Таск 5, `ADR-032`), таблица могла уже
+// существовать без него.
+$indexExists->execute(['table' => 'product_variants', 'index_name' => 'idx_variants_material']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE product_variants ADD INDEX idx_variants_material (material);');
 }
 
 $pdo->exec("

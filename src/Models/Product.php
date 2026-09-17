@@ -197,6 +197,171 @@ function bindCatalogFilterParams(PDOStatement $stmt, array $params): void
 }
 
 /**
+ * Поиск (`FR-SRCH-002`, Таск 5) — та же форма строки, что и листинг
+ * каталога (через `attachCheapestVariant()`), тот же `product-card.php`.
+ * `$q` — уже нормализованный `normalizeSearchQuery()` запрос.
+ */
+function searchProducts(string $q, string $sort, int $page, int $perPage): array
+{
+    $pdo = getPdo();
+
+    [$where, $params] = buildSearchConditions($q);
+
+    $orderBy = match ($sort) {
+        'price_asc'  => 'min_price ASC',
+        'price_desc' => 'min_price DESC',
+        default      => 'p.created_at DESC',
+    };
+
+    $offset = ($page - 1) * $perPage;
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.is_active = 1 AND ({$where})
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY {$orderBy}
+        LIMIT :limit OFFSET :offset
+    ");
+    bindSearchParams($stmt, $params);
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    if ($products === []) {
+        return [];
+    }
+
+    return attachCheapestVariant($pdo, $products);
+}
+
+function countSearchProducts(string $q): int
+{
+    $pdo = getPdo();
+
+    [$where, $params] = buildSearchConditions($q);
+
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM products p
+        WHERE p.is_active = 1
+          AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active = 1)
+          AND ({$where})
+    ");
+    bindSearchParams($stmt, $params);
+    $stmt->execute();
+
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Подсказки поиска (`FR-SRCH-001`) — до `$limit` позиций, тот же формат
+ * строки, что и остальной поиск.
+ */
+function suggestProducts(string $q, int $limit): array
+{
+    $pdo = getPdo();
+
+    [$where, $params] = buildSearchConditions($q);
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.is_active = 1 AND ({$where})
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+    ");
+    bindSearchParams($stmt, $params);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    if ($products === []) {
+        return [];
+    }
+
+    return attachCheapestVariant($pdo, $products);
+}
+
+/**
+ * Условия `WHERE` для поиска — общие для `searchProducts()`,
+ * `countSearchProducts()`, `suggestProducts()`, чтобы список и счётчик не
+ * могли разойтись по условиям (тот же принцип, что
+ * `buildCatalogFilterConditions()`). Стратегия по длине запроса —
+ * `phase-1.md`, «Решения фазы»: `innodb_ft_min_token_size = 3` на
+ * shared-хостинге не даёт FULLTEXT искать короче 3 символов, поэтому
+ * 1–2 символа идут через префиксный `LIKE`.
+ */
+function buildSearchConditions(string $q): array
+{
+    $likeTerm = escapeLikeValue($q) . '%';
+
+    if (mb_strlen($q) >= 3) {
+        $fulltextTerm = buildFulltextTerm($q);
+        if ($fulltextTerm === '') {
+            return ['0 = 1', []];
+        }
+
+        $condition = '(
+            MATCH(p.name, p.description) AGAINST (:fulltext_term IN BOOLEAN MODE)
+            OR EXISTS (
+                SELECT 1 FROM product_variants pvs
+                WHERE pvs.product_id = p.id AND pvs.is_active = 1 AND pvs.material LIKE :material_term
+            )
+            OR EXISTS (
+                SELECT 1 FROM product_variants pvc
+                INNER JOIN variant_images vic ON vic.product_variant_id = pvc.id
+                WHERE pvc.product_id = p.id AND pvc.is_active = 1 AND vic.color LIKE :color_term
+            )
+        )';
+
+        return [$condition, [
+            'fulltext_term' => $fulltextTerm,
+            'material_term' => $likeTerm,
+            'color_term'    => $likeTerm,
+        ]];
+    }
+
+    $condition = '(
+        p.name LIKE :name_term
+        OR EXISTS (
+            SELECT 1 FROM product_variants pvs
+            WHERE pvs.product_id = p.id AND pvs.is_active = 1 AND pvs.material LIKE :material_term
+        )
+        OR EXISTS (
+            SELECT 1 FROM product_variants pvc
+            INNER JOIN variant_images vic ON vic.product_variant_id = pvc.id
+            WHERE pvc.product_id = p.id AND pvc.is_active = 1 AND vic.color LIKE :color_term
+        )
+    )';
+
+    return [$condition, [
+        'name_term'     => $likeTerm,
+        'material_term' => $likeTerm,
+        'color_term'    => $likeTerm,
+    ]];
+}
+
+function bindSearchParams(PDOStatement $stmt, array $params): void
+{
+    foreach ($params as $key => $value) {
+        $stmt->bindValue(":{$key}", $value, PDO::PARAM_STR);
+    }
+}
+
+/**
+ * Экранирует `\`/`%`/`_` перед подстановкой в `LIKE 'q%'` — иначе ввод
+ * вроде `50%` вёл бы себя как маска, а не как буквальный текст запроса.
+ */
+function escapeLikeValue(string $value): string
+{
+    return addcslashes($value, '\\_%');
+}
+
+/**
  * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
  * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
  * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный

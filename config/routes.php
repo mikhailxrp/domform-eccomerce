@@ -13,6 +13,8 @@ return [
         '/catalog'                 => ['CatalogController', 'index'],
         '/catalog/{slug}'          => ['CatalogController', 'category'],
         '/product/{slug}'          => ['ProductController', 'show'],
+        '/search'                  => ['SearchController', 'index'],
+        '/search/suggest'          => ['SearchController', 'suggest'],
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],

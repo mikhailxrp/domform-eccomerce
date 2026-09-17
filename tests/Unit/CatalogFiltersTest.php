@@ -126,4 +126,39 @@ final class CatalogFiltersTest extends TestCase
         $this->assertSame('1', $parsed['in_stock']);
         $this->assertArrayNotHasKey('price_max', $parsed);
     }
+
+    public function testNormalizeSearchQueryTrimsAndCollapsesWhitespace(): void
+    {
+        $this->assertSame('диван кровать', normalizeSearchQuery('  диван   кровать  '));
+    }
+
+    public function testNormalizeSearchQueryCapsLength(): void
+    {
+        $this->assertSame(100, mb_strlen(normalizeSearchQuery(str_repeat('a', 150))));
+    }
+
+    public function testNormalizeSearchQueryEmptyStringStaysEmpty(): void
+    {
+        $this->assertSame('', normalizeSearchQuery('   '));
+    }
+
+    public function testBuildFulltextTermAppendsWildcardPerWord(): void
+    {
+        $this->assertSame('диван* кровать*', buildFulltextTerm('диван кровать'));
+    }
+
+    public function testBuildFulltextTermStripsBooleanOperators(): void
+    {
+        $this->assertSame('экокожа*', buildFulltextTerm('эко"кожа'));
+    }
+
+    public function testBuildFulltextTermOnlyOperatorsReturnsEmpty(): void
+    {
+        $this->assertSame('', buildFulltextTerm('+*"'));
+    }
+
+    public function testBuildFulltextTermEmptyQueryReturnsEmpty(): void
+    {
+        $this->assertSame('', buildFulltextTerm(''));
+    }
 }

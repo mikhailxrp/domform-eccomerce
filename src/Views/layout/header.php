@@ -5,11 +5,13 @@ declare(strict_types=1);
 /** @var string|null $title */
 
 require_once ROOT_PATH . '/src/Models/Category.php';
+require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
-$pageTitle         = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
-$isLoggedIn        = isAuthenticated();
-$userName          = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
-$catalogCategories = getCategoryTree();
+$pageTitle           = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
+$isLoggedIn          = isAuthenticated();
+$userName            = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
+$catalogCategories   = getCategoryTree();
+$currentSearchQuery  = normalizeSearchQuery((string) ($_GET['q'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -81,10 +83,23 @@ $catalogCategories = getCategoryTree();
                             <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-search"></i></a>
                             <div class="dropdown-menu dropdown-search">
                                 <div class="header-search">
-                                    <form action="#">
-                                        <input type="text" placeholder="Поиск по каталогу...">
+                                    <form method="get" action="/search">
+                                        <label for="header-search-desktop" class="visually-hidden">Поиск по каталогу</label>
+                                        <input
+                                            type="text"
+                                            id="header-search-desktop"
+                                            name="q"
+                                            class="header-search__input"
+                                            placeholder="Поиск по каталогу..."
+                                            value="<?= e($currentSearchQuery) ?>"
+                                            autocomplete="off"
+                                            role="combobox"
+                                            aria-expanded="false"
+                                            aria-autocomplete="list"
+                                        >
                                         <button type="submit"><i class="pe-7s-search"></i></button>
                                     </form>
+                                    <?php include ROOT_PATH . '/src/Views/components/search-suggest.php'; ?>
                                 </div>
                             </div>
                         </div>
@@ -169,10 +184,23 @@ $catalogCategories = getCategoryTree();
         <div class="header-mobile-bottom">
             <div class="container">
                 <div class="header-search">
-                    <form action="#">
-                        <input type="text" placeholder="Поиск по каталогу...">
+                    <form method="get" action="/search">
+                        <label for="header-search-mobile" class="visually-hidden">Поиск по каталогу</label>
+                        <input
+                            type="text"
+                            id="header-search-mobile"
+                            name="q"
+                            class="header-search__input"
+                            placeholder="Поиск по каталогу..."
+                            value="<?= e($currentSearchQuery) ?>"
+                            autocomplete="off"
+                            role="combobox"
+                            aria-expanded="false"
+                            aria-autocomplete="list"
+                        >
                         <button type="submit"><i class="pe-7s-search"></i></button>
                     </form>
+                    <?php include ROOT_PATH . '/src/Views/components/search-suggest.php'; ?>
                 </div>
             </div>
         </div>

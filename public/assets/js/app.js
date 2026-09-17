@@ -426,6 +426,130 @@
         }
     }
 
+    /**
+     * Подсказки поиска в шапке (Таск 5) — `#search-suggest`-контейнер живёт
+     * рядом с каждым из двух полей (десктоп/мобильное, оба в разметке
+     * одновременно, переключаются медиа-запросами темы), поэтому ищем его
+     * через `.closest('.header-search')`, а не по фиксированному id.
+     */
+    var SEARCH_SUGGEST_DEBOUNCE_MS = 250;
+    var searchSuggestTimer         = null;
+    var searchSuggestActiveIndex   = -1;
+
+    function closeSearchSuggest($suggest) {
+        $suggest.attr('hidden', true).empty();
+        searchSuggestActiveIndex = -1;
+    }
+
+    function renderSearchSuggest($suggest, items) {
+        $suggest.empty();
+
+        if (!items.length) {
+            closeSearchSuggest($suggest);
+            return;
+        }
+
+        items.forEach(function (item) {
+            jQuery('<a class="search-suggest__item" role="option"></a>')
+                .attr('href', item.url)
+                .append(jQuery('<img alt="">').attr('src', item.image))
+                .append(jQuery('<span></span>').text(item.name))
+                .appendTo($suggest);
+        });
+
+        $suggest.removeAttr('hidden');
+        searchSuggestActiveIndex = -1;
+    }
+
+    function fetchSearchSuggest($input) {
+        var q        = $input.val().trim();
+        var $suggest = $input.closest('.header-search').find('.search-suggest');
+        if (!$suggest.length) {
+            return;
+        }
+
+        if (q.length < 2) {
+            closeSearchSuggest($suggest);
+            return;
+        }
+
+        fetch('/search/suggest?q=' + encodeURIComponent(q), {
+            headers: { 'X-Requested-With': 'fetch' },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                return response.ok ? response.json() : { items: [] };
+            })
+            .then(function (data) {
+                renderSearchSuggest($suggest, data.items || []);
+            })
+            .catch(function () {
+                closeSearchSuggest($suggest);
+            });
+    }
+
+    function initSearchSuggest() {
+        if (!jQuery('.header-search__input').length) {
+            return;
+        }
+
+        jQuery(document).on('input', '.header-search__input', function () {
+            var $input = jQuery(this);
+            clearTimeout(searchSuggestTimer);
+            searchSuggestTimer = setTimeout(function () {
+                fetchSearchSuggest($input);
+            }, SEARCH_SUGGEST_DEBOUNCE_MS);
+        });
+
+        jQuery(document).on('keydown', '.header-search__input', function (event) {
+            var $suggest = jQuery(this).closest('.header-search').find('.search-suggest');
+            var $items   = $suggest.find('.search-suggest__item');
+            if (!$items.length || $suggest.attr('hidden') !== undefined) {
+                return;
+            }
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                searchSuggestActiveIndex = Math.min(searchSuggestActiveIndex + 1, $items.length - 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                searchSuggestActiveIndex = Math.max(searchSuggestActiveIndex - 1, 0);
+            } else if (event.key === 'Enter') {
+                if (searchSuggestActiveIndex >= 0) {
+                    event.preventDefault();
+                    window.location.href = $items.eq(searchSuggestActiveIndex).attr('href');
+                }
+                return;
+            } else if (event.key === 'Escape') {
+                closeSearchSuggest($suggest);
+                return;
+            } else {
+                return;
+            }
+
+            $items.removeClass('active').attr('aria-selected', 'false');
+            $items.eq(searchSuggestActiveIndex).addClass('active').attr('aria-selected', 'true');
+        });
+
+        jQuery(document).on('click', function (event) {
+            if (jQuery(event.target).closest('.header-search').length) {
+                return;
+            }
+            jQuery('.search-suggest').each(function () {
+                closeSearchSuggest(jQuery(this));
+            });
+        });
+    }
+
+    /** Страница `/search` (Таск 5) — сортировка обычной формой, без fetch. */
+    function initSearchSortSubmit() {
+        jQuery(document).on('change', '#search-sort', function () {
+            if (this.form) {
+                this.form.submit();
+            }
+        });
+    }
+
     jQuery(function () {
         syncHeaderSticky();
         applyContentOffset();
@@ -436,6 +560,8 @@
         initCatalogFilters();
         applyStoredCatalogView();
         initProductVariantSelector();
+        initSearchSuggest();
+        initSearchSortSubmit();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);
         jQuery(document).on('close.bs.alert', '.alert', function () {

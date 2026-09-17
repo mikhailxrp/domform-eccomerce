@@ -114,3 +114,48 @@ function buildCatalogQueryString(array $filters): string
 
     return http_build_query($params);
 }
+
+// ─── Поиск (Таск 5) ─────────────────────────────────────────────────────
+
+const SEARCH_BOOLEAN_OPERATORS = ['+', '-', '*', '"', '(', ')', '<', '>', '~', '@'];
+const SEARCH_QUERY_MAX_LENGTH  = 100;
+
+/**
+ * Обрезка/схлопывание пробелов и ограничение длины — годится и для
+ * отображения запроса на странице (`e($q)`), и как основа для LIKE-поиска
+ * по материалу/цвету/названию. Операторы BOOLEAN MODE здесь не трогаем —
+ * это отображаемый пользователю текст, экранирование для `MATCH...AGAINST`
+ * отдельно в `buildFulltextTerm()`.
+ */
+function normalizeSearchQuery(string $q): string
+{
+    $normalized = trim(preg_replace('/\s+/u', ' ', $q) ?? '');
+
+    return mb_substr($normalized, 0, SEARCH_QUERY_MAX_LENGTH);
+}
+
+/**
+ * Термин для `MATCH ... AGAINST (... IN BOOLEAN MODE)` — операторы
+ * BOOLEAN MODE (`+ - * " ( ) < > ~ @`) вырезаются из каждого слова перед
+ * добавлением `*` (префиксный поиск), иначе запрос вроде `+*"` либо ничего
+ * не найдёт, либо (внутри кавычек/скобок без пары) оборвёт синтаксис
+ * `AGAINST` ошибкой MySQL. Пустая строка — нечего искать (все слова
+ * состояли только из операторов).
+ */
+function buildFulltextTerm(string $q): string
+{
+    $words = preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY);
+    if ($words === false) {
+        return '';
+    }
+
+    $terms = [];
+    foreach ($words as $word) {
+        $clean = str_replace(SEARCH_BOOLEAN_OPERATORS, '', $word);
+        if ($clean !== '') {
+            $terms[] = $clean . '*';
+        }
+    }
+
+    return implode(' ', $terms);
+}
