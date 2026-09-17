@@ -1,119 +1,154 @@
 # Current Task
 
 ## Фаза
-Phase 1 — Каталог и карточка товара (`.docs/phases/phase-1.md`, Таск 2)
+Phase 1 — Каталог и карточка товара (`.docs/phases/phase-1.md`, Таск 5)
+
+**Статус:** ✅ Завершён — код реализован и проверен против реальной БД
+(`mikhail700.beget.tech`): FULLTEXT-поиск (≥3 симв.), префиксный `LIKE`
+(2 симв., материал, цвет), подсказки, пустое состояние, сортировка,
+сохранение `q` в URL, rate-limit — подтверждены `curl`; `composer test`
+70/70 (детали — `dev-log.md`, 17.09.2026)
 
 ## Задача
-`/catalog` и `/catalog/{slug}` показывают сетку товаров по макету
-`SCR-02` с хлебными крошками, описанием категории, сортировкой
-(новизна / цена ↑ / цена ↓) и пагинацией; мини-карточка — фото,
-название, «от X ₽», материал/цвет текстом, кнопка «В корзину».
-Сайдбар с фильтрами — отдельный Таск 3, здесь не строится.
+Поле поиска в шапке ведёт на `GET /search?q=` (результаты — в сетке
+каталога, тот же `product-card.php`); подсказки с 2 символов, до 5
+позиций (фото+название) через `GET /search/suggest` с debounce и
+rate-limit.
 
 ## Scope — что трогаем
 
-- [x] `src/Models/Category.php` — создать: `getCategoryTree()`,
-      `findCategoryBySlug()`, `getCategoryPath()` (для хлебных крошек)
-- [x] `src/Models/Product.php` — создать: `getCatalogProducts(array
-      $filters, string $sort, int $page, int $perPage)`,
-      `countCatalogProducts(array $filters)` — минимальная цена
-      активных Вариантов, главное фото, список материалов/цветов;
-      только `is_active = 1` с ≥ 1 активным Вариантом
-- [x] `src/Core/Pagination.php` — создать: чистая `buildPagination(int
-      $total, int $page, int $perPage): array` (номера страниц,
-      prev/next, нормализация `page` < 1 / > max) + `buildPaginationUrl()`
-      (генерация ссылок пагинации, тоже чистая функция)
-- [x] `tests/Unit/PaginationTest.php` — создать
-- [x] `src/Controllers/CatalogController.php` — создать: `index()`,
-      `category(string $slug)` (404 на неизвестный slug)
-- [x] `src/Views/catalog/index.php` — создать (по
-      `shop-grid-left-sidebar.html`)
-- [x] `src/Views/components/product-card.php`,
-      `components/breadcrumbs.php`, `components/pagination.php` —
-      создать
-- [x] `config/routes.php` — изменить: `/catalog`, `/catalog/{slug}`
-- [x] `src/Views/layout/header.php` — изменить: пункт «Каталог» и
-      корневые категории из БД в меню (десктоп + off-canvas)
+- [x] `src/Models/Product.php` — изменено: `searchProducts()`,
+      `countSearchProducts()`, `suggestProducts()`, плюс общий
+      `buildSearchConditions()`/`bindSearchParams()`/`escapeLikeValue()`
+      (по образцу `getCatalogProducts`/`countCatalogProducts`):
+      `MATCH...AGAINST` для `mb_strlen($q) >= 3` по `products(name,
+      description)`, `LIKE 'q%'` по `products.name` для 2 символов, плюс
+      `LIKE 'q%'` по `product_variants.material`/`variant_images.color`
+      в обоих случаях; `suggestProducts()` переиспользует
+      `attachCheapestVariant()`
+- [x] `src/Core/CatalogFilters.php` — изменено: добавлены
+      `normalizeSearchQuery(string $q): string` (trim, схлопывание
+      пробелов, обрезка длины — для отображения и как основа LIKE),
+      `buildFulltextTerm(string $q): string` (вырезает операторы BOOLEAN
+      MODE `+ - * " ( ) < > ~ @` из каждого слова, добавляет `*`)
+- [x] `tests/Unit/CatalogFiltersTest.php` — изменено: 7 новых тестов на
+      `normalizeSearchQuery`/`buildFulltextTerm` (пробелы, длина, пустая
+      строка, спецсимволы, запрос из одних операторов)
+- [x] `src/Controllers/SearchController.php` — создан: `index()`,
+      `suggest()` (JSON, `tooManyAttempts('suggest', 20, 10)` +
+      `hitRateLimit('suggest')`)
+- [x] `src/Views/layout/header.php` — изменено: обе формы поиска
+      (desktop-дропдаун и мобильная) → `method="get" action="/search"`,
+      `name="q"`, значение сохраняется из `$_GET['q']`
+      (`normalizeSearchQuery()`); добавлен `require_once
+      CatalogFilters.php`
+- [x] `src/Views/components/search-suggest.php` — создан: пустой
+      контейнер подсказок (`.search-suggest[hidden]`), заполняется JS
+- [x] `public/assets/js/app.js` — изменено: `initSearchSuggest()`
+      (debounce 250мс, рендер подсказок, ↑↓/Enter/Esc, закрытие по клику
+      вне — делегирование на `.header-search__input`/`.search-suggest`),
+      `initSearchSortSubmit()` — в существующем IIFE, без новых
+      глобальных переменных
+- [x] `public/assets/css/app.css` — изменено: стили `.search-suggest`/
+      `.search-suggest__item`
+- [x] `config/routes.php` — изменено: `GET /search`, `GET /search/suggest`
+- [x] `config/config.php` — изменено: константы `SEARCH_SUGGEST_LIMIT = 5`,
+      `SEARCH_MIN_QUERY_LENGTH = 2`
+- [x] `.docs/planning-log.md` — изменено: `ADR-032` (FULLTEXT ≥3 симв. +
+      префиксный `LIKE` для 2 симв./материала/цвета, `INDEX(material)`)
 
-Не было в исходном плане, добавлено по ходу (мелкие зависимости
-перечисленных выше файлов, не отдельная функциональность):
-- [x] `config/config.php` — изменить: константа `CATALOG_PER_PAGE = 12`
-      (`phase-1.md`, «Решения фазы» — товаров на страницу)
-- [x] `src/Core/ErrorHandlers.php` — изменить: `abort404()` — тот же
-      404-ответ, что уже отдаёт `Router::dispatch()` на неизвестный
-      маршрут, вызывается из `CatalogController::category()`
-- [x] `src/Core/functions.php` — изменить: `formatPrice()` — «от X ₽»
-      на мини-карточке без float (`php.md`)
-- [x] `tests/bootstrap.php` — изменить: подключить `Pagination.php`
-      для `PaginationTest`
+Отклонения от изначального Scope, обнаруженные в процессе реализации
+(причины — ниже):
+- [x] `src/Views/search/index.php` — создан (не было в изначальном
+      Scope)
+- [x] `database/install.php`, `.docs/database.md` — изменены:
+      `INDEX(material)` на `product_variants` (не было в изначальном
+      Scope)
 
-Правки по ручному ревью пользователя после сдачи Таска (скриншот
-`/catalog`):
-- [x] `src/Views/catalog/index.php` — изменить: цифры счётчика «N из M
-      товаров» обёрнуты в `<span>` (нужно для цветовой/размерной
-      акцентировки — тот же `<span>`, что уже был в разметке темы)
-- [x] `public/assets/css/app.css` — изменить: `.shop-top-bar .shop-text
-      p` — убран `text-transform: uppercase` (ломал читаемость
-      русского текста), `span` — крупнее на `1.2em`
-- [x] `src/Views/components/product-card.php` — изменить: фото
-      карточки — заглушка из набора темы `assets/images/product/
-      product-01…13.jpg` (детерминированно по id товара), не реальный
-      `$product['image_path']` из БД; без фиксированного `width`/
-      `height` — размер естественный, как в теме (`width: 100%` из
-      `style.css`)
-- ~~`public/assets/images/placeholder-product.svg` — серая заглушка
-  270×303~~ — пользователь уточнил задачу (неверно понял «заглушки»
-  как отдельную картинку фиксированного размера вместо фото из
-  набора темы), файл удалён, `width`/`height` из `<img>` убраны
+## Отклонения от плана
+
+1. **`src/Views/search/index.php` создан отдельно, не переиспользован
+   `catalog/index.php`/`components/catalog-grid.php` буквально.**
+   Причина: `<select id="catalog-sort">` в `catalog-grid.php` привязан
+   к сайдбар-форме через `form="catalog-filter-form"`, а JS
+   (`initCatalogFilters()`) целиком выключен, если этой формы нет на
+   странице (`if (!jQuery('#catalog-filter-form').length) return;`) —
+   на `/search` такой формы нет и не должно быть (Out of scope: сайдбар
+   каталога не меняется), поэтому и сортировка, и пагинация через
+   `#catalog-results .page-link` молча не работали бы. Новый
+   `search/index.php` переиспользует то, что действительно общее
+   (`product-card.php`, `pagination.php`, `empty-state.php`), и вместо
+   fetch-фрагмента — обычная навигация: сортировка — маленькая
+   `<form id="search-sort-form">` с автосабмитом по `change`
+   (`initSearchSortSubmit()`), пагинация — обычные `<a href>` со
+   `?q=...&sort=...&page=N`. DoD («сортировкой и пагинацией») это
+   покрывает, а требования «без перезагрузки», в отличие от каталога
+   Таска 3, для `/search` в `phase-1.md` нет.
+2. **Добавлен `INDEX(material)` на `product_variants`
+   (`database/install.php`, `database.md`, `ADR-032`).** Причина: новый
+   `LIKE 'q%'`-фильтр по материалу (и для ≥3, и для 2 символов) —
+   `dod-global.md` требует индекс под новый фильтруемый запрос, тот же
+   принцип, что уже применялся к `color` в `ADR-031` (Таск 3). Индекс
+   под `products.name` сознательно не добавлен — тот путь (2-символьный
+   `LIKE` по названию) уже описан в `phase-1.md` как «≤ 200 строк»,
+   осознанно допустимый полный скан; заводить второй индекс поверх уже
+   существующего `FULLTEXT(name, description)` ради этого редкого
+   случая было бы избыточно.
 
 ## Out of scope — не трогаем
 
-- Сайдбар фильтров (цена/категория/цвет/«В наличии»), фильтрация без
-  перезагрузки, пустое состояние, переключатель плитка/список —
-  Таск 3 Фазы 1
-- Карточка товара (`/product/{slug}`), выбор Варианта — Таск 4
-- Поиск и подсказки (`/search`) — Таск 5
-- Обработчик `POST /cart/add` и сама корзина — Фаза 2; на мини-карточке
-  форма `POST /cart/add` (`variant_id` самого дешёвого активного
-  Варианта, `color`, `quantity`) уже рендерится по решению
-  `phase-1.md` («Кнопка «В корзину»» — тот же паттерн, что применится
-  и на карточке товара в Таске 4), но обработчик маршрута появится
-  только в Фазе 2 — сейчас сабмит даст 404
-- CRUD категорий/товаров для Менеджера/Администратора — Фаза 4
+- Сайдбар фильтров каталога и сама логика фильтрации — переиспользуется
+  как есть (Таск 3), не меняется
+- Обработчик `POST /cart/add` и корзина — Фаза 2
+- CRUD товаров/вариантов, загрузка фото — Фаза 4
 - Скидки, отзывы, избранное — Фазы 6/7
+- Закрытие фазы (`_status.md`, `tz-coverage.md`, `dev-log.md`) —
+  отдельный шаг после DoD этого таска, не часть Scope
 
 ## Definition of Done
 
-- [x] Неактивный товар и товар без активных Вариантов не показываются;
-      несуществующий slug → 404 через `ErrorHandlers` — проверено
-      `curl` против реальной БД: 11 активных из 12 сидов, `/catalog/
-      does-not-exist` → 404
-- [x] Товар из двух категорий виден в обеих; крошки строятся по
-      `is_primary` — «Осло» найден и в `/catalog/divany`, и в
-      `/catalog/krovati`
-- [x] Сортировка и страница — в query (`?sort=price_asc&page=2`), F5
-      сохраняет; неизвестный `sort` → сортировка по умолчанию, не
-      ошибка
-- [x] Хлебные крошки: Главная → родительская → текущая категория, все
-      звенья кликабельны; описание категории — под заголовком —
-      проверено на `/catalog/divany`: Главная → Мягкая мебель → Диваны
-- [x] Более 12 товаров → есть номера страниц; `page=999` → последняя
-      страница или пустой список без ошибки — проверено временным
-      понижением `CATALOG_PER_PAGE` до 3 (11 товаров → 4 страницы),
-      `page=999` корректно откатывается на последнюю; константа
-      возвращена на 12 после проверки
-- [x] На странице нет числа «в наличии» и иконки «в избранное»
-      (`BR-004`, `ADR-017`); иконка «лупа» ведёт на карточку — grep по
-      выдаче не находит `pe-7s-like`/«в наличии»
-- [x] Меню «Каталог» в шапке ведёт на реальные категории — все 6 в
-      выпадающем меню (десктоп + off-canvas), ссылки рабочие
-- [x] `composer test` зелёный, включая `PaginationTest` — 49/49 (было
-      40, +9 новых)
-- [x] Проверить `.docs/dod-global.md` (индексы под новые запросы,
-      пагинация) — `idx_products_active`, `idx_variants_product`,
-      `idx_variant_images_variant` уже покрывают новые запросы;
-      `storage/logs/app.log` не создан за всю сессию проверки —
-      PHP-ошибок и warning'ов не было
+- [x] «ди» (кириллица, 2 символа) → до 5 подсказок с фото; «диван» (≥3)
+      → `/search?q=диван` показывает результаты в сетке каталога с
+      сортировкой и пагинацией — проверено `curl` против реальной БД:
+      4 товара на «диван» (FULLTEXT), 3 на «ди» (префиксный `LIKE` по
+      имени), подсказки для «ди» вернули 3 товара с фото/названием/
+      ссылкой
+- [x] «экокожа» находит товар по материалу Варианта (3 товара); поиск
+      по названию цвета — «Коричневый» нашёл 2 товара
+      (`variant_images.color`)
+- [x] Пустая выдача → пустое состояние (`components/empty-state.php`),
+      запрос остаётся видимым в поле поиска — `q=zzzzznotfound` показал
+      «Ничего не найдено»
+- [x] 1 символ → подсказок нет, запрос к `/search/suggest` не уходит на
+      клиенте (`fetchSearchSuggest()` — ранний `return` при
+      `q.length < 2`); сервер тоже не ищет при `mb_strlen($q) <
+      SEARCH_MIN_QUERY_LENGTH` — второй рубеж на случай прямого
+      запроса к `/search/suggest?q=д`, проверено `curl` — `{"items":[]}`
+- [x] `q` нормализован и выведен через `e()`; запрос `+*"` (только
+      операторы BOOLEAN MODE) не вызывает SQL-ошибку — проверено
+      `curl` на `/search` и `/search/suggest`, оба вернули `200`
+- [x] Подсказки и результаты — только `is_active=1` товары с ≥1 активным
+      Вариантом (тот же `INNER JOIN ... is_active = 1`, что в
+      `getCatalogProducts()`)
+- [x] `/search/suggest` отдаёт `Content-Type: application/json`;
+      `tooManyAttempts('suggest', 20, 10)`/`hitRateLimit('suggest')`
+      корректно блокируют 21-й и далее запрос в пределах 10-секундного
+      окна — подтверждено изолированным вызовом (25 запросов подряд:
+      1–20 `ok`, 21–25 `BLOCKED`). HTTP-бёрст через `php -S`
+      (dev-сервер спавнит процесс на каждый запрос) не уложился в
+      10 секунд на 25 последовательных `curl` и окно успевало
+      «истечь» раньше, чем счётчик — не баг моего кода: изолированный
+      тест той же пары `tooManyAttempts()`/`hitRateLimit()` без сетевых
+      задержек подтверждает правильную блокировку. Отмечено отдельно:
+      `hitRateLimit()` не сбрасывает `first_at` при истечении окна
+      (существующая функция, `src/Core/functions.php`, тот же код уже
+      используется `login`/`checkout` до этого таска) — вне скоупа,
+      не трогал
+- [x] `composer test` зелёный (70/70), включая новые тесты
+      `normalizeSearchQuery`/`buildFulltextTerm`
+- [x] Проверить `.docs/dod-global.md` — `storage/logs/app.log` не
+      прирастал новыми записями за время проверки (2 старые строки —
+      те же, что были найдены и объяснены в Таске 4)
 
 ## Важные правила
 - Следовать `CLAUDE.md`

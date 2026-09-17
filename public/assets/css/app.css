@@ -109,3 +109,227 @@
 .shop-top-bar .shop-text p span {
     font-size: 1.2em;
 }
+
+/* Состояние загрузки при fetch-подмене #catalog-results (Таск 3) —
+   тема не даёт визуального признака «идёт запрос». */
+#catalog-results[aria-busy="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* «Ничего не найдено» — своя BEM-компонента, тема не даёт готового
+   пустого состояния для каталога. */
+.empty-state {
+    padding: 60px 0;
+    text-align: center;
+}
+
+.empty-state__title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.catalog-reset-link {
+    display: inline-block;
+    margin-top: 16px;
+}
+
+/* Селектор Варианта/цвета на карточке товара (Таск 4) — своя
+   BEM-компонента: у темы вообще нет готовой разметки под выбор
+   Варианта (`product-details-affiliate.html` — партнёрская витрина без
+   корзины и вариантов). */
+.product-variant-selector {
+    margin: 20px 0;
+}
+
+.product-variant-selector__group {
+    margin-bottom: 16px;
+}
+
+.product-variant-selector__label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #252525;
+}
+
+.product-variant-selector__option {
+    display: inline-block;
+    margin: 0 8px 8px 0;
+    padding: 8px 16px;
+    border: 1px solid #ebebeb;
+    border-radius: 4px;
+    background: none;
+    color: #6d707f;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.product-variant-selector__option:hover {
+    border-color: #f2a100;
+    color: #f2a100;
+}
+
+.product-variant-selector__option.active {
+    border-color: #f2a100;
+    background-color: #f2a100;
+    color: #fff;
+}
+
+.product-variant-selector__mechanism {
+    color: #6d707f;
+}
+
+.product-variant-selector__lead-time {
+    margin-bottom: 24px;
+}
+
+.product-variant-selector__color-name {
+    margin-bottom: 8px;
+    color: #6d707f;
+}
+
+.product-variant-selector__cart-row {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+/* Количество не должно тянуться на всю ширину, как обычные текстовые
+   поля форм логина/регистрации (`.single-form input` в теме —
+   `width: 100%`, рассчитано на другой контекст) — своя узкая обёртка. */
+.product-variant-selector__quantity {
+    width: 90px;
+    flex: 0 0 auto;
+}
+
+.product-variant-selector__quantity input {
+    width: 100%;
+    height: 50px;
+    padding: 0 12px;
+    border: 1px solid #d7d7d7;
+    text-align: center;
+}
+
+/* flex: 0 (не растягивать) — иначе кнопка занимает весь остаток
+   строки рядом со 90px-полем количества и выглядит непропорционально
+   широкой. */
+.product-variant-selector__submit {
+    flex: 0 0 auto;
+    padding-left: 32px;
+    padding-right: 32px;
+}
+
+.product-variant-selector__hint {
+    margin: 8px 0 0;
+    color: #dc3545;
+}
+
+/* Миниатюры под главным фото (Таск 4) — тема даёт только `position:
+   relative` для swiper-версии (`.details-gallery-thumbs`), сама сетка
+   миниатюр строится здесь без swiper. */
+.details-gallery-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.details-gallery-thumbs__item {
+    width: 70px;
+    height: 70px;
+    padding: 2px;
+    border: 2px solid #ebebeb;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.details-gallery-thumbs__item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.details-gallery-thumbs__item:hover {
+    border-color: #f2a100;
+}
+
+.details-gallery-thumbs__item.active {
+    border-color: #f2a100;
+}
+
+/* Таблица характеристик товара (Таск 4) — без своих цветов/шрифтов,
+   только структурные отступы поверх Bootstrap `.table`. */
+.product-specs-table th {
+    width: 40%;
+    color: #6d707f;
+    font-weight: 500;
+}
+
+/* Декоративный баннер карточки товара (макет SCR-03) — картинка через
+   CSS-класс, не через `style="background-image:..."` (запрещено
+   `general.md`/HTML-правилами: никаких inline-стилей). `.page-banner-
+   section`/`.page-banner-content` — структура и типографика уже в
+   теме (`style.css`), здесь только сам фон. */
+.page-banner-section--product {
+    background-image: url('/uploads/baners/page-banner-product.webp');
+}
+
+/* Заголовок «Похожие товары» после вкладок «Характеристики»/
+   «Описание» — тема-шный `.mt-5` здесь даёт всего 26px (свой,
+   нестандартный масштаб отступов, не Bootstrap-овские 3rem), рядом с
+   плотной таблицей характеристик выглядит слипшимся. */
+.product-section-gap {
+    margin-top: 48px;
+}
+
+/* Тема центрирует текст описания (`.description-content`) — для
+   обычного абзаца текста это читается хуже, чем выключка по левому
+   краю; таблица характеристик и так по левому краю (ячейки), это
+   правило только для вкладки «Описание». */
+.description-content {
+    text-align: left;
+}
+
+/* Подсказки поиска (Таск 5) — `.header-search` в теме уже `position:
+   relative` (style.css), выпадающий список позиционируется от него. */
+.search-suggest {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    margin-top: 4px;
+    background: #fff;
+    border: 1px solid #ebebeb;
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.search-suggest__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    color: #494949;
+    text-decoration: none;
+}
+
+.search-suggest__item img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex: 0 0 auto;
+}
+
+.search-suggest__item:hover,
+.search-suggest__item.active {
+    background: #f8f8f8;
+    color: #f2a100;
+}

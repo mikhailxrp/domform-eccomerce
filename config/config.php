@@ -24,5 +24,9 @@ define('APP_LOG_LEVEL', env('APP_LOG_LEVEL', 'error'));
 // Каталог (`.docs/phases/phase-1.md`, «Решения фазы»)
 define('CATALOG_PER_PAGE', 12);
 
+// Поиск (`.docs/phases/phase-1.md`, Таск 5)
+define('SEARCH_SUGGEST_LIMIT', 5);
+define('SEARCH_MIN_QUERY_LENGTH', 2);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

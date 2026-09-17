@@ -17,7 +17,7 @@
 
 ## Статус
 
-🔄 В работе
+✅ Завершена
 
 ## Решения фазы
 
@@ -67,9 +67,9 @@
 | --- | ----------------------------------------------------------------- | ----------- |
 | 1   | Схема под каталог + сиды каталога                                 | ✅ Завершён |
 | 2   | Листинг каталога: категории, сортировка, пагинация, мини-карточка | ✅ Завершён |
-| 3   | Фильтры без перезагрузки, пустое состояние, плитка/список         | ⏳ Ожидает |
-| 4   | Карточка товара с выбором Варианта                                | ⏳ Ожидает |
-| 5   | Поиск с подсказками                                               | ⏳ Ожидает |
+| 3   | Фильтры без перезагрузки, пустое состояние, плитка/список         | ✅ Завершён |
+| 4   | Карточка товара с выбором Варианта                                | ✅ Завершён |
+| 5   | Поиск с подсказками                                               | ✅ Завершён |
 
 ---
 
@@ -108,7 +108,7 @@
 **Definition of Done:**
 
 - [ ] `install.php` выполняется дважды подряд без ошибок; `SHOW CREATE
-      TABLE categories` / `product_specs` совпадают с `database.md` по
+    TABLE categories` / `product_specs` совпадают с `database.md` по
       колонкам, типам, FK и индексам (ручная сверка)
 - [ ] `seed-catalog.php` дважды подряд — без дублей (`COUNT(*)` не
       растёт)
@@ -143,12 +143,12 @@
 - `src/Models/Category.php` — создать: `getCategoryTree()`,
   `findCategoryBySlug()`, `getCategoryPath()` (для крошек)
 - `src/Models/Product.php` — создать: `getCatalogProducts(array
-  $filters, string $sort, int $page, int $perPage)`,
+$filters, string $sort, int $page, int $perPage)`,
   `countCatalogProducts(array $filters)` — минимальная цена активных
   Вариантов, главное фото, список материалов/цветов; только
   `is_active = 1` с ≥ 1 активным Вариантом
 - `src/Core/Pagination.php` — создать: чистая `buildPagination(int
-  $total, int $page, int $perPage): array` (номера страниц,
+$total, int $page, int $perPage): array` (номера страниц,
   prev/next, нормализация `page` < 1 / > max)
 - `tests/Unit/PaginationTest.php` — создать
 - `src/Controllers/CatalogController.php` — создать: `index()`,
@@ -185,7 +185,13 @@
 
 ## Таск 3 — Фильтры без перезагрузки, пустое состояние, плитка/список
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен против реальной БД
+(`mikhail700.beget.tech`): все фильтры (цена/категория/цвет/наличие),
+пагинация с сохранением фильтров, пустое состояние и сброс проверены
+`curl`; клиентская часть (`fetch`/`pushState`/`popstate`, плитка/список
+через `sessionStorage`) синтаксически проверена (`node --check`), но не
+воспроизведена в браузере — нет браузера в сессии (детали —
+`dev-log.md`, 17.09.2026)
 
 **Цель таска:**
 Сайдбар с 4 фильтрами (`FR-CAT-002/003`): цена (`ion.rangeSlider`
@@ -239,7 +245,14 @@
 
 ## Таск 4 — Карточка товара с выбором Варианта
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен против реальной БД
+(`mikhail700.beget.tech`): 404 на неактивный/несуществующий товар,
+данные Варианта-образца и swatch-цвета без фото, таблица характеристик,
+«Похожие товары», отсутствие «Buy Now» — подтверждены `curl`. Swiper-
+галерея с миниатюрами темы упрощена до одного `<img>` (на сидах у
+каждого сочетания Вариант+цвет ровно одно фото — карусели показывать
+нечего). Сам клик по кнопкам материала/цвета — нет браузера в сессии
+(детали — `dev-log.md`, 17.09.2026)
 
 **Цель таска:**
 `/product/{slug}` по макету `SCR-03` (`product-details-affiliate.html`)
@@ -255,10 +268,10 @@
 
 - `src/Models/Product.php` — изменить: `findProductBySlug()`,
   `getProductVariants(int $productId)`, `getVariantImages(array
-  $variantIds)`, `getProductSpecs(int $productId)`,
+$variantIds)`, `getProductSpecs(int $productId)`,
   `getRelatedProducts(int $productId, int $categoryId, int $limit)`
 - `src/Controllers/ProductController.php` — создать: `show(string
-  $slug)` (404 для неактивного / несуществующего)
+$slug)` (404 для неактивного / несуществующего)
 - `src/Views/product/show.php` — создать (по `SCR-03`; без вкладки
   «Reviews», без «Кредит/рассрочка», без «Наличие на складе»)
 - `src/Views/components/variant-selector.php` — создать: данные
@@ -294,14 +307,21 @@
       неактивных
 - [ ] Неактивный товар → 404; весь вывод через `e()`, JSON Вариантов —
       `json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
-      JSON_HEX_QUOT)`
+    JSON_HEX_QUOT)`
 - [ ] Проверить `.docs/dod-global.md`
 
 ---
 
 ## Таск 5 — Поиск с подсказками
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен против реальной БД
+(`mikhail700.beget.tech`): FULLTEXT (≥3 симв.) и префиксный `LIKE`
+(2 симв., материал, цвет), подсказки, пустое состояние, экранирование
+операторов BOOLEAN MODE, rate-limit — подтверждены `curl`; `composer
+test` 70/70 (детали — `dev-log.md`, `TASK.md`, 17.09.2026). Страница
+`/search` реализована отдельным `search/index.php` (не буквальным
+переиспользованием `catalog/index.php` — см. «Отклонения от плана» в
+`TASK.md`)
 
 **Цель таска:**
 Поле в шапке ведёт на `GET /search?q=`, результаты — в сетке каталога
@@ -312,7 +332,7 @@
 **Что нужно создать/изменить:**
 
 - `src/Models/Product.php` — изменить: `searchProducts(string $q,
-  string $sort, int $page, int $perPage)`, `countSearchProducts()`,
+string $sort, int $page, int $perPage)`, `countSearchProducts()`,
   `suggestProducts(string $q, int $limit)`
 - `src/Core/CatalogFilters.php` — изменить: чистая
   `normalizeSearchQuery(string $q): string` (обрезка, экранирование
@@ -335,27 +355,27 @@
 
 **Definition of Done:**
 
-- [ ] «ди» → до 5 подсказок с фото; «диван» → страница результатов в
+- [x] «ди» → до 5 подсказок с фото; «диван» → страница результатов в
       сетке каталога с сортировкой и пагинацией
-- [ ] «экокожа» находит по материалу Варианта; название цвета из сидов
+- [x] «экокожа» находит по материалу Варианта; название цвета из сидов
       — по `variant_images.color`
-- [ ] Ничего не найдено → пустое состояние, запрос остаётся в
+- [x] Ничего не найдено → пустое состояние, запрос остаётся в
       поисковой строке
-- [ ] 1 символ → подсказок нет и запроса к серверу нет
-- [ ] `q` нормализован, выведен через `e()`; операторы BOOLEAN MODE
+- [x] 1 символ → подсказок нет и запроса к серверу нет
+- [x] `q` нормализован, выведен через `e()`; операторы BOOLEAN MODE
       экранированы — запрос `+*"` не даёт SQL-ошибки
-- [ ] Подсказки и результаты — только активные товары с активными
+- [x] Подсказки и результаты — только активные товары с активными
       Вариантами
-- [ ] `/search/suggest` отдаёт `application/json`, ограничен по частоте
-- [ ] `composer test` зелёный (тесты `normalizeSearchQuery`)
-- [ ] Проверить `.docs/dod-global.md`
+- [x] `/search/suggest` отдаёт `application/json`, ограничен по частоте
+- [x] `composer test` зелёный (тесты `normalizeSearchQuery`)
+- [x] Проверить `.docs/dod-global.md`
 
 ---
 
 ## Закрытие фазы
 
-- [ ] `.docs/phases/_status.md` — Фаза 1 → ✅ Завершена
-- [ ] `.docs/tz-coverage.md` — статус `FR-CAT-001…009`,
+- [x] `.docs/phases/_status.md` — Фаза 1 → ✅ Завершена
+- [x] `.docs/tz-coverage.md` — статус `FR-CAT-001…009`,
       `FR-CARD-001…005, 007…009`, `FR-SRCH-001…004`, `BR-004`
       (отображение)
-- [ ] `.docs/dev-log.md` — запись сессии
+- [x] `.docs/dev-log.md` — запись сессии
