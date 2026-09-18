@@ -42,3 +42,12 @@
 .alert .btn-close {
     background-image: var(--bs-btn-close-bg) !important;
 }
+
+/* Редактирование состава Заказа (Таск 4 Фазы 4). */
+.order-items-table__quantity-input {
+    width: 5rem;
+}
+
+.variant-picker__suggestions {
+    z-index: 10;
+}

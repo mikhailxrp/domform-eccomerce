@@ -45,5 +45,9 @@ define('SHOP_WHATSAPP_URL', 'https://wa.me/79000000000');
 // Панель управления — Заказы (`.docs/phases/phase-4.md`, Таск 2)
 define('ADMIN_ORDERS_PER_PAGE', 20);
 
+// Панель управления — подсказки поиска Варианта при редактировании
+// состава Заказа (`.docs/phases/phase-4.md`, Таск 4)
+define('ADMIN_VARIANT_SEARCH_LIMIT', 10);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

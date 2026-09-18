@@ -362,6 +362,87 @@ function escapeLikeValue(string $value): string
 }
 
 /**
+ * Поиск активного Варианта для добавления в состав Заказа
+ * (`variant-picker`, Таск 4 Фазы 4) — по названию Товара (FULLTEXT/
+ * префикс, тот же порог в 3 символа, что `buildSearchConditions()`) и
+ * артикулу Варианта (всегда префиксом, независимо от длины запроса,
+ * артикул короче «настоящего» поискового запроса). Только активные
+ * Товар и Вариант — недоступный для продажи Вариант нельзя добавить в
+ * существующий Заказ так же, как и в новый (`createOrder()`).
+ */
+function searchVariantsForAdmin(string $q, int $limit): array
+{
+    $pdo = getPdo();
+
+    $likeTerm = escapeLikeValue($q) . '%';
+
+    if (mb_strlen($q) >= 3) {
+        $fulltextTerm  = buildFulltextTerm($q);
+        $nameCondition = $fulltextTerm !== ''
+            ? 'MATCH(p.name, p.description) AGAINST (:fulltext_term IN BOOLEAN MODE)'
+            : '0 = 1';
+        $params = $fulltextTerm !== '' ? ['fulltext_term' => $fulltextTerm] : [];
+    } else {
+        $nameCondition = 'p.name LIKE :name_term';
+        $params        = ['name_term' => $likeTerm];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT pv.id, pv.sku, pv.price, pv.material, pv.mechanism_type,
+               pv.is_showroom_sample, p.name AS product_name
+        FROM product_variants pv
+        INNER JOIN products p ON p.id = pv.product_id
+        WHERE pv.is_active = 1 AND p.is_active = 1
+          AND ({$nameCondition} OR pv.sku LIKE :sku_term)
+        ORDER BY p.name ASC, pv.sku ASC
+        LIMIT :limit
+    ");
+    foreach ($params as $key => $value) {
+        $stmt->bindValue(":{$key}", $value, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':sku_term', $likeTerm, PDO::PARAM_STR);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $variants = $stmt->fetchAll();
+
+    if ($variants === []) {
+        return [];
+    }
+
+    $variantIds      = array_map('intval', array_column($variants, 'id'));
+    $colorsByVariant = [];
+    foreach (getVariantImages($variantIds) as $image) {
+        if ($image['color'] !== null) {
+            $colorsByVariant[(int) $image['product_variant_id']][$image['color']] = true;
+        }
+    }
+
+    return array_map(static function (array $variant) use ($colorsByVariant): array {
+        return $variant + ['colors' => array_keys($colorsByVariant[(int) $variant['id']] ?? [])];
+    }, $variants);
+}
+
+/**
+ * Точное совпадение по артикулу — резерв для `variant-picker.php`, когда
+ * форма отправлена без JS и `variant_id` от подсказки не пришёл
+ * (`dod-global.md`: форма должна работать и без JS).
+ */
+function findActiveVariantIdBySku(string $sku): ?int
+{
+    $stmt = getPdo()->prepare('
+        SELECT pv.id
+        FROM product_variants pv
+        INNER JOIN products p ON p.id = pv.product_id
+        WHERE pv.sku = :sku AND pv.is_active = 1 AND p.is_active = 1
+        LIMIT 1
+    ');
+    $stmt->execute(['sku' => $sku]);
+    $id = $stmt->fetchColumn();
+
+    return $id !== false ? (int) $id : null;
+}
+
+/**
  * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
  * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
  * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный

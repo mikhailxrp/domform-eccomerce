@@ -478,6 +478,166 @@ function countAdminOrders(array $filters): int
 }
 
 /**
+ * Пересчитывает `orders.total` из актуальных `order_items` (снэпшот
+ * `price` × `quantity`, не текущая цена Варианта) — вызывается только
+ * изнутри чужой транзакции (`addOrderItem()`/`updateOrderItemQuantity()`/
+ * `removeOrderItem()`), сама транзакцию не открывает и не коммитит.
+ */
+function recalculateOrderTotal(PDO $pdo, int $orderId): void
+{
+    $stmt = $pdo->prepare('SELECT price, quantity FROM order_items WHERE order_id = :order_id');
+    $stmt->execute(['order_id' => $orderId]);
+
+    $total = '0.00';
+    foreach ($stmt->fetchAll() as $row) {
+        $total = bcadd($total, bcmul((string) $row['price'], (string) $row['quantity'], 2), 2);
+    }
+
+    $update = $pdo->prepare('UPDATE orders SET total = :total WHERE id = :id');
+    $update->execute(['total' => $total, 'id' => $orderId]);
+}
+
+/**
+ * Добавляет позицию к уже существующему Заказу (`FR-ORD-003`, Таск 4
+ * Фазы 4) — тот же снэпшот, что `createOrder()`: Вариант перечитывается
+ * из `product_variants` внутри транзакции (`FOR UPDATE`), клиент не
+ * присылает цену/характеристики. Неактивный/несуществующий Вариант →
+ * `false`, ничего не пишется. Пересчёт `total` — в той же транзакции.
+ */
+function addOrderItem(int $orderId, int $variantId, ?string $color, int $qty): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            SELECT pv.id, pv.price, pv.sku, pv.material, pv.mechanism_type,
+                   pv.is_showroom_sample, pv.is_active, p.name AS product_name
+            FROM product_variants pv
+            INNER JOIN products p ON p.id = pv.product_id
+            WHERE pv.id = :id
+            FOR UPDATE
+        ');
+        $stmt->execute(['id' => $variantId]);
+        $variant = $stmt->fetch();
+
+        if ($variant === false || (int) $variant['is_active'] === 0) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $quantity = clampCartQuantity($qty, (bool) $variant['is_showroom_sample']);
+
+        $insert = $pdo->prepare('
+            INSERT INTO order_items (
+                order_id, product_variant_id, product_name, variant_sku,
+                variant_material, variant_mechanism, variant_color, price, quantity
+            ) VALUES (
+                :order_id, :product_variant_id, :product_name, :variant_sku,
+                :variant_material, :variant_mechanism, :variant_color, :price, :quantity
+            )
+        ');
+        $insert->execute([
+            'order_id'           => $orderId,
+            'product_variant_id' => $variant['id'],
+            'product_name'       => $variant['product_name'],
+            'variant_sku'        => $variant['sku'],
+            'variant_material'   => $variant['material'],
+            'variant_mechanism'  => $variant['mechanism_type'],
+            'variant_color'      => $color,
+            'price'              => $variant['price'],
+            'quantity'           => $quantity,
+        ]);
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * `$itemId` обязан принадлежать `$orderId` — оба условия в одном
+ * `WHERE` защищают от подстановки чужого `itemId` в форме. Образец
+ * (`is_showroom_sample` снэпшота Варианта, если он ещё не удалён
+ * физически) всегда остаётся 1 — `clampCartQuantity()`.
+ */
+function updateOrderItemQuantity(int $orderId, int $itemId, int $qty): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            SELECT oi.id, pv.is_showroom_sample
+            FROM order_items oi
+            LEFT JOIN product_variants pv ON pv.id = oi.product_variant_id
+            WHERE oi.id = :item_id AND oi.order_id = :order_id
+            FOR UPDATE
+        ');
+        $stmt->execute(['item_id' => $itemId, 'order_id' => $orderId]);
+        $item = $stmt->fetch();
+
+        if ($item === false) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $quantity = clampCartQuantity($qty, (bool) ($item['is_showroom_sample'] ?? false));
+
+        $update = $pdo->prepare('UPDATE order_items SET quantity = :quantity WHERE id = :id AND order_id = :order_id');
+        $update->execute(['quantity' => $quantity, 'id' => $itemId, 'order_id' => $orderId]);
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Последняя Позиция Заказа не удаляется — это отмена, не редактирование
+ * состава (`FR-ORD-002` правило 6): `false` без изменений, чужой
+ * `itemId` — тоже `false` (`rowCount()` покажет 0 совпадений).
+ */
+function removeOrderItem(int $orderId, int $itemId): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM order_items WHERE order_id = :order_id');
+        $countStmt->execute(['order_id' => $orderId]);
+        if ((int) $countStmt->fetchColumn() <= 1) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $delete = $pdo->prepare('DELETE FROM order_items WHERE id = :id AND order_id = :order_id');
+        $delete->execute(['id' => $itemId, 'order_id' => $orderId]);
+
+        if ($delete->rowCount() === 0) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
  * Заказ + контакт клиента одним массивом: `is_guest` и
  * `customer_name`/`customer_phone`/`customer_email` вычислены здесь,
  * чтобы View не решала сама, откуда брать контакт — `users` или

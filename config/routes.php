@@ -24,6 +24,7 @@ return [
         '/admin'                   => ['AdminController', 'index'],
         '/admin/orders'            => ['AdminOrderController', 'index'],
         '/admin/orders/{id}'       => ['AdminOrderController', 'show'],
+        '/admin/variants/search'   => ['AdminVariantController', 'search'],
         '/forgot-password'         => ['AuthController', 'showForgot'],
         '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],
@@ -44,5 +45,8 @@ return [
         '/admin/orders/{id}/paid-full'   => ['AdminOrderController', 'markPaidFull'],
         '/admin/orders/{id}/shipping'    => ['AdminOrderController', 'setShipping'],
         '/admin/orders/{id}/cancel'      => ['AdminOrderController', 'cancel'],
+        '/admin/orders/{id}/items'                 => ['AdminOrderController', 'addItem'],
+        '/admin/orders/{id}/items/{itemId}'        => ['AdminOrderController', 'updateItem'],
+        '/admin/orders/{id}/items/{itemId}/remove' => ['AdminOrderController', 'removeItem'],
     ],
 ];

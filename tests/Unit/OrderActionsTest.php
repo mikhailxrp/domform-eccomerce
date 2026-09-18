@@ -133,4 +133,26 @@ final class OrderActionsTest extends TestCase
         $this->assertNotNull(validateShippingCost('abc'));
         $this->assertNotNull(validateShippingCost(''));
     }
+
+    // ─── canEditOrderItems() ─────────────────────────────────────────────
+
+    public function testConfirmedAndInProductionAllowEditingItems(): void
+    {
+        $this->assertTrue(canEditOrderItems(ORDER_STATUS_CONFIRMED));
+        $this->assertTrue(canEditOrderItems(ORDER_STATUS_IN_PRODUCTION));
+    }
+
+    public function testOtherStatusesDoNotAllowEditingItems(): void
+    {
+        $this->assertFalse(canEditOrderItems(ORDER_STATUS_NEW));
+        $this->assertFalse(canEditOrderItems(ORDER_STATUS_READY_FOR_SHIPMENT));
+        $this->assertFalse(canEditOrderItems(ORDER_STATUS_SHIPPING));
+        $this->assertFalse(canEditOrderItems(ORDER_STATUS_DELIVERED));
+        $this->assertFalse(canEditOrderItems(ORDER_STATUS_CANCELLED));
+    }
+
+    public function testUnknownStatusDoesNotAllowEditingItems(): void
+    {
+        $this->assertFalse(canEditOrderItems('bogus'));
+    }
 }

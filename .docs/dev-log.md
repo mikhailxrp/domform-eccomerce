@@ -1784,3 +1784,24 @@ bg)!important}` — возвращает крестик через ту же CSS
 `task-init`.
 
 ---
+
+**Дата:** 18.09.2026
+**Что сделано:** Таск 4 Фазы 4 реализован и проверен на реальной БД
+(`mikhail700.beget.tech`, временные тестовые Заказы удалены после
+проверки). Добавление позиции (`addOrderItem()`), изменение количества
+(`updateOrderItemQuantity()`), удаление (`removeOrderItem()`, последняя
+позиция запрещена) пересчитывают `orders.total` в общей транзакции
+(`recalculateOrderTotal()`) — проверено сквозной цепочкой сумм на
+реальных данных. `variant-picker.php` работает и без JS (`sku` +
+`findActiveVariantIdBySku()`), с JS — подсказки через
+`GET /admin/variants/search` (`AdminVariantController`,
+`searchVariantsForAdmin()` в `Product.php`). В процессе проверки
+найдена и исправлена ошибка: `AdminVariantController.php` не подключал
+`Core/CatalogFilters.php` (нужен для `buildFulltextTerm()`) — падало 500
+`Call to undefined function`; добавлен `require_once` по образцу
+`SearchController.php`. `composer test` 143/143 (3 новых теста
+`canEditOrderItems()`).
+**Что следующее:** Таск 5 Фазы 4 — ручное создание Заказа по звонку/
+WhatsApp, `task-init`.
+
+---

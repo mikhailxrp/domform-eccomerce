@@ -30,6 +30,17 @@ function validateCancelInput(array $input, string $paymentStatus): array
 }
 
 /**
+ * Редактирование состава Заказа (`FR-ORD-003`, Таск 4 Фазы 4) доступно
+ * только после подтверждения и до отгрузки — в `new` состав ещё
+ * согласовывается по телефону и правится через сам чекаут/повторный
+ * звонок, а с `ready_for_shipment` уже поздно (сборка/раскрой начаты).
+ */
+function canEditOrderItems(string $status): bool
+{
+    return in_array($status, [ORDER_STATUS_CONFIRMED, ORDER_STATUS_IN_PRODUCTION], true);
+}
+
+/**
  * Стоимость доставки (`BR-006`) — вносится Менеджером вручную; пустая
  * строка (сброс в `NULL`) обрабатывается отдельно в Controller, сюда
  * попадает только непустое значение. Формат — тот же, что деньги везде

@@ -7,6 +7,7 @@ declare(strict_types=1);
 /** @var array<int, array<string, mixed>> $items */
 /** @var array<int, string> $allowedTransitions */
 /** @var bool $canCancel */
+/** @var bool $canEditItems */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
@@ -148,6 +149,9 @@ $orderId = (string) $order['id'];
                         <th>Цена</th>
                         <th>Кол-во</th>
                         <th>Сумма</th>
+                        <?php if ($canEditItems): ?>
+                            <th></th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -159,13 +163,37 @@ $orderId = (string) $order['id'];
                             <td><?= e($item['variant_mechanism'] ?? '—') ?></td>
                             <td><?= e($item['variant_color'] ?? '—') ?></td>
                             <td><?= e(formatPrice($item['price'])) ?></td>
-                            <td><?= e((string) $item['quantity']) ?></td>
+                            <td>
+                                <?php if ($canEditItems): ?>
+                                    <form method="post" action="/admin/orders/<?= e($orderId) ?>/items/<?= e((string) $item['id']) ?>" class="d-flex gap-1">
+                                        <?= csrfField() ?>
+                                        <input type="number" name="quantity" class="form-control form-control-sm order-items-table__quantity-input" value="<?= e((string) $item['quantity']) ?>" min="1" required>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Сохранить</button>
+                                    </form>
+                                <?php else: ?>
+                                    <?= e((string) $item['quantity']) ?>
+                                <?php endif; ?>
+                            </td>
                             <td><?= e(formatPrice(bcmul((string) $item['price'], (string) $item['quantity'], 2))) ?></td>
+                            <?php if ($canEditItems): ?>
+                                <td>
+                                    <form method="post" action="/admin/orders/<?= e($orderId) ?>/items/<?= e((string) $item['id']) ?>/remove">
+                                        <?= csrfField() ?>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                                    </form>
+                                </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
+
+        <?php if ($canEditItems): ?>
+            <hr>
+            <h6>Добавить позицию</h6>
+            <?php include ROOT_PATH . '/src/Views/components/admin/variant-picker.php'; ?>
+        <?php endif; ?>
     </div>
 </div>
 

@@ -1,145 +1,138 @@
 # Current Task
 
 ## Фаза
-Phase 4 — Панель менеджера и каталог в админке (`.docs/phases/phase-4.md`, Таск 3)
+Phase 4 — Панель менеджера и каталог в админке (`.docs/phases/phase-4.md`, Таск 4)
 
 **Статус:** ✅ Завершён — код реализован и проверен. `composer test`
-140/140 (13 новых тестов `OrderActionsTest`). Проверено `php -S` +
-`curl` против реальной БД (`mikhail700.beget.tech`), включая
-идемпотентный запуск `database/install.php` дважды подряд (`SHOW
-CREATE TABLE orders` содержит обе новые колонки). Временными тестовыми
-Заказами (все удалены после проверки, существовавший Заказ №17
-восстановлен в исходное состояние прямым SQL): переходы статуса верно
-ветвятся по образцу/способу получения; ручной POST с запрещённым `to`
-отклонён, статус не изменён, `grep` подтвердил единственное вхождение
-`UPDATE orders SET status`; предоплата отклоняет 0/отрицательную/
-превышающую остаток/`12.345`, корректная сумма переводит в
-`confirmed`/`prepaid`, повторная отправка идемпотентна; «Остаток
-получен» → `paid_full`, статус не тронут; стоимость доставки
-сохраняется отдельно от `total`, пустое поле → `NULL`, некорректный
-формат отклонён; отмена — нестандартная ветка без комментария и
-предоплаченный Заказ без отметки возврата отклонены, корректная форма
-→ `cancelled`/`prepayment_refunded=1`/`cancel_note` сохранён (в т.ч.
-кириллица — первая проверка через `curl` в Git Bash дала ложный
-негативный результат из-за кодировки консоли Windows, перепроверено
-через PHP `curl_*` напрямую); на `ready_for_shipment` кнопки/модалки
-отмены нет, ручной POST отклонён. `customer` по POST-маршрутам →
-редирект на `/`. `storage/logs/app.log` не пополнился ошибками (только
-ожидаемая `INFO` от `markOrderPaidFull()`). Не проверено вручную (нет
-браузера в сессии): реальное открытие Bootstrap-модалки отмены и
-вёрстка на 320px — тот же пробел, что в Тасках 1–2.
+143/143 (3 новых теста `canEditOrderItems()`). Проверено `php -S` +
+`curl` против реальной БД (`mikhail700.beget.tech`) на двух временных
+тестовых Заказах (оба и их позиции удалены после проверки, изменённая
+для проверки снэпшота цена Варианта восстановлена): добавление позиции
+по артикулу без JS пересчитывает `orders.total` (35000 → 111000 →
+149000 верно по bcmath); изменение количества пересчитывает `total`
+(149000 → тот же расчёт); удаление не последней позиции пересчитывает
+`total` и оставляет запись; удаление последней оставшейся позиции
+отклонено с flash «Нельзя удалить последнюю позицию — отмените Заказ.»,
+запись не удалена; смена цены Варианта в БД после добавления позиции не
+изменила `order_items.price`/`total` уже добавленной позиции;
+статус `new` — блок редактирования не рендерится, ручной POST на
+`items` отклонён без изменений (`item_count` не увеличился); чужой
+`itemId` (Позиция другого Заказа) в `items/{itemId}` не изменён;
+`GET /admin/variants/search` — Гостю редирект на `/login`, залогиненному
+`customer` редирект на `/`, `manager`/`admin` получает JSON с ценой и
+цветами. В процессе проверки найдена и исправлена реальная ошибка:
+`AdminVariantController.php` вызывал `searchVariantsForAdmin()` →
+`buildFulltextTerm()`, но не подключал `Core/CatalogFilters.php` (тот же
+`require`, что уже стоит в `SearchController.php`) — падало 500
+`Call to undefined function`; добавлен `require_once`, зафиксировано в
+`storage/logs/app.log` (единственная ошибка за сессию, до фикса).
+Не проверено вручную: откат при порче SQL внутри `recalculateOrderTotal()`
+проверен только код-ревью (та же структура `try/rollBack/throw`, что уже
+верифицирована живым тестом на `cancelOrder()` в Таске 3), фактическая
+порча SQL на реальной БД не воспроизводилась — риск для чужих данных не
+оправдан; реальная работа JS-подсказок `variant-picker` в браузере
+(только код-ревью), вёрстка на 320px — тот же пробел, что в Тасках 1–3
+(нет браузера в сессии).
 
 ## Задача
-На карточке Заказа появляется панель действий: кнопки следующего
-статуса — только из `allowedOrderTransitions()` для текущего статуса,
-ветки образца и способа получения (`FR-MGR-001` правило 3,
-`FR-ORD-001`); форма «Отметить предоплату» (сумма →
-`validatePaymentAmount()` → `markOrderPrepaid()`, `new → confirmed`) и
-кнопка «Остаток получен» (`markOrderPaidFull()`) — UI `FR-PAY-002`;
-поле «Стоимость доставки» (`BR-006`, вносится вручную); форма отмены
-(`FR-ORD-002`, `BR-007`): выбор ветки — стандартный / нестандартный
-размер, комментарий (обязателен для нестандартного), отметка
-«предоплата возвращена переводом на карту» (обязательна, если
-`payment_status ≠ unpaid`). Из «Готов к отгрузке» и далее кнопки
-«Отменить» нет (`canCancelOrder()`), ручной POST отклоняется. Хуки
-Резерва (Фаза 5) и СМС (Фаза 7) — точки расширения, не реализуются.
+В статусах `confirmed` / `in_production` (`FR-ORD-003`, `FR-MGR-003`) Менеджер
+на карточке Заказа добавляет позицию (поиск Варианта по названию Товара /
+артикулу с подсказками → выбор цвета из `variant_images.color` →
+количество), меняет количество, удаляет позицию; `orders.total`
+пересчитывается в той же транзакции из `product_variants`, снэпшот полей —
+как в `createOrder()`. Последнюю позицию удалить нельзя (это отмена,
+`FR-ORD-002` правило 6). В других статусах блок редактирования не
+показывается, ручной POST отклоняется. Границу «до раскроя ткани» система
+не проверяет (`FR-ORD-003` правило 2).
 
 ## Scope — что трогаем
 
-- [x] `database/install.php` — изменён: `orders.cancel_note TEXT
-      NULL`, `orders.prepayment_refunded TINYINT(1) NOT NULL DEFAULT
-      0` — новая колонка в `CREATE TABLE orders` для свежих установок
-      + идемпотентная проверка через `information_schema` для уже
-      развёрнутых БД (тот же приём, что `comment`/индексы из Тасков
-      1–2)
-- [x] `.docs/database.md` — изменён: обе колонки с назначением
-- [x] `.docs/planning-log.md` — изменён: `ADR-038` — колонки отмены;
-      почему не отдельная таблица (отмена одна на Заказ, статусной
-      модели у неё нет)
-- [x] `src/Core/OrderActions.php` — создан: `validateCancelInput(array
-      $input, string $paymentStatus): array` — ошибки по полям:
-      `branch` ∈ {`standard`, `non_standard`}, `note` обязателен при
-      `non_standard`, `refund_confirmed` обязателен при
-      `paymentStatus ≠ unpaid`; чистая функция, без БД; заодно
-      `validateShippingCost(string $raw): ?string` — та же чистая
-      валидация денег, что `Payment.php`, для формы стоимости доставки
-      (не входило дословно в Scope, но нужно по `dod-global.md`: новая
-      логика без БД — юнит-тест)
-- [x] `tests/Unit/OrderActionsTest.php` — создан
-- [x] `src/Models/Order.php` — изменён: `cancelOrder(int $orderId,
-      string $note = '', bool $prepaymentRefunded = false): bool` — в
-      той же транзакции пишет `cancel_note`/`prepayment_refunded` и
-      вызывает `transitionOrderStatus(...'cancelled')` (`cancelOrder()`
-      не вызывалась ни из одного контроллера — сигнатура изменена
-      безопасно); `setOrderShippingCost(int $orderId, ?string $cost):
-      void`
-- [x] `src/Controllers/AdminOrderController.php` — изменён:
-      `transition()` (`to` из whitelist статусов, `transitionOrder
-      Status()` → `false` → flash-ошибка), `markPrepaid()`
-      (`validatePaymentAmount()` с `orders.total` и `0`),
-      `markPaidFull()` (остаток считается как `total - prepaid_amount`
-      — формы для суммы нет, только кнопка), `setShipping()` (число ≥
-      0 или пусто → NULL), `cancel()` (`validateCancelInput()` →
-      конкретное сообщение через `setFlash()`, редирект назад) — все
-      методы: `requireCsrf()`, POST → `redirect()`
-- [x] `src/Views/admin/orders/show.php` — изменён: панель действий —
-      кнопки переходов (по одной форме на переход), форма предоплаты /
-      остатка (скрыта, если `paid_full`), форма стоимости доставки,
-      форма отмены (модальное окно Bootstrap через `data-bs-*`),
-      блок «Отмена» с `cancel_note` и отметкой возврата на уже
-      отменённом Заказе
-- [x] `config/routes.php` — изменён: `POST /admin/orders/{id}/transition`,
-      `/prepaid`, `/paid-full`, `/shipping`, `/cancel`
-- [x] `tests/bootstrap.php` — изменён: подключён `Core/OrderActions.php`
-      (не входило дословно в Scope, но необходимо для юнит-тестов)
+- [x] `src/Core/OrderActions.php` — изменён: `canEditOrderItems(string
+      $status): bool` (`confirmed`, `in_production`)
+- [x] `tests/Unit/OrderActionsTest.php` — изменён: тест
+      `canEditOrderItems()` для всех 7 статусов + неизвестного
+- [x] `src/Models/Order.php` — изменён: `addOrderItem(int $orderId, int
+      $variantId, ?string $color, int $qty): bool` (активный Вариант,
+      снэпшот, `clampCartQuantity()` для образца), `updateOrderItemQuantity(int
+      $orderId, int $itemId, int $qty): bool`, `removeOrderItem(int
+      $orderId, int $itemId): bool` (последняя позиция → `false`),
+      `recalculateOrderTotal(PDO $pdo, int $orderId): void` — все три в
+      одной транзакции с пересчётом, условие `order_id` в каждом `WHERE`
+- [x] `src/Models/Product.php` — изменён: `searchVariantsForAdmin(string
+      $q, int $limit): array` — по образцу `suggestProducts()` /
+      `buildSearchConditions()`, по `products.name` (FULLTEXT/префикс) и
+      `product_variants.sku` (префикс), только активные, с ценой и списком
+      цветов из `variant_images`; заодно `findActiveVariantIdBySku(string
+      $sku): ?int` (не входило дословно в Scope, но необходимо для формы
+      без JS — `variant-picker.php` шлёт `sku`, а `addOrderItem()`
+      принимает `variantId`)
+- [x] `src/Controllers/AdminOrderController.php` — изменён: `addItem()`,
+      `updateItem()`, `removeItem()` (`requireCsrf()`,
+      `canEditOrderItems()`, редирект на карточку с flash); `show()` —
+      передаёт `canEditItems` во View
+- [x] `src/Controllers/AdminVariantController.php` — создан: `search()` —
+      JSON-подсказки по образцу `SearchController::suggest()`,
+      `requireRole(['manager', 'admin'])`
+- [x] `src/Views/components/admin/variant-picker.php` — создан: поле
+      «Артикул» (`name="sku"`) + скрытые `variant_id`/`color`/`quantity`;
+      без JS — обычный POST кнопкой «Добавить»
+- [x] `src/Views/admin/orders/show.php` — изменён: таблица позиций с
+      формами количества/удаления, блок добавления через `variant-picker`
+      — виден только когда `canEditItems`
+- [x] `public/assets/js/admin.js` — изменён: подсказки к `variant-picker`
+      (`fetch`, async/await), подстановка цветов выбранного Варианта
+- [x] `config/routes.php` — изменён: `GET /admin/variants/search`,
+      `POST /admin/orders/{id}/items`,
+      `POST /admin/orders/{id}/items/{itemId}`,
+      `POST /admin/orders/{id}/items/{itemId}/remove`
+- [x] `config/config.php` — изменён: `ADMIN_VARIANT_SEARCH_LIMIT` (не
+      входило дословно в Scope, но нужна константа лимита подсказок — по
+      образцу `SEARCH_SUGGEST_LIMIT`)
 
 ## Out of scope — не трогаем
 
-- Список Заказов, карточка на просмотр (без действий) — уже сделаны
-  Таском 2, не трогаем повторно (кроме добавления панели действий в
-  `show.php`, которая в Таске 2 сознательно не строилась)
-- Редактирование состава Заказа (Таск 4), ручное создание Заказа по
-  звонку (Таск 5)
+- Список Заказов, карточка на просмотр, панель действий статуса/оплаты/
+  доставки/отмены (Таски 2–3) — не трогаем повторно
+- Ручное создание Заказа по звонку (Таск 5) — `variant-picker` создаётся
+  здесь, повторно используется там
 - Клиенты, Категории/Товары, форма Товара, фото Вариантов, отчёт по
-  продажам (Таски 6–10 этой же фазы)
-- Резерв, Выставочный образец, STOCK-эффекты отмены — снятие Резерва,
-  пометка изготовленного Варианта образцом (`FR-STOCK-001…005` →
-  Фаза 5); хуки для них — только точки расширения, без реализации
-- СМС на переходах статуса (`FR-NOTIF-001` → Фаза 7) — хук без
-  реализации
-- Каркас Панели управления, дашборд, список/просмотр Заказов —
-  сделаны Тасками 1–2, не трогаем повторно
-- `markOrderPrepaid()`/`markOrderPaidFull()`/`transitionOrderStatus()`
-  (Фаза 3, Таск 1 Фазы 2) — переиспользуются как есть, сигнатуры не
-  меняются
+  продажам (Таски 6–10)
+- Резерв, Выставочный образец, STOCK-эффекты (`FR-STOCK-001…005` →
+  Фаза 5): при удалении позиции с активным Резервом строка `reserves`
+  каскадно удалится по существующему `FK ON DELETE CASCADE` — штатное
+  поведение схемы, не новая логика этого таска
+- Граница «до раскроя ткани» — не проверяется системой (`FR-ORD-003`
+  правило 2)
+- `createOrder()`, `transitionOrderStatus()`, `markOrderPrepaid()` и
+  остальные функции Тасков 1–3 — переиспользуются как есть
 
 ## Definition of Done
 
-- [x] `install.php` дважды подряд без ошибок; `SHOW CREATE TABLE
-      orders` содержит обе новые колонки (ручная сверка с
-      `database.md`)
-- [x] Заказ `new` с обычным Вариантом: кнопки «Подтверждён» и
-      «Отменить»; `confirmed` с образцом — «Готов к отгрузке», без «В
-      производстве»; `ready_for_shipment` самовывоз — «Доставлен/
-      Собран», доставка — «В доставке»
-- [x] Ручной POST `transition` с `to=shipping` на Заказе `new` →
-      flash-ошибка, статус в БД не изменён;
-      `grep -r "UPDATE orders SET status" src/` — по-прежнему одно
-      вхождение в `transitionOrderStatus()`
-- [x] Предоплата: `0`, отрицательная, больше `total`, `12.345` →
-      ошибка формы; корректная → `payment_status=prepaid`,
-      `prepaid_amount` записана, статус `confirmed`; повторная
-      отправка → flash «Предоплата уже отмечена.», данные не изменились;
-      «Остаток получен» → `paid_full`, `status` не тронут
-- [x] Стоимость доставки сохраняется и показывается отдельно от
-      `total`; пустое поле → `NULL`; некорректный формат отклонён
-- [x] Отмена: `non_standard` без комментария → ошибка; `prepaid` без
-      отметки возврата → ошибка; с отметкой → `cancelled`,
-      `prepayment_refunded=1`, `cancel_note` сохранён (включая
-      кириллицу — проверено напрямую через PHP `curl_*`, не только
-      через `curl` в Git Bash); на Заказе `ready_for_shipment` кнопки
-      «Отменить» нет, ручной POST → отклонён, статус не изменён
-- [x] `composer test` зелёный (140/140), включая `OrderActionsTest`
+- [x] Добавление / изменение количества / удаление меняют `order_items` и
+      `orders.total` атомарно (проверено на реальной БД: 35000 → 111000 →
+      149000 → 114000 — все шаги сошлись с ручным пересчётом); откат при
+      порче SQL внутри общей транзакции проверен код-ревью (та же
+      структура `try/rollBack/throw`, что и в уже протестированных
+      `createOrder()`/`cancelOrder()`), живая порча SQL на реальной БД не
+      воспроизводилась
+- [x] В `new` блока нет (проверено), ручной POST → flash-ошибка без
+      изменений (проверено); `ready_for_shipment`/`delivered`/`cancelled`
+      — та же проверка `canEditOrderItems()`, что и `new`, отдельно не
+      гонялась (тождественный код-путь)
+- [x] Неактивный / несуществующий Вариант нельзя добавить (проверка
+      `pv.is_active = 1 AND p.is_active = 1` в `addOrderItem()`/
+      `findActiveVariantIdBySku()` — код-ревью); образец — количество 1
+      (`clampCartQuantity()`, переиспользуется как есть); чужой `itemId`
+      (другого Заказа) → без изменений (проверено на реальной БД)
+- [x] Удаление последней позиции → ошибка «Нельзя удалить последнюю
+      позицию — отмените Заказ.» (проверено на реальной БД)
+- [x] Снэпшот: после добавления позиции изменение цены Варианта в БД не
+      меняет `order_items.price` и `total` (проверено на реальной БД)
+- [x] Без JS: артикул + количество + «Добавить» работают обычным POST
+      (проверено — вся ручная проверка велась через `sku`, без
+      `variant_id`); `GET /admin/variants/search` недоступен Гостю
+      (редирект `/login`) и залогиненному `customer` (редирект `/`)
+- [x] `composer test` зелёный (143/143)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
