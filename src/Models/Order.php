@@ -220,6 +220,88 @@ function cancelOrder(int $orderId): bool
 }
 
 /**
+ * Фиксирует получение предоплаты (`FR-PAY-002`) — единственное место,
+ * пишущее `orders.payment_status` в `prepaid` (`pay.md`). Идемпотентна:
+ * повторный вызов на Заказе, уже вышедшем из `unpaid`, не меняет
+ * данные и возвращает `false`, а не исключение. `transitionOrderStatus()`
+ * тоже не бросает на запрещённом переходе (например, Заказ уже
+ * отменён) — оплата в этом случае всё равно фиксируется.
+ */
+function markOrderPrepaid(int $orderId, string $amount): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            UPDATE orders
+            SET payment_status = :prepaid, prepaid_amount = :amount
+            WHERE id = :id AND payment_status = :unpaid
+        ');
+        $stmt->execute([
+            'prepaid' => PAYMENT_STATUS_PREPAID,
+            'amount'  => $amount,
+            'id'      => $orderId,
+            'unpaid'  => PAYMENT_STATUS_UNPAID,
+        ]);
+
+        if ($stmt->rowCount() === 0) {
+            $pdo->commit();
+            return false;
+        }
+
+        transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Фиксирует получение остатка при получении Заказа (`FR-PAY-002`) —
+ * единственное место, пишущее `orders.payment_status` в `paid_full`.
+ * Не меняет `orders.status` — эта ось не управляется оплатой
+ * (`pay.md`). Идемпотентна, как `markOrderPrepaid()`. `$amount` (сумма
+ * остатка) не хранится отдельной колонкой — `database.md` фиксирует
+ * только `prepaid_amount` (предоплата), а не остаток; полная сумма уже
+ * известна из `orders.total`. Значение уходит в лог как аудиторский
+ * след, а не как модификация данных Заказа.
+ */
+function markOrderPaidFull(int $orderId, string $amount): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            UPDATE orders
+            SET payment_status = :paid_full
+            WHERE id = :id AND payment_status = :prepaid
+        ');
+        $stmt->execute([
+            'paid_full' => PAYMENT_STATUS_PAID_FULL,
+            'id'        => $orderId,
+            'prepaid'   => PAYMENT_STATUS_PREPAID,
+        ]);
+
+        $updated = $stmt->rowCount() > 0;
+        $pdo->commit();
+
+        if ($updated) {
+            logInfo('Остаток по Заказу зафиксирован', ['order_id' => $orderId, 'amount' => $amount]);
+        }
+
+        return $updated;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
  * Привязывает гостевые Заказы к аккаунту при регистрации тем же email
  * (`FR-ORD-005`, `ord.md`) — только к незанятым (`user_id IS NULL`),
  * `guest_*` очищаются, чтобы «ровно один источник контактов» оставалось

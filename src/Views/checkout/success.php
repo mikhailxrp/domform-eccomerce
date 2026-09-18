@@ -36,10 +36,16 @@ $breadcrumbs = [['name' => 'Заказ принят']];
                 <?php if ($order['payment_method'] === 'card_online'): ?>
                     <p class="info-header">
                         <i class="fa fa-exclamation-circle"></i>
-                        Оплата картой онлайн будет доступна после звонка менеджера.
+                        Вы выбрали оплату картой онлайн.
                     </p>
                 <?php endif; ?>
             </div>
+
+            <?php if ($order['payment_method'] === 'card_online'): ?>
+                <div class="single-form">
+                    <a href="/payment/stub" class="btn btn-dark btn-hover-primary">Перейти к оплате</a>
+                </div>
+            <?php endif; ?>
 
             <div class="row">
                 <div class="col-lg-7">

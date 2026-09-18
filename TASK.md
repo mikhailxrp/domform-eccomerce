@@ -1,91 +1,88 @@
 # Current Task
 
 ## Фаза
-Phase 2 — Корзина и оформление заказа (`.docs/phases/phase-2.md`, Таск 5)
+Phase 3 — Онлайн-оплата и касса (`.docs/phases/phase-3.md`, Таск 2)
 
-**Статус:** ✅ Завершён — последний таск фазы, фаза 2 целиком закрыта
-(`.docs/phases/_status.md`, `.docs/tz-coverage.md` обновлены). Код
-реализован и проверен: `composer test` 119/119 (21 новый тест
-`OrderStatusTest` — вся таблица переходов раздела 6.3, включая
-запрещённые); ручная проверка временным скриптом в scratchpad против
-реальной БД (`mikhail700.beget.tech`): `cancelOrder()` на `new` →
-`cancelled` с обновлением `updated_at`, на `delivered` → `false` без
-изменений; полная цепочка `new→confirmed→in_production→
-ready_for_shipment→shipping→delivered` с заполнением `delivered_at`;
-образец `confirmed→ready_for_shipment` напрямую минуя `in_production`;
-запрещённый `new→shipping` корректно отклонён; `grep -r "UPDATE orders"
-src/` — единственное вхождение со `status` в `transitionOrderStatus()`;
-`/checkout/success` показывает «Новый» через `orderStatusLabel()`,
-подтверждено на реальном заказе через `curl`. Тестовые заказы удалены
-после проверки.
+**Статус:** ✅ Завершён — последний таск фазы, фаза 3 целиком закрыта.
+Код реализован и проверен: `composer test` 125/125 (6 новых тестов
+`PaymentTest`); `grep -r "SET payment_status" src/` — ровно 2
+вхождения; ручная проверка временным скриптом в scratchpad против
+реальной БД (`mikhail700.beget.tech`): `markOrderPrepaid()` на
+`new`/`unpaid` → `prepaid`/`confirmed`, `prepaid_amount` записана;
+повторный вызов → `false`, без изменений; `markOrderPaidFull()` →
+`paid_full`, `status` не тронут, повторный вызов → `false`; отменённый
+Заказ → `markOrderPrepaid()` фиксирует оплату, но не переоткрывает
+`cancelled`-статус. `storage/logs/app.log` — только ожидаемая `INFO`
+запись из `markOrderPaidFull()`. Тестовые заказы удалены после
+проверки.
 
 ## Задача
-Единственная функция-переход по таблице раздела 6.3 ТЗ (`FR-ORD-001`,
-`php.md`: никогда raw `UPDATE orders SET status`): запрет обхода
-диаграммы, ветвление образца («Подтверждён» → «Готов к отгрузке»
-напрямую, минуя «В производстве»), ветвление по способу получения из
-«Готов к отгрузке», `delivered_at` на «Доставлен/Собран»; отмена
-доступна только из «Новый / Подтверждён / В производстве»
-(`FR-ORD-002` правило 4, `BR-007`). Хуки резерва (Фаза 5), предоплаты
-(Фаза 4) и СМС (Фаза 7) — точки расширения, здесь не реализуются. UI —
-Фаза 4; проверка — unit-тесты и прямой вызов, без UI.
+Единственный путь пометить оплату Заказа полученной — `markOrderPrepaid()`
+(предоплата: `payment_status → prepaid`, `prepaid_amount` заполнена,
+статус Заказа `new → confirmed` через существующий
+`transitionOrderStatus()`) и `markOrderPaidFull()` (остаток:
+`payment_status → paid_full`, `orders.status` не трогается) — обе
+атомарны (одна транзакция) и идемпотентны (повторный вызов на уже
+оплаченном Заказе не меняет данные, не бросает исключение). Сумма
+проверяется чистой функцией без БД. UI вызова — Фаза 4, здесь не
+реализуется.
 
 ## Scope — что трогаем
 
-- [x] `src/Core/OrderStatus.php` — создан: константы 7 статусов Заказа
-      и 3 статусов оплаты с русскими подписями (`orderStatusLabel()`),
-      `allowedOrderTransitions(string $from, bool $hasShowroomSample,
-      string $fulfillment): array`, `canTransitionOrder(string $from,
-      string $to, bool $hasShowroomSample, string $fulfillment): bool`,
-      `canCancelOrder(string $status): bool`
-- [x] `tests/bootstrap.php` — изменён: `require_once
-      Core/OrderStatus.php`
-- [x] `tests/Unit/OrderStatusTest.php` — создан: 21 тест, вся таблица
-      переходов раздела 6.3, включая запрещённые
-- [x] `src/Models/Order.php` — изменён: `orderHasShowroomSample(int
-      $orderId): bool`, `transitionOrderStatus(int $orderId, string
-      $to): bool` (единственное место с `UPDATE orders SET status`),
-      `cancelOrder(int $orderId): bool`
-- [x] `src/Views/checkout/success.php` — изменён: подпись статуса
-      через `orderStatusLabel($order['status'])` вместо литерала
-      «Новый»
-- [x] `.docs/tz-coverage.md` — изменён: `FR-ORD-001…005` разбит по
-      фактическому покрытию (001/005 — Фаза 2, 002 — механизм Фаза 2 /
-      UI Фаза 4, 003/004 — целиком Фаза 4); также обновлены
-      `FR-CART-*`/`FR-CHK-*`/`FR-SHIP-*`/`BR-001`/`BR-006`/`BR-007` —
-      отметки «Реализовано Тасками N Фазы 2» (закрытие фазы)
+- [x] `src/Core/Payment.php` — создан: `validatePaymentAmount(string
+      $amount, string $orderTotal, string $alreadyPaid): ?string` —
+      `null`, если сумма корректна (число > 0, не превышает
+      `orderTotal - alreadyPaid`), иначе текст ошибки; сравнение
+      только через `bccomp()`
+- [x] `tests/Unit/PaymentTest.php` — создан: 6 тестов (0/отрицательная
+      сумма, сумма больше остатка, сумма равна остатку, корректная
+      сумма, сумма с лишними знаками после запятой, некорректный формат)
+- [x] `tests/bootstrap.php` — изменён: добавлен
+      `require_once ROOT_PATH . '/src/Core/Payment.php';`
+- [x] `src/Models/Order.php` — изменён: `markOrderPrepaid(int
+      $orderId, string $amount): bool` — транзакция, `UPDATE orders
+      SET payment_status = :prepaid, prepaid_amount = :amount WHERE
+      id = :id AND payment_status = :unpaid` (константы
+      `PAYMENT_STATUS_*`), `rowCount() === 0` → `false` без изменений,
+      иначе `transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED)`;
+      `markOrderPaidFull(int $orderId, string $amount): bool` — тот же
+      паттерн, `payment_status='prepaid' → 'paid_full'`, `orders.status`
+      и `prepaid_amount` не трогаются (в схеме нет колонки под остаток
+      — `orders.total` уже содержит полную сумму); `$amount` уходит в
+      `logInfo()` как аудиторский след, не как запись в БД
 
 ## Out of scope — не трогаем
 
-- Снятие/списание `reserves` при отмене/доставке — Фаза 5 (решение
-  фазы, `phase-2.md`)
-- UI отмены заказа, смены статуса из Панели менеджера — Фаза 4 (этот
-  таск — только механизм)
-- Предоплата (`prepaid_amount`, переход по факту оплаты) — Фаза 4 /
-  модуль `PAY`
-- СМС-уведомления при смене статуса — Фаза 7
-- Нестандартный размер, согласование Менеджером — Фаза 5
+- UI Менеджера для вызова этих функций (кнопка «Отметить оплату» и
+  т.п.) — Фаза 4, когда появится Панель менеджера
+- Реальная интеграция с ЮMoney, вебхук, запись в `payment_logs` — не
+  реализуется (`ADR-018`)
+- Фискализация Атол (`FR-PAY-005`) — не реализуется (`Q-007` снят)
+- `PaymentController`, `/payment/stub` — уже сделаны Таском 1, не
+  трогаем
+- Диапазон 30–50% предоплаты — не валидируется системой (`FR-PAY-002`:
+  процент вводит Менеджер вручную, не расчёт сайта)
 
 ## Definition of Done
 
-- [x] `grep -r "UPDATE orders" src/` — единственное вхождение со
-      `status` в `transitionOrderStatus()`
-- [x] `OrderStatusTest`: «Новый → В доставке» запрещён; обычный
-      Вариант из «Подтверждён» → только «В производстве» и «Отменён»;
-      образец из «Подтверждён» → «Готов к отгрузке» и «Отменён», не
-      «В производстве»; из «Готов к отгрузке» самовывоз → «Доставлен/
-      Собран», доставка → «В доставке»; отмена из «Готов к отгрузке»/
-      «В доставке»/«Доставлен/Собран»/«Отменён» запрещена; терминальные
-      статусы без переходов
-- [x] Ручная проверка скриптом в scratchpad (не в репозитории):
-      `cancelOrder()` на `new` → `cancelled`, `updated_at` обновлён; на
-      `delivered` → `false`, статус не изменён; цепочка `new →
-      confirmed → in_production → ready_for_shipment → shipping →
-      delivered` проходит и заполняет `delivered_at`
-- [x] `/checkout/success` показывает «Новый» из `orderStatusLabel()`,
-      не строку `new` (проверено на реальном заказе через `curl`)
-- [x] `composer test` зелёный — 119/119
-- [x] Проверить `.docs/dod-global.md`
+- [x] `composer test` зелёный (125/125), включая `PaymentTest`:
+      `validatePaymentAmount()` отклоняет 0/отрицательную/превышающую
+      остаток/некорректно отформатированную сумму, принимает корректную
+- [x] `grep -r "SET payment_status" src/` — единственные два вхождения,
+      в `markOrderPrepaid()`/`markOrderPaidFull()`
+- [x] Ручная проверка временным скриптом в scratchpad (не в
+      репозитории) против реальной БД (`mikhail700.beget.tech`): Заказ
+      `new`/`unpaid` → `markOrderPrepaid()` → `prepaid`/`confirmed`,
+      `prepaid_amount` записана; повторный вызов → `false`, данные не
+      изменились; `markOrderPaidFull()` после этого → `paid_full`,
+      `orders.status` не тронут, повторный вызов → `false`; отменённый
+      Заказ (`cancelled`) → `markOrderPrepaid()` помечает оплату, но не
+      переоткрывает статус (переход запрещён таблицей 6.3, функция не
+      бросает исключение)
+- [x] Деньги нигде как `float`
+- [x] Проверить `.docs/dod-global.md` — новых записей в
+      `storage/logs/app.log`, кроме ожидаемой `INFO` из
+      `markOrderPaidFull()`, нет
 
 ## Важные правила
 - Следовать `CLAUDE.md`

@@ -559,6 +559,15 @@
     margin: 4px 0 0;
 }
 
+/* `.checkout-call` (Фаза 3, Таск 1, `/payment/stub`) — в теме у
+   компонента есть только `margin-bottom`, `margin-top` нет: на
+   `/checkout` он первый элемент в `.container`, отступ не нужен. На
+   `/payment/stub` он идёт после `.checkout-info` и без своего
+   `margin-top` прилипает к нему вплотную. */
+.checkout-info + .checkout-call {
+    margin-top: 30px;
+}
+
 .page-loader__spinner {
     width: 48px;
     height: 48px;
