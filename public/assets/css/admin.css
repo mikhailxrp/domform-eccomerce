@@ -26,3 +26,19 @@
         margin-block-start: 4rem !important;
     }
 }
+
+/* Вся строка списка Заказов ведёт на карточку Заказа (admin.js), не
+   только ссылка «№…» — курсор показывает это до клика. */
+.admin-orders-table__row {
+    cursor: pointer;
+}
+
+/* styles.min.css глобально снимает background-image у .btn-close
+   (Valex рисует крестик через дочернюю иконку шрифта — есть только в
+   разметке карточек их темы, не в общем components/flash.php витрины)
+   — крестик закрытия алерта становился невидимым. Возвращаем крестик
+   через ту же CSS-переменную --bs-btn-close-bg, что объявляет сам
+   Bootstrap на .btn-close — своей иконки не добавляем. */
+.alert .btn-close {
+    background-image: var(--bs-btn-close-bg) !important;
+}

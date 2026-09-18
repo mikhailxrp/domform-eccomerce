@@ -70,7 +70,7 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                             $customerName = $order['user_id'] !== null ? $order['user_name'] : $order['guest_name'];
                             $status       = $order['status'];
                             ?>
-                            <tr>
+                            <tr class="admin-orders-table__row" data-href="/admin/orders/<?= e((string) $order['id']) ?>">
                                 <td><a href="/admin/orders/<?= e((string) $order['id']) ?>">№<?= e((string) $order['id']) ?></a></td>
                                 <td><?= e($customerName ?? '—') ?></td>
                                 <td><?= e(formatPrice($order['total'])) ?></td>

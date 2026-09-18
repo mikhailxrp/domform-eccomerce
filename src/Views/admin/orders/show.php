@@ -5,21 +5,45 @@ declare(strict_types=1);
 /** @var string $title */
 /** @var array<string, mixed> $order */
 /** @var array<int, array<string, mixed>> $items */
+/** @var array<int, string> $allowedTransitions */
+/** @var bool $canCancel */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
-$status = $order['status'];
+$status  = $order['status'];
+$orderId = (string) $order['id'];
 ?>
 
 <div class="d-md-flex d-block align-items-center justify-content-between my-4 page-header-breadcrumb">
     <div>
-        <h4 class="mb-0">Заказ №<?= e((string) $order['id']) ?></h4>
+        <h4 class="mb-0">Заказ №<?= e($orderId) ?></h4>
         <p class="mb-0"><a href="/admin/orders">← К списку заказов</a></p>
     </div>
     <div>
         <?php include ROOT_PATH . '/src/Views/components/admin/order-status-badge.php'; ?>
     </div>
 </div>
+
+<?php if ($allowedTransitions !== [] || $canCancel): ?>
+    <div class="card custom-card">
+        <div class="card-header">
+            <div class="card-title">Действия</div>
+        </div>
+        <div class="card-body d-flex flex-wrap gap-2">
+            <?php foreach ($allowedTransitions as $nextStatus): ?>
+                <form method="post" action="/admin/orders/<?= e($orderId) ?>/transition">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="to" value="<?= e($nextStatus) ?>">
+                    <button type="submit" class="btn btn-primary"><?= e(orderStatusLabel($nextStatus)) ?></button>
+                </form>
+            <?php endforeach; ?>
+
+            <?php if ($canCancel): ?>
+                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelOrderModal">Отменить заказ</button>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="row">
     <div class="col-lg-6">
@@ -51,6 +75,57 @@ $status = $order['status'];
                 <p class="mb-1"><strong>Статус оплаты:</strong> <?= e(PAYMENT_STATUS_LABELS[$order['payment_status']] ?? $order['payment_status']) ?></p>
                 <p class="mb-1"><strong>Внесена предоплата:</strong> <?= $order['prepaid_amount'] !== null ? e(formatPrice($order['prepaid_amount'])) : '—' ?></p>
                 <p class="mb-0"><strong>Сумма заказа:</strong> <?= e(formatPrice($order['total'])) ?></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <?php if ($order['payment_status'] !== PAYMENT_STATUS_PAID_FULL): ?>
+        <div class="col-lg-6">
+            <div class="card custom-card">
+                <div class="card-header">
+                    <div class="card-title">Оплата</div>
+                </div>
+                <div class="card-body">
+                    <?php if ($order['payment_status'] === PAYMENT_STATUS_UNPAID): ?>
+                        <form method="post" action="/admin/orders/<?= e($orderId) ?>/prepaid" class="row g-2 align-items-end">
+                            <?= csrfField() ?>
+                            <div class="col-auto">
+                                <label for="prepaid-amount" class="form-label">Сумма предоплаты</label>
+                                <input type="text" id="prepaid-amount" name="amount" class="form-control" placeholder="Например, 10500.00" required>
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-primary">Отметить предоплату</button>
+                            </div>
+                        </form>
+                    <?php else: ?>
+                        <form method="post" action="/admin/orders/<?= e($orderId) ?>/paid-full">
+                            <?= csrfField() ?>
+                            <button type="submit" class="btn btn-primary">Остаток получен</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <div class="col-lg-6">
+        <div class="card custom-card">
+            <div class="card-header">
+                <div class="card-title">Стоимость доставки</div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/admin/orders/<?= e($orderId) ?>/shipping" class="row g-2 align-items-end">
+                    <?= csrfField() ?>
+                    <div class="col-auto">
+                        <label for="shipping-cost" class="form-label">Стоимость (пусто — сбросить)</label>
+                        <input type="text" id="shipping-cost" name="shipping_cost" class="form-control" value="<?= $order['shipping_cost'] !== null ? e((string) $order['shipping_cost']) : '' ?>" placeholder="Например, 2500">
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -103,6 +178,18 @@ $status = $order['status'];
     </div>
 </div>
 
+<?php if ($status === ORDER_STATUS_CANCELLED): ?>
+    <div class="card custom-card">
+        <div class="card-header">
+            <div class="card-title">Отмена</div>
+        </div>
+        <div class="card-body">
+            <p class="mb-1"><strong>Комментарий:</strong> <?= $order['cancel_note'] !== null && $order['cancel_note'] !== '' ? nl2br(e($order['cancel_note'])) : '—' ?></p>
+            <p class="mb-0"><strong>Предоплата возвращена:</strong> <?= ((int) $order['prepayment_refunded']) === 1 ? 'Да' : 'Нет' ?></p>
+        </div>
+    </div>
+<?php endif; ?>
+
 <div class="card custom-card">
     <div class="card-header">
         <div class="card-title">Хронология</div>
@@ -113,5 +200,48 @@ $status = $order['status'];
         <p class="mb-0"><strong>Доставлен/собран:</strong> <?= $order['delivered_at'] !== null ? e(date('d.m.Y H:i', strtotime((string) $order['delivered_at']))) : '—' ?></p>
     </div>
 </div>
+
+<?php if ($canCancel): ?>
+    <div class="modal fade" id="cancelOrderModal" tabindex="-1" aria-labelledby="cancelOrderModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form method="post" action="/admin/orders/<?= e($orderId) ?>/cancel">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cancelOrderModalLabel">Отмена Заказа №<?= e($orderId) ?></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                    </div>
+                    <div class="modal-body">
+                        <?= csrfField() ?>
+                        <div class="mb-3">
+                            <label class="form-label d-block">Ветка отмены</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="branch" id="branch-standard" value="standard" checked>
+                                <label class="form-check-label" for="branch-standard">Стандартная</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="branch" id="branch-non-standard" value="non_standard">
+                                <label class="form-check-label" for="branch-non-standard">Нестандартный размер</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cancel-note" class="form-label">Комментарий (обязателен для нестандартного размера)</label>
+                            <textarea id="cancel-note" name="note" class="form-control" rows="3"></textarea>
+                        </div>
+                        <?php if ($order['payment_status'] !== PAYMENT_STATUS_UNPAID): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="refund_confirmed" id="refund-confirmed" value="1">
+                                <label class="form-check-label" for="refund-confirmed">Предоплата возвращена переводом на карту</label>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Закрыть</button>
+                        <button type="submit" class="btn btn-danger">Отменить заказ</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php include ROOT_PATH . '/src/Views/layout/admin-footer.php'; ?>

@@ -352,6 +352,8 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | prepaid_amount | DECIMAL(10,2) NULL | сумма внесённой предоплаты (30–50%, точный процент — решение Владельца по звонку, `AS-003`); NULL пока не внесена |
 | total | DECIMAL(10,2) NOT NULL | |
 | delivered_at | TIMESTAMP NULL | момент перехода в `delivered` — нужен только для расчёта окончания гарантии (18 мес., раздел 6.1); Гарантия отдельной таблицей не хранится (`ADR-013`) |
+| cancel_note | TEXT NULL | комментарий отмены; обязателен для ветки «нестандартный размер» (`FR-ORD-002` правило 3), проверяется в `validateCancelInput()`, не CHECK — добавлена Таском 3 Фазы 4 (`ADR-038`) |
+| prepayment_refunded | TINYINT(1) NOT NULL DEFAULT 0 | отметка «предоплата возвращена переводом на карту» — форма отмены не даёт закрыть отмену без неё, если `payment_status ≠ unpaid` (`FR-ORD-002` правило 7); добавлена Таском 3 Фазы 4 (`ADR-038`) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 

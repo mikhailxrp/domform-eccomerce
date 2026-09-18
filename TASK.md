@@ -3,7 +3,31 @@
 ## Фаза
 Phase 4 — Панель менеджера и каталог в админке (`.docs/phases/phase-4.md`, Таск 3)
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён — код реализован и проверен. `composer test`
+140/140 (13 новых тестов `OrderActionsTest`). Проверено `php -S` +
+`curl` против реальной БД (`mikhail700.beget.tech`), включая
+идемпотентный запуск `database/install.php` дважды подряд (`SHOW
+CREATE TABLE orders` содержит обе новые колонки). Временными тестовыми
+Заказами (все удалены после проверки, существовавший Заказ №17
+восстановлен в исходное состояние прямым SQL): переходы статуса верно
+ветвятся по образцу/способу получения; ручной POST с запрещённым `to`
+отклонён, статус не изменён, `grep` подтвердил единственное вхождение
+`UPDATE orders SET status`; предоплата отклоняет 0/отрицательную/
+превышающую остаток/`12.345`, корректная сумма переводит в
+`confirmed`/`prepaid`, повторная отправка идемпотентна; «Остаток
+получен» → `paid_full`, статус не тронут; стоимость доставки
+сохраняется отдельно от `total`, пустое поле → `NULL`, некорректный
+формат отклонён; отмена — нестандартная ветка без комментария и
+предоплаченный Заказ без отметки возврата отклонены, корректная форма
+→ `cancelled`/`prepayment_refunded=1`/`cancel_note` сохранён (в т.ч.
+кириллица — первая проверка через `curl` в Git Bash дала ложный
+негативный результат из-за кодировки консоли Windows, перепроверено
+через PHP `curl_*` напрямую); на `ready_for_shipment` кнопки/модалки
+отмены нет, ручной POST отклонён. `customer` по POST-маршрутам →
+редирект на `/`. `storage/logs/app.log` не пополнился ошибками (только
+ожидаемая `INFO` от `markOrderPaidFull()`). Не проверено вручную (нет
+браузера в сессии): реальное открытие Bootstrap-модалки отмены и
+вёрстка на 320px — тот же пробел, что в Тасках 1–2.
 
 ## Задача
 На карточке Заказа появляется панель действий: кнопки следующего
@@ -22,44 +46,52 @@ Phase 4 — Панель менеджера и каталог в админке 
 
 ## Scope — что трогаем
 
-- [ ] `database/install.php` — изменить: `orders.cancel_note TEXT
+- [x] `database/install.php` — изменён: `orders.cancel_note TEXT
       NULL`, `orders.prepayment_refunded TINYINT(1) NOT NULL DEFAULT
       0` — новая колонка в `CREATE TABLE orders` для свежих установок
       + идемпотентная проверка через `information_schema` для уже
       развёрнутых БД (тот же приём, что `comment`/индексы из Тасков
       1–2)
-- [ ] `.docs/database.md` — изменить: обе колонки с назначением
-- [ ] `.docs/planning-log.md` — изменить: ADR — колонки отмены; почему
-      не отдельная таблица (отмена одна на Заказ, статусной модели у
-      неё нет)
-- [ ] `src/Core/OrderActions.php` — создать: `validateCancelInput(array
+- [x] `.docs/database.md` — изменён: обе колонки с назначением
+- [x] `.docs/planning-log.md` — изменён: `ADR-038` — колонки отмены;
+      почему не отдельная таблица (отмена одна на Заказ, статусной
+      модели у неё нет)
+- [x] `src/Core/OrderActions.php` — создан: `validateCancelInput(array
       $input, string $paymentStatus): array` — ошибки по полям:
       `branch` ∈ {`standard`, `non_standard`}, `note` обязателен при
       `non_standard`, `refund_confirmed` обязателен при
-      `paymentStatus ≠ unpaid`; чистая функция, без БД
-- [ ] `tests/Unit/OrderActionsTest.php` — создать
-- [ ] `src/Models/Order.php` — изменить: `cancelOrder(int $orderId,
+      `paymentStatus ≠ unpaid`; чистая функция, без БД; заодно
+      `validateShippingCost(string $raw): ?string` — та же чистая
+      валидация денег, что `Payment.php`, для формы стоимости доставки
+      (не входило дословно в Scope, но нужно по `dod-global.md`: новая
+      логика без БД — юнит-тест)
+- [x] `tests/Unit/OrderActionsTest.php` — создан
+- [x] `src/Models/Order.php` — изменён: `cancelOrder(int $orderId,
       string $note = '', bool $prepaymentRefunded = false): bool` — в
       той же транзакции пишет `cancel_note`/`prepayment_refunded` и
-      вызывает `transitionOrderStatus(...'cancelled')` (сейчас
-      `cancelOrder()` не вызывается ни из одного контроллера — менять
-      сигнатуру безопасно); `setOrderShippingCost(int $orderId,
-      ?string $cost): void`
-- [ ] `src/Controllers/AdminOrderController.php` — изменить:
+      вызывает `transitionOrderStatus(...'cancelled')` (`cancelOrder()`
+      не вызывалась ни из одного контроллера — сигнатура изменена
+      безопасно); `setOrderShippingCost(int $orderId, ?string $cost):
+      void`
+- [x] `src/Controllers/AdminOrderController.php` — изменён:
       `transition()` (`to` из whitelist статусов, `transitionOrder
       Status()` → `false` → flash-ошибка), `markPrepaid()`
       (`validatePaymentAmount()` с `orders.total` и `0`),
-      `markPaidFull()`, `setShipping()` (число ≥ 0 или пусто → NULL),
-      `cancel()` (`validateCancelInput()` → ошибки в сессию, редирект
-      назад) — все методы: `requireCsrf()`, POST → `redirect()`
-- [ ] `src/Views/admin/orders/show.php` — изменить: панель действий —
+      `markPaidFull()` (остаток считается как `total - prepaid_amount`
+      — формы для суммы нет, только кнопка), `setShipping()` (число ≥
+      0 или пусто → NULL), `cancel()` (`validateCancelInput()` →
+      конкретное сообщение через `setFlash()`, редирект назад) — все
+      методы: `requireCsrf()`, POST → `redirect()`
+- [x] `src/Views/admin/orders/show.php` — изменён: панель действий —
       кнопки переходов (по одной форме на переход), форма предоплаты /
       остатка (скрыта, если `paid_full`), форма стоимости доставки,
-      форма отмены (модальное окно Bootstrap через `data-bs-*`; без JS
-      — обычная форма в блоке страницы), блок «Отмена» с `cancel_note`
-      и отметкой возврата на уже отменённом Заказе
-- [ ] `config/routes.php` — изменить: `POST /admin/orders/{id}/transition`,
+      форма отмены (модальное окно Bootstrap через `data-bs-*`),
+      блок «Отмена» с `cancel_note` и отметкой возврата на уже
+      отменённом Заказе
+- [x] `config/routes.php` — изменён: `POST /admin/orders/{id}/transition`,
       `/prepaid`, `/paid-full`, `/shipping`, `/cancel`
+- [x] `tests/bootstrap.php` — изменён: подключён `Core/OrderActions.php`
+      (не входило дословно в Scope, но необходимо для юнит-тестов)
 
 ## Out of scope — не трогаем
 
@@ -83,31 +115,32 @@ Phase 4 — Панель менеджера и каталог в админке 
 
 ## Definition of Done
 
-- [ ] `install.php` дважды подряд без ошибок; `SHOW CREATE TABLE
+- [x] `install.php` дважды подряд без ошибок; `SHOW CREATE TABLE
       orders` содержит обе новые колонки (ручная сверка с
       `database.md`)
-- [ ] Заказ `new` с обычным Вариантом: кнопки «Подтверждён» и
+- [x] Заказ `new` с обычным Вариантом: кнопки «Подтверждён» и
       «Отменить»; `confirmed` с образцом — «Готов к отгрузке», без «В
       производстве»; `ready_for_shipment` самовывоз — «Доставлен/
       Собран», доставка — «В доставке»
-- [ ] Ручной POST `transition` с `to=shipping` на Заказе `new` →
+- [x] Ручной POST `transition` с `to=shipping` на Заказе `new` →
       flash-ошибка, статус в БД не изменён;
       `grep -r "UPDATE orders SET status" src/` — по-прежнему одно
       вхождение в `transitionOrderStatus()`
-- [ ] Предоплата: `0`, отрицательная, больше `total`, `12.345` →
+- [x] Предоплата: `0`, отрицательная, больше `total`, `12.345` →
       ошибка формы; корректная → `payment_status=prepaid`,
       `prepaid_amount` записана, статус `confirmed`; повторная
-      отправка → сообщение «уже отмечена», данные не изменились;
+      отправка → flash «Предоплата уже отмечена.», данные не изменились;
       «Остаток получен» → `paid_full`, `status` не тронут
-- [ ] Стоимость доставки сохраняется и показывается отдельно от
-      `total`; пустое поле → `NULL`
-- [ ] Отмена: `non_standard` без комментария → ошибка; `prepaid` без
+- [x] Стоимость доставки сохраняется и показывается отдельно от
+      `total`; пустое поле → `NULL`; некорректный формат отклонён
+- [x] Отмена: `non_standard` без комментария → ошибка; `prepaid` без
       отметки возврата → ошибка; с отметкой → `cancelled`,
-      `prepayment_refunded=1`, `cancel_note` сохранён; на Заказе
-      `shipping` кнопки «Отменить» нет, ручной POST → отклонён, статус
-      не изменён
-- [ ] `composer test` зелёный, включая `OrderActionsTest`
-- [ ] Проверить `.docs/dod-global.md`
+      `prepayment_refunded=1`, `cancel_note` сохранён (включая
+      кириллицу — проверено напрямую через PHP `curl_*`, не только
+      через `curl` в Git Bash); на Заказе `ready_for_shipment` кнопки
+      «Отменить» нет, ручной POST → отклонён, статус не изменён
+- [x] `composer test` зелёный (140/140), включая `OrderActionsTest`
+- [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
 - Следовать `CLAUDE.md`

@@ -230,13 +230,55 @@ function transitionOrderStatus(int $orderId, string $to): bool
 }
 
 /**
- * Отмена по звонку Менеджеру (`FR-ORD-002` правило 4, `BR-007`) —
- * стандартная ветка: снятие Резерва при отмене — Фаза 5 (`phase-2.md`,
- * «Решения фазы»), здесь не реализовано.
+ * Отмена по звонку Менеджеру (`FR-ORD-002`, `BR-007`). `$note`/
+ * `$prepaymentRefunded` — уже провалидированы `validateCancelInput()`
+ * до вызова (обязательность зависит от ветки/`payment_status`, Model
+ * этого не проверяет повторно). Переход статуса и запись `cancel_note`/
+ * `prepayment_refunded` — одна транзакция: либо применяются оба факта,
+ * либо ни одного; сам `UPDATE orders SET status` — по-прежнему только
+ * внутри `transitionOrderStatus()` (`php.md`). Снятие Резерва при
+ * отмене — Фаза 5 (`phase-2.md`, «Решения фазы»), здесь не
+ * реализовано.
  */
-function cancelOrder(int $orderId): bool
+function cancelOrder(int $orderId, string $note = '', bool $prepaymentRefunded = false): bool
 {
-    return transitionOrderStatus($orderId, ORDER_STATUS_CANCELLED);
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        if (!transitionOrderStatus($orderId, ORDER_STATUS_CANCELLED)) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $stmt = $pdo->prepare('
+            UPDATE orders
+            SET cancel_note = :note, prepayment_refunded = :refunded
+            WHERE id = :id
+        ');
+        $stmt->execute([
+            'note'     => $note !== '' ? $note : null,
+            'refunded' => $prepaymentRefunded ? 1 : 0,
+            'id'       => $orderId,
+        ]);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Стоимость доставки (`BR-006`) — вносится вручную, отдельно от
+ * `orders.total`, не пересчитывает его. `$cost === null` — сброс в
+ * `NULL` (доставка ещё не согласована).
+ */
+function setOrderShippingCost(int $orderId, ?string $cost): void
+{
+    $stmt = getPdo()->prepare('UPDATE orders SET shipping_cost = :cost WHERE id = :id');
+    $stmt->execute(['cost' => $cost, 'id' => $orderId]);
 }
 
 /**

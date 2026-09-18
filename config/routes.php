@@ -39,5 +39,10 @@ return [
         '/cart/clear'              => ['CartController', 'clear'],
         '/checkout/accept-changes' => ['CheckoutController', 'acceptChanges'],
         '/checkout'                => ['CheckoutController', 'store'],
+        '/admin/orders/{id}/transition'  => ['AdminOrderController', 'transition'],
+        '/admin/orders/{id}/prepaid'     => ['AdminOrderController', 'markPrepaid'],
+        '/admin/orders/{id}/paid-full'   => ['AdminOrderController', 'markPaidFull'],
+        '/admin/orders/{id}/shipping'    => ['AdminOrderController', 'setShipping'],
+        '/admin/orders/{id}/cancel'      => ['AdminOrderController', 'cancel'],
     ],
 ];

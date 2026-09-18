@@ -273,6 +273,8 @@ $pdo->exec("
         prepaid_amount      DECIMAL(10, 2) NULL,
         total               DECIMAL(10, 2) NOT NULL,
         delivered_at        TIMESTAMP NULL,
+        cancel_note         TEXT NULL,
+        prepayment_refunded TINYINT(1) NOT NULL DEFAULT 0,
         created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_orders_user (user_id),
@@ -293,6 +295,22 @@ $columnExists->execute(['table' => 'orders', 'column' => 'comment']);
 
 if ((int) $columnExists->fetchColumn() === 0) {
     $pdo->exec('ALTER TABLE orders ADD COLUMN comment TEXT NOT NULL AFTER delivery_address;');
+}
+
+// Таблица уже могла быть развёрнута до формы отмены Таска 3 Фазы 4
+// (`ADR-038`) — та же идемпотентная проверка. `prepayment_refunded`
+// с DEFAULT 0 безопасно добавлять и на непустую таблицу (в отличие от
+// `comment` выше, у которого не было DEFAULT).
+$columnExists->execute(['table' => 'orders', 'column' => 'cancel_note']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD COLUMN cancel_note TEXT NULL AFTER delivered_at;');
+}
+
+$columnExists->execute(['table' => 'orders', 'column' => 'prepayment_refunded']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD COLUMN prepayment_refunded TINYINT(1) NOT NULL DEFAULT 0 AFTER cancel_note;');
 }
 
 // Индексы под поиск Заказа по телефону в Панели управления (`ADR-037`,
