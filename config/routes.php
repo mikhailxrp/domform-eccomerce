@@ -18,6 +18,7 @@ return [
         '/cart'                    => ['CartController', 'index'],
         '/checkout'                => ['CheckoutController', 'index'],
         '/checkout/success'        => ['CheckoutController', 'success'],
+        '/payment/stub'            => ['PaymentController', 'stub'],
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],
