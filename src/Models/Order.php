@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
+require_once ROOT_PATH . '/src/Core/OrderStatus.php';
 
 /**
  * `$order['user_id']` либо `$order['guest_name']`/`guest_phone`/
@@ -151,6 +152,71 @@ function getOrderItems(int $orderId): array
     $stmt->execute(['order_id' => $orderId]);
 
     return $stmt->fetchAll();
+}
+
+/**
+ * Хотя бы одна Позиция Заказа — Выставочный образец (`order_items` →
+ * `product_variants`, вариант мог быть удалён — `ON DELETE SET NULL`,
+ * тогда `product_variant_id IS NULL` и в join не попадёт, что и нужно:
+ * про удалённый физически Вариант нечего спросить у `product_variants`).
+ */
+function orderHasShowroomSample(int $orderId): bool
+{
+    $stmt = getPdo()->prepare('
+        SELECT EXISTS (
+            SELECT 1 FROM order_items oi
+            INNER JOIN product_variants pv ON pv.id = oi.product_variant_id
+            WHERE oi.order_id = :order_id AND pv.is_showroom_sample = 1
+        )
+    ');
+    $stmt->execute(['order_id' => $orderId]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+/**
+ * Единственное место в проекте с `UPDATE orders SET status` (`php.md`).
+ * Запрещённый переход (в т.ч. неизвестный текущий/целевой статус,
+ * несуществующий Заказ) — `false` без изменений, не исключение: вызов
+ * из Панели управления (Фаза 4) должен уметь просто не предложить
+ * недопустимый переход, а не падать.
+ */
+function transitionOrderStatus(int $orderId, string $to): bool
+{
+    $order = findOrderById($orderId);
+    if ($order === null) {
+        return false;
+    }
+
+    $canTransition = canTransitionOrder(
+        $order['status'],
+        $to,
+        orderHasShowroomSample($orderId),
+        $order['fulfillment_method']
+    );
+
+    if (!$canTransition) {
+        return false;
+    }
+
+    $sql = $to === ORDER_STATUS_DELIVERED
+        ? 'UPDATE orders SET status = :status, delivered_at = NOW() WHERE id = :id'
+        : 'UPDATE orders SET status = :status WHERE id = :id';
+
+    $stmt = getPdo()->prepare($sql);
+    $stmt->execute(['status' => $to, 'id' => $orderId]);
+
+    return true;
+}
+
+/**
+ * Отмена по звонку Менеджеру (`FR-ORD-002` правило 4, `BR-007`) —
+ * стандартная ветка: снятие Резерва при отмене — Фаза 5 (`phase-2.md`,
+ * «Решения фазы»), здесь не реализовано.
+ */
+function cancelOrder(int $orderId): bool
+{
+    return transitionOrderStatus($orderId, ORDER_STATUS_CANCELLED);
 }
 
 /**

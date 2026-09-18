@@ -30,7 +30,7 @@ $breadcrumbs = [['name' => 'Заказ принят']];
             <div class="checkout-info mt-30">
                 <p class="info-header">
                     <i class="fa fa-check-circle"></i>
-                    Заказ №<?= e((string) $order['id']) ?> принят, статус — «Новый».
+                    Заказ №<?= e((string) $order['id']) ?> принят, статус — «<?= e(orderStatusLabel($order['status'])) ?>».
                     Менеджер позвонит для согласования ткани, размера и стоимости доставки.
                 </p>
                 <?php if ($order['payment_method'] === 'card_online'): ?>
