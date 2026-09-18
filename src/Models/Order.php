@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/OrderStatus.php';
+require_once ROOT_PATH . '/src/Core/Validation.php';
 
 /**
  * `$order['user_id']` либо `$order['guest_name']`/`guest_phone`/
@@ -336,4 +337,132 @@ function linkGuestOrdersToUser(string $email, int $userId): int
     $stmt->execute(['user_id' => $userId, 'email' => $email]);
 
     return $stmt->rowCount();
+}
+
+/**
+ * `$filters['status']` — один из `ORDER_STATUS_*` либо `null` (без
+ * фильтра). `$filters['search']` — сырая строка из формы: число →
+ * совпадение по `orders.id`, телефон в любом написании → сравнение по
+ * `normalizePhone()` с уже нормализованными `users.phone`/
+ * `orders.guest_phone` (обе колонки нормализуются при записи —
+ * `AuthController`/`Checkout.php`). Строка, из которой не удалось
+ * извлечь ни номер, ни телефон, даёт заведомо пустой результат, а не
+ * полный список (иначе поиск «не нашёл» выглядел бы как «фильтр не
+ * применился»).
+ */
+function buildAdminOrderFilterConditions(array $filters): array
+{
+    $conditions = [];
+    $params     = [];
+
+    $status = $filters['status'] ?? null;
+    if ($status !== null) {
+        $conditions[]      = 'o.status = :status';
+        $params['status'] = $status;
+    }
+
+    $search = trim((string) ($filters['search'] ?? ''));
+    if ($search !== '') {
+        $searchConditions = [];
+
+        if (ctype_digit($search)) {
+            $searchConditions[]     = 'o.id = :search_id';
+            $params['search_id']    = (int) $search;
+        }
+
+        $normalizedPhone = normalizePhone($search);
+        if ($normalizedPhone !== '') {
+            $searchConditions[]              = 'o.guest_phone = :search_phone_guest';
+            $searchConditions[]              = 'u.phone = :search_phone_user';
+            $params['search_phone_guest']    = $normalizedPhone;
+            $params['search_phone_user']     = $normalizedPhone;
+        }
+
+        $conditions[] = $searchConditions !== [] ? '(' . implode(' OR ', $searchConditions) . ')' : '1 = 0';
+    }
+
+    return [$conditions, $params];
+}
+
+function bindAdminOrderFilterParams(PDOStatement $stmt, array $params): void
+{
+    foreach ($params as $key => $value) {
+        $stmt->bindValue(":{$key}", $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    }
+}
+
+/**
+ * Все Заказы независимо от источника — сайт или ручное создание
+ * Менеджером (`FR-ORD-004`, `FR-MGR-001` правило 1); `LEFT JOIN users`,
+ * потому что гостевой Заказ не ссылается ни на одну строку `users`.
+ */
+function getAdminOrders(array $filters, int $page, int $perPage): array
+{
+    [$conditions, $params] = buildAdminOrderFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+    $offset   = ($page - 1) * $perPage;
+
+    $stmt = getPdo()->prepare("
+        SELECT o.*, u.name AS user_name
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        {$whereSql}
+        ORDER BY o.created_at DESC, o.id DESC
+        LIMIT :limit OFFSET :offset
+    ");
+    bindAdminOrderFilterParams($stmt, $params);
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
+function countAdminOrders(array $filters): int
+{
+    [$conditions, $params] = buildAdminOrderFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+
+    $stmt = getPdo()->prepare("
+        SELECT COUNT(*)
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        {$whereSql}
+    ");
+    bindAdminOrderFilterParams($stmt, $params);
+    $stmt->execute();
+
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Заказ + контакт клиента одним массивом: `is_guest` и
+ * `customer_name`/`customer_phone`/`customer_email` вычислены здесь,
+ * чтобы View не решала сама, откуда брать контакт — `users` или
+ * `guest_*` (ровно один источник, `validateOrderContact()`).
+ */
+function findOrderForAdmin(int $id): ?array
+{
+    $stmt = getPdo()->prepare('
+        SELECT o.*, u.name AS user_name, u.phone AS user_phone, u.email AS user_email
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.id = :id
+        LIMIT 1
+    ');
+    $stmt->execute(['id' => $id]);
+    $order = $stmt->fetch();
+
+    if ($order === false) {
+        return null;
+    }
+
+    $isGuest = $order['user_id'] === null;
+
+    $order['is_guest']       = $isGuest;
+    $order['customer_name']  = $isGuest ? $order['guest_name'] : $order['user_name'];
+    $order['customer_phone'] = $isGuest ? $order['guest_phone'] : $order['user_phone'];
+    $order['customer_email'] = $isGuest ? $order['guest_email'] : $order['user_email'];
+
+    return $order;
 }

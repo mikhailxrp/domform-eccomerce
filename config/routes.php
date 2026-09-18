@@ -22,6 +22,8 @@ return [
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],
+        '/admin/orders'            => ['AdminOrderController', 'index'],
+        '/admin/orders/{id}'       => ['AdminOrderController', 'show'],
         '/forgot-password'         => ['AuthController', 'showForgot'],
         '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],

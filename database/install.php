@@ -26,7 +26,8 @@ $pdo->exec("
         phone         VARCHAR(20) NULL,
         role          ENUM('customer', 'manager', 'admin') NOT NULL DEFAULT 'customer',
         is_blocked    TINYINT(1) NOT NULL DEFAULT 0,
-        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_users_phone (phone)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
@@ -277,6 +278,7 @@ $pdo->exec("
         KEY idx_orders_user (user_id),
         KEY idx_orders_status (status),
         KEY idx_orders_created (created_at),
+        KEY idx_orders_guest_phone (guest_phone),
         CONSTRAINT fk_orders_user
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -291,6 +293,22 @@ $columnExists->execute(['table' => 'orders', 'column' => 'comment']);
 
 if ((int) $columnExists->fetchColumn() === 0) {
     $pdo->exec('ALTER TABLE orders ADD COLUMN comment TEXT NOT NULL AFTER delivery_address;');
+}
+
+// Индексы под поиск Заказа по телефону в Панели управления (`ADR-037`,
+// Таск 2 Фазы 4) — та же идемпотентная проверка, что для
+// `idx_variant_images_color`/`idx_variants_material` выше: таблицы уже
+// могли быть развёрнуты раньше, без этих индексов.
+$indexExists->execute(['table' => 'users', 'index_name' => 'idx_users_phone']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE users ADD INDEX idx_users_phone (phone);');
+}
+
+$indexExists->execute(['table' => 'orders', 'index_name' => 'idx_orders_guest_phone']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD INDEX idx_orders_guest_phone (guest_phone);');
 }
 
 $pdo->exec("

@@ -56,6 +56,9 @@ M:N связи Товар↔Категория, а не 1:N. Оставить с
 | is_blocked | TINYINT(1) NOT NULL DEFAULT 0 | блокировка учётной записи Менеджера Администратором (`FR-ADM-007` правило 3) — колонки не было в схеме, найдено ревью перед `phase-init` (`ADR-025`, `Q-DEV-011` в `tz-coverage.md`); заблокированный пользователь не проходит `AUTH`, но запись и его прошлые Заказы не удаляются |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
+**Индексы:** `INDEX(phone)` — поиск Заказа по телефону Покупателя в
+Панели управления (`FR-MGR-001` правило 2, Таск 2 Фазы 4, `ADR-037`)
+
 ---
 
 ### `password_resets` _(новая — `ADR-027`)_
@@ -352,7 +355,9 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | created_at | TIMESTAMP DEFAULT NOW | |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
-**Индексы:** `INDEX(user_id)`, `INDEX(status)`, `INDEX(created_at)`
+**Индексы:** `INDEX(user_id)`, `INDEX(status)`, `INDEX(created_at)`,
+`INDEX(guest_phone)` — поиск гостевого Заказа по телефону в Панели
+управления (`FR-MGR-001` правило 2, Таск 2 Фазы 4, `ADR-037`)
 
 > Исключение из общего правила «`user_id` → CASCADE»: если удалить
 > пользователя, заказы должны остаться (бухгалтерия/история), поэтому здесь
