@@ -599,6 +599,80 @@
         });
     }
 
+    /**
+     * Страница `/cart` (Таск 2) — без AJAX (`CLAUDE.md`: «POST всегда
+     * заканчивается redirect()»). main.js уже меняет значение `<input>`
+     * по клику `.add`/`.sub` (обработчик на самой кнопке, срабатывает
+     * первым); здесь только автосабмит формы строки после этого —
+     * обработчик навешан на `document` и ловит клик уже во всплытии.
+     * У образца кнопка `.add` серверная — `disabled`, клика не будет.
+     */
+    function initCartQuantityControls() {
+        jQuery(document).on('click', '.cart-row__quantity-form .add, .cart-row__quantity-form .sub', function () {
+            var $form = jQuery(this).closest('form');
+            if ($form.length) {
+                $form.trigger('submit');
+            }
+        });
+    }
+
+    /**
+     * Страница `/checkout` (Таск 3) — поле адреса доставки нужно только
+     * при способе получения «Доставка» (`data-checkout-fulfillment`,
+     * значение `pickup` — `Core/Checkout.php:FULFILLMENT_PICKUP`).
+     * Без JS поле остаётся видимым всегда — обязательность решает
+     * сервер (Таск 4). Создание аккаунта — уже готовый переключатель
+     * темы (`main.js`: `#account` → `.checkout-account`), здесь не
+     * дублируется.
+     */
+    function applyCheckoutFulfillmentVisibility() {
+        var $address = jQuery('#checkout-delivery-address');
+        if (!$address.length) {
+            return;
+        }
+        var isPickup = jQuery('[data-checkout-fulfillment]:checked').val() === 'pickup';
+        $address.attr('hidden', isPickup);
+    }
+
+    function initCheckoutFulfillmentToggle() {
+        if (!jQuery('#checkout-delivery-address').length) {
+            return;
+        }
+        jQuery(document).on('change', '[data-checkout-fulfillment]', applyCheckoutFulfillmentVisibility);
+        applyCheckoutFulfillmentVisibility();
+    }
+
+    /**
+     * Индикатор перехода между страницами — сайт без SPA-роутинга,
+     * каждый переход это полная перезагрузка, а БД сейчас ощутимо
+     * небыстрая (dev-стенд, удалённая БД). Показывается по нативному
+     * `beforeunload`, а не по перехвату клика/сабмита — так лоадер
+     * физически не может ложно сработать на AJAX-переходах каталога
+     * (`loadCatalogResults()`: `fetch()` + `preventDefault()`, без
+     * настоящей навигации — `beforeunload` для них никогда не
+     * происходит) и не требует держать список исключений в актуальном
+     * состоянии. Без `event.preventDefault()`/`returnValue` — иначе
+     * браузер показал бы системный диалог «покинуть страницу?».
+     */
+    function initPageLoader() {
+        var $loader = jQuery('#page-loader');
+        if (!$loader.length) {
+            return;
+        }
+
+        window.addEventListener('beforeunload', function () {
+            $loader.addClass('is-active');
+        });
+
+        // Восстановление страницы из bfcache (кнопка «назад») — лоадер
+        // мог остаться показанным с прошлого перехода.
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted) {
+                $loader.removeClass('is-active');
+            }
+        });
+    }
+
     jQuery(function () {
         syncHeaderSticky();
         applyContentOffset();
@@ -611,6 +685,9 @@
         initProductVariantSelector();
         initSearchSuggest();
         initSearchSortSubmit();
+        initCartQuantityControls();
+        initCheckoutFulfillmentToggle();
+        initPageLoader();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);
         jQuery(document).on('close.bs.alert', '.alert', function () {

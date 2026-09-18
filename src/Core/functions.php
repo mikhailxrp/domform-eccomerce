@@ -302,6 +302,7 @@ function attemptRememberLogin(): void
 
     require_once ROOT_PATH . '/src/Models/RememberToken.php';
     require_once ROOT_PATH . '/src/Models/User.php';
+    require_once ROOT_PATH . '/src/Models/Cart.php';
 
     $token = findRememberToken($selector);
     if ($token === null || strtotime((string) $token['expires_at']) < time()) {
@@ -325,6 +326,11 @@ function attemptRememberLogin(): void
     $_SESSION['user_id']   = (int) $user['id'];
     $_SESSION['user_name'] = $user['name'];
     $_SESSION['user_role'] = $user['role'];
+
+    if (isset($_COOKIE['cart_token'])) {
+        mergeGuestCart($_COOKIE['cart_token'], (int) $user['id']);
+    }
+    refreshCartCount(cartOwner());
 }
 
 // ─── Корзина ────────────────────────────────────────────────────────────
@@ -363,6 +369,48 @@ function cartOwner(): array
     $user = currentUser();
 
     return $user !== null ? ['user_id' => $user['id']] : ['session_id' => cartToken()];
+}
+
+/**
+ * Количество позиций в корзине для шапки — кэшируется в сессии, не
+ * запрашивается из БД на каждой странице: удалённая БД
+ * (`mikhail700.beget.tech`) отвечает на простой запрос за ~300мс
+ * (сеть до shared-хостинга), а `header.php` подключается на каждой
+ * странице сайта — без кэша это лишние ~300мс на КАЖДЫЙ переход,
+ * независимо от того, менялась корзина или нет. Кэш выставляется
+ * заново только там, где корзина реально меняется —
+ * `refreshCartCount()` в `CartController`/`AuthController`/
+ * `attemptRememberLogin()`.
+ */
+function currentCartCount(array $owner): int
+{
+    ensureSessionStarted();
+    if (!isset($_SESSION['cart_count'])) {
+        require_once ROOT_PATH . '/src/Models/Cart.php';
+        $_SESSION['cart_count'] = countCartItems($owner);
+    }
+    return (int) $_SESSION['cart_count'];
+}
+
+function refreshCartCount(array $owner): void
+{
+    ensureSessionStarted();
+    require_once ROOT_PATH . '/src/Models/Cart.php';
+    $_SESSION['cart_count'] = countCartItems($owner);
+}
+
+/**
+ * Кладёт уже известное количество в кэш без похода в БД — для мест,
+ * которые и так только что прочитали полный список строк корзины
+ * (`CartController::index()`), самое надёжное место для самоисцеления
+ * кэша: что бы ни разошлось (кэш пережил ручную правку `cart_items` в
+ * обход приложения, redis/сессия отстала и т.п.) — открыв `/cart`,
+ * счётчик в шапке снова совпадёт с тем, что реально на странице.
+ */
+function cacheCartCount(int $count): void
+{
+    ensureSessionStarted();
+    $_SESSION['cart_count'] = $count;
 }
 
 // ─── Rate limiting ──────────────────────────────────────────────────────

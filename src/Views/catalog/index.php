@@ -30,7 +30,7 @@ include ROOT_PATH . '/src/Views/layout/header.php';
         </div>
     </div>
 
-    <div class="section section-padding-02">
+    <div class="section section-padding">
         <div class="container">
             <?php if (($category['description'] ?? '') !== ''): ?>
                 <p class="catalog__description"><?= e($category['description']) ?></p>

@@ -62,6 +62,7 @@ declare(strict_types=1);
     <a href="#" class="back-to-top"><i class="pe-7s-angle-up"></i></a>
 
     <?php include ROOT_PATH . '/src/Views/components/cookie-notice.php'; ?>
+    <?php include ROOT_PATH . '/src/Views/components/page-loader.php'; ?>
 
     <!-- Modernizer & jQuery JS -->
     <script src="/assets/js/vendor/modernizr-3.11.2.min.js"></script>

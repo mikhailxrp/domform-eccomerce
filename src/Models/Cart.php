@@ -207,6 +207,38 @@ function clearCart(array $owner): void
 }
 
 /**
+ * «Принять изменения» на `/checkout` (`FR-CHK-003`): недоступные из-за
+ * активного Резерва на образец позиции удаляются из корзины,
+ * `price_snapshot` оставшихся строк подтягивается к текущей цене
+ * Варианта — после вызова `findPriceChanges()`/`is_reserved` для этого
+ * владельца снова пусты.
+ */
+function acceptCartPriceChanges(array $owner): void
+{
+    $ownerCondition = validateCartOwner($owner);
+    $pdo            = getPdo();
+
+    $deleteStmt = $pdo->prepare("
+        DELETE ci FROM cart_items ci
+        INNER JOIN product_variants pv ON pv.id = ci.product_variant_id
+        WHERE ci.{$ownerCondition['column']} = :owner_value
+          AND EXISTS (
+              SELECT 1 FROM reserves r
+              WHERE r.product_variant_id = pv.id AND r.status = 'active'
+          )
+    ");
+    $deleteStmt->execute(['owner_value' => $ownerCondition['value']]);
+
+    $syncStmt = $pdo->prepare("
+        UPDATE cart_items ci
+        INNER JOIN product_variants pv ON pv.id = ci.product_variant_id
+        SET ci.price_snapshot = pv.price
+        WHERE ci.{$ownerCondition['column']} = :owner_value
+    ");
+    $syncStmt->execute(['owner_value' => $ownerCondition['value']]);
+}
+
+/**
  * Переносит гостевую корзину (`cart_token`, `$token`) в корзину
  * зарегистрированного/вошедшего пользователя: тот же Вариант+цвет —
  * количества суммируются (с clamp, образец остаётся 1), иначе гостевая

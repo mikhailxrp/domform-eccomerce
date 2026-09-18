@@ -7,6 +7,7 @@ namespace App\Controllers;
 require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Models/RememberToken.php';
 require_once ROOT_PATH . '/src/Models/PasswordReset.php';
+require_once ROOT_PATH . '/src/Models/Cart.php';
 require_once ROOT_PATH . '/src/Services/Mailer.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 
@@ -71,6 +72,11 @@ class AuthController
         $_SESSION['user_id']   = (int) $user['id'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];
+
+        if (isset($_COOKIE['cart_token'])) {
+            mergeGuestCart($_COOKIE['cart_token'], (int) $user['id']);
+        }
+        refreshCartCount(cartOwner());
 
         if (input('remember') === '1') {
             $token = createRememberToken((int) $user['id']);
@@ -144,6 +150,11 @@ class AuthController
             return;
         }
 
+        if (isset($_COOKIE['cart_token'])) {
+            mergeGuestCart($_COOKIE['cart_token'], $userId);
+            refreshCartCount(cartOwner());
+        }
+
         setFlash('success', 'Регистрация прошла успешно. Теперь войдите в аккаунт.');
         redirect('/login');
     }
@@ -158,7 +169,7 @@ class AuthController
         }
         clearRememberCookie();
 
-        unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_role']);
+        unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_role'], $_SESSION['cart_count']);
         regenerateSession();
 
         setFlash('success', 'Вы вышли из аккаунта.');
