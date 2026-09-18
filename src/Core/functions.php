@@ -222,6 +222,12 @@ function roleAllowed(array $allowedRoles, ?string $role): bool
     return $role !== null && $role !== '' && in_array($role, $allowedRoles, true);
 }
 
+/**
+ * Гость — на `/login`; авторизованный, но с неподходящей ролью (например,
+ * Покупатель на `/admin`) — не 403, а на свою домашнюю страницу
+ * (`homeUrlForRole()`): роль не ошибка доступа, а нормальное состояние,
+ * которое просто ведёт не туда.
+ */
 function requireRole(array $roles): void
 {
     $user = currentUser();
@@ -229,8 +235,7 @@ function requireRole(array $roles): void
         redirect('/login');
     }
     if (!roleAllowed($roles, $user['role'])) {
-        http_response_code(403);
-        exit('403 Доступ запрещён.');
+        redirect(homeUrlForRole($user['role']));
     }
 }
 

@@ -46,6 +46,21 @@ function orderStatusLabel(string $status): string
     return ORDER_STATUS_LABELS[$status] ?? $status;
 }
 
+const ORDER_STATUS_BADGE_CLASSES = [
+    ORDER_STATUS_NEW                => 'bg-secondary',
+    ORDER_STATUS_CONFIRMED          => 'bg-info',
+    ORDER_STATUS_IN_PRODUCTION      => 'bg-primary',
+    ORDER_STATUS_READY_FOR_SHIPMENT => 'bg-warning text-dark',
+    ORDER_STATUS_SHIPPING           => 'bg-warning',
+    ORDER_STATUS_DELIVERED          => 'bg-success',
+    ORDER_STATUS_CANCELLED          => 'bg-danger',
+];
+
+function orderStatusBadgeClass(string $status): string
+{
+    return ORDER_STATUS_BADGE_CLASSES[$status] ?? 'bg-light text-dark';
+}
+
 /**
  * Разрешённые следующие статусы из `$from` (раздел 6.3 ТЗ): образец
  * (`$hasShowroomSample`) пропускает «В производстве» — идёт сразу в

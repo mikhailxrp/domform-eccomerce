@@ -149,4 +149,22 @@ final class OrderStatusTest extends TestCase
     {
         $this->assertSame('bogus', orderStatusLabel('bogus'));
     }
+
+    // ─── orderStatusBadgeClass() ─────────────────────────────────────────
+
+    public function testOrderStatusBadgeClassForEachOfSevenStatuses(): void
+    {
+        $this->assertSame('bg-secondary', orderStatusBadgeClass(ORDER_STATUS_NEW));
+        $this->assertSame('bg-info', orderStatusBadgeClass(ORDER_STATUS_CONFIRMED));
+        $this->assertSame('bg-primary', orderStatusBadgeClass(ORDER_STATUS_IN_PRODUCTION));
+        $this->assertSame('bg-warning text-dark', orderStatusBadgeClass(ORDER_STATUS_READY_FOR_SHIPMENT));
+        $this->assertSame('bg-warning', orderStatusBadgeClass(ORDER_STATUS_SHIPPING));
+        $this->assertSame('bg-success', orderStatusBadgeClass(ORDER_STATUS_DELIVERED));
+        $this->assertSame('bg-danger', orderStatusBadgeClass(ORDER_STATUS_CANCELLED));
+    }
+
+    public function testOrderStatusBadgeClassFallsBackForUnknownStatus(): void
+    {
+        $this->assertSame('bg-light text-dark', orderStatusBadgeClass('bogus'));
+    }
 }

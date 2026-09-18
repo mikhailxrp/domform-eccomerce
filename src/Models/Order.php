@@ -146,6 +146,25 @@ function findOrderById(int $id): ?array
     return $order !== false ? $order : null;
 }
 
+/**
+ * Все 7 статусов всегда присутствуют в результате (0, если Заказов
+ * нет) — дашборд Панели управления показывает счётчик по каждому,
+ * а не только по тем, что реально встретились в `orders`.
+ */
+function countOrdersByStatus(): array
+{
+    $counts = array_fill_keys(array_keys(ORDER_STATUS_LABELS), 0);
+
+    $stmt = getPdo()->query('SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status');
+    foreach ($stmt->fetchAll() as $row) {
+        if (array_key_exists($row['status'], $counts)) {
+            $counts[$row['status']] = (int) $row['cnt'];
+        }
+    }
+
+    return $counts;
+}
+
 function getOrderItems(int $orderId): array
 {
     $stmt = getPdo()->prepare('SELECT * FROM order_items WHERE order_id = :order_id ORDER BY id');

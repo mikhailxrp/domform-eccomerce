@@ -1,0 +1,28 @@
+/* Панель управления — точечные переопределения темы Valex, саму тему не трогаем (по аналогии с app.css витрины). */
+
+/* Иконка пункта сайдбара из styles.min.css задаёт line-height:34px при
+   height:1.375rem — глиф иконки визуально вылезает за пределы своего
+   бокса и не совпадает по центру с подписью пункта. Flex-центрирование
+   содержимого не зависит от метрик конкретного шрифта иконок. */
+.app-sidebar .side-menu__icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+
+/* На ширине ≤991.98px тема сама скрывает .main-sidebar-header (логотип
+   над списком пунктов) и убирает у .main-sidebar отступ под него —
+   открытое мобильное меню начинается пунктом «Дашборд» вплотную к
+   верхнему краю экрана. Возвращаем логотип и его высоту (4rem — то же
+   значение, что тема использует на десктопе), чтобы список пунктов не
+   был прижат к краю. */
+@media (max-width: 991.98px) {
+    .main-sidebar-header {
+        display: flex !important;
+    }
+
+    .main-sidebar {
+        margin-block-start: 4rem !important;
+    }
+}
