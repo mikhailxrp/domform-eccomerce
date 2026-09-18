@@ -21,11 +21,17 @@ include ROOT_PATH . '/src/Views/layout/header.php';
 
 <main>
     <?php include ROOT_PATH . '/src/Views/components/flash.php'; ?>
-    <div class="section section-padding page-content-offset">
+    <div class="section page-banner-section page-banner-section--catalog">
         <div class="container">
-            <?php include ROOT_PATH . '/src/Views/components/breadcrumbs.php'; ?>
+            <div class="page-banner-content">
+                <h1 class="title"><?= e($category['name'] ?? 'Каталог') ?></h1>
+                <?php include ROOT_PATH . '/src/Views/components/breadcrumbs.php'; ?>
+            </div>
+        </div>
+    </div>
 
-            <h1 class="catalog__title"><?= e($category['name'] ?? 'Каталог') ?></h1>
+    <div class="section section-padding-02">
+        <div class="container">
             <?php if (($category['description'] ?? '') !== ''): ?>
                 <p class="catalog__description"><?= e($category['description']) ?></p>
             <?php endif; ?>

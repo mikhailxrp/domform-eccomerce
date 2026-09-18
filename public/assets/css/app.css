@@ -135,6 +135,36 @@
     margin-top: 16px;
 }
 
+/* Верхняя панель каталога (счётчик «N из M товаров», «Сортировка:» и
+   сам select): тема задаёт 18px под Rajdhani — узкий шрифт без
+   кириллицы; для русского текста подставляется обычный sans-serif, и те
+   же 18px выглядят крупнее остального интерфейса. */
+.shop-top-bar {
+    --shop-top-bar-font-size: 14px;
+}
+
+.shop-top-bar .shop-text p,
+.shop-top-bar .shop-sort .title,
+.shop-top-bar .shop-sort .nice-select,
+.shop-top-bar .shop-sort .nice-select .list .option {
+    font-size: var(--shop-top-bar-font-size);
+}
+
+/* Сайдбар каталога занимает всю ширину col-lg-3, а ion.rangeSlider
+   рисует правую ручку по центру края шкалы — она вылезает за колонку
+   и упирается в сетку товаров (гаттера Bootstrap не хватает). На
+   десктопе отодвигаем сайдбар от сетки; на мобильном сайдбар под
+   сеткой во всю ширину — отступ не нужен. */
+.catalog-sidebar {
+    --catalog-sidebar-gap: 30px;
+}
+
+@media only screen and (min-width: 992px) {
+    .catalog-sidebar {
+        padding-right: var(--catalog-sidebar-gap);
+    }
+}
+
 /* Селектор Варианта/цвета на карточке товара (Таск 4) — своя
    BEM-компонента: у темы вообще нет готовой разметки под выбор
    Варианта (`product-details-affiliate.html` — партнёрская витрина без
@@ -274,7 +304,8 @@
    `general.md`/HTML-правилами: никаких inline-стилей). `.page-banner-
    section`/`.page-banner-content` — структура и типографика уже в
    теме (`style.css`), здесь только сам фон. */
-.page-banner-section--product {
+.page-banner-section--product,
+.page-banner-section--catalog {
     background-image: url('/uploads/baners/page-banner-product.webp');
 }
 

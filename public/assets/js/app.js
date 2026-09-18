@@ -133,6 +133,23 @@
         }
     }
 
+    /**
+     * `<select id="catalog-sort">` приходит внутри fetch-фрагмента, а
+     * main.js оборачивает `.nice_select` только один раз при загрузке —
+     * после подмены `#catalog-results` оформляем новый select сами.
+     * Плагин триггерит `change` на исходном select при выборе пункта —
+     * делегированный обработчик в `initCatalogFilters()` его увидит.
+     */
+    function initCatalogSortSelect() {
+        var $sort = jQuery('#catalog-sort');
+        if (!$sort.length || typeof $sort.niceSelect !== 'function') {
+            return;
+        }
+        if (!$sort.next('.nice-select').length) {
+            $sort.niceSelect();
+        }
+    }
+
     function initCatalogViewToggle() {
         jQuery(document).on('shown.bs.tab', '[data-catalog-view]', function () {
             try {
@@ -195,6 +212,12 @@
         return $form.attr('action') + (query ? '?' + query : '');
     }
 
+    /**
+     * В полёте — ровно один запрос: новый фильтр отменяет предыдущий,
+     * иначе ответы приходят вразнобой и старый перезаписывает новый.
+     */
+    var catalogFetchController = null;
+
     function loadCatalogResults(url, pushState) {
         var $results = jQuery('#catalog-results');
         if (!$results.length) {
@@ -202,7 +225,17 @@
         }
         $results.attr('aria-busy', 'true');
 
-        fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+        if (catalogFetchController) {
+            catalogFetchController.abort();
+        }
+        var controller = window.AbortController ? new AbortController() : null;
+        catalogFetchController = controller;
+
+        fetch(url, {
+            headers: { 'X-Requested-With': 'fetch' },
+            credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined
+        })
             .then(function (response) {
                 if (!response.ok) {
                     throw new Error('catalog fetch failed: ' + response.status);
@@ -210,13 +243,19 @@
                 return response.text();
             })
             .then(function (html) {
+                catalogFetchController = null;
                 $results.html(html).removeAttr('aria-busy');
+                initCatalogSortSelect();
                 applyStoredCatalogView();
                 if (pushState) {
                     window.history.pushState({ catalogUrl: url }, '', url);
                 }
             })
-            .catch(function () {
+            .catch(function (error) {
+                // Отменён более новым запросом — тот сам снимет aria-busy
+                if (error && error.name === 'AbortError') {
+                    return;
+                }
                 // Сеть подвела/сервер недоступен — обычная навигация как
                 // запасной вариант, тот же URL работает и без JS
                 window.location.href = url;
@@ -226,13 +265,15 @@
     /** Чекбоксы/цвет в сайдбаре сбрасываются вручную — вне `#catalog-results`, повторный fetch их не перерисует. */
     function resetCatalogFilterForm() {
         jQuery('#catalog-filter-form input[type=checkbox]').prop('checked', false);
+        // Hidden-поля — до `update()` слайдера: он триггерит `change` на
+        // своём input, и обработчик ниже не должен увидеть старые значения
+        jQuery('#catalog-price-min, #catalog-price-max').val('');
 
         var $slider = jQuery('#catalog-price-slider');
         var instance = $slider.data('ionRangeSlider');
         if (instance) {
             instance.update({ from: instance.options.min, to: instance.options.max });
         }
-        jQuery('#catalog-price-min, #catalog-price-max').val('');
     }
 
     function applyCatalogFilters() {
@@ -247,7 +288,15 @@
             return;
         }
 
-        jQuery(document).on('change', '#catalog-filter-form input, #catalog-filter-form select, #catalog-sort', applyCatalogFilters);
+        // `#catalog-price-slider` исключён: ion.rangeSlider сам триггерит
+        // `change` на своём input при каждом сдвиге ползунка (и при
+        // `update()`) — это дало бы fetch на каждый mousemove; для цены
+        // фильтр применяет `onFinish` в `initCatalogPriceSlider()`
+        jQuery(document).on(
+            'change',
+            '#catalog-filter-form input:not(#catalog-price-slider), #catalog-filter-form select, #catalog-sort',
+            applyCatalogFilters
+        );
 
         jQuery(document).on('submit', '#catalog-filter-form', function (event) {
             event.preventDefault();

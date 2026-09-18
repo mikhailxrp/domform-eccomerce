@@ -48,7 +48,7 @@ $sortOptions = [
         </ul>
     </div>
     <div class="shop-sort">
-        <label for="catalog-sort" class="visually-hidden">Сортировка</label>
+        <label for="catalog-sort" class="title">Сортировка:</label>
         <select name="sort" id="catalog-sort" class="nice_select" form="catalog-filter-form">
             <?php foreach ($sortOptions as $value => $label): ?>
                 <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
