@@ -28,5 +28,12 @@ define('CATALOG_PER_PAGE', 12);
 define('SEARCH_SUGGEST_LIMIT', 5);
 define('SEARCH_MIN_QUERY_LENGTH', 2);
 
+// Корзина (`.docs/phases/phase-2.md`, Таск 1) — CART_MAX_QUANTITY не
+// здесь: он нужен внутри чистой clampCartQuantity() в Core/Cart.php,
+// поэтому определён там же (по образцу SEARCH_QUERY_MAX_LENGTH в
+// CatalogFilters.php — константы, нужные тестируемым Core-функциям, не
+// в config.php, который tests/bootstrap.php не подключает)
+define('CART_COOKIE_DAYS', 30);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

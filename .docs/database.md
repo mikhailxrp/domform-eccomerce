@@ -288,14 +288,21 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | product_variant_id | INT NOT NULL, FK → product_variants.id, ON DELETE CASCADE | было `product_id` → `products.id` (`ADR-010`) — цена и остаток теперь на уровне Варианта, не Товара |
 | color | VARCHAR(100) NULL | выбранный Покупателем цвет — не влияет на артикул/цену (раздел 6.2), только на отображение и снэпшот в `order_items` |
 | quantity | INT NOT NULL DEFAULT 1 | |
+| price_snapshot | DECIMAL(10,2) NOT NULL | цена Варианта на момент добавления в корзину — **только для уведомления** «было / стало» (`FR-CHK-003` правило 1), никогда для суммы: сумма корзины и Заказа всегда пересчитывается из `product_variants` (`ADR-033`) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
 **Индексы:** `INDEX(session_id)`, `INDEX(user_id)`
 
-> Цена здесь никогда не хранится — при чекауте всегда перечитывается из
-> `product_variants` (см. правило "server is the source of truth" в
-> `general.md`). Ровно одно из `session_id` / `user_id` должно быть
+> Цена в `product_variants` — источник истины при чекауте, всегда
+> перечитывается заново (см. правило "server is the source of truth" в
+> `general.md`); `price_snapshot` используется только для сравнения
+> «изменилась ли цена». Ровно одно из `session_id` / `user_id` должно быть
 > заполнено — проверяется в Model, а не constraint'ом БД.
+> `session_id` с Таска 1 Фазы 2 хранит не PHP session id, а значение
+> cookie `cart_token` (32 байта `random_bytes` → 64 hex, 30 дней) — имя
+> колонки не переименовано, изменилась только семантика (`ADR-034`):
+> PHP-сессия не переживает закрытие браузера на shared-хостинге
+> (`ADR-028`), а корзина гостя должна.
 
 ---
 

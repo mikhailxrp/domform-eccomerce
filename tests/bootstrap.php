@@ -10,3 +10,4 @@ require_once ROOT_PATH . '/src/Core/Router.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
+require_once ROOT_PATH . '/src/Core/Cart.php';

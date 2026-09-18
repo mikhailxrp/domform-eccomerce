@@ -1083,3 +1083,32 @@ debounce 250мс, ↑↓/Enter/Esc, закрытие по клику вне.
 Фаза 2 (`_status.md` → 🔄, `task-init` Таска 1).
 
 ---
+
+**Дата:** 18.09.2026
+**Что сделано:** Таск 1 Фазы 2 — схема под корзину, Model корзины,
+расчёты (без UI). `cart_items.price_snapshot DECIMAL(10,2) NOT NULL`
+(`ADR-033`); `session_id` с этого таска хранит cookie `cart_token`, не
+PHP session id (`ADR-034`, `functions.php`: `cartToken()`/
+`cartOwner()`). Чистые расчёты в `Core/Cart.php` (`clampCartQuantity()`,
+`calculateCartTotals()` — суммы через bcmath, без float,
+`findPriceChanges()` — через `bccomp`, устойчиво к разнице
+форматирования `"1999.9"`/`"1999.90"`); `Models/Cart.php` —
+`getCartItems()`/`addCartItem()`/`updateCartItemQuantity()`/
+`removeCartItem()`/`countCartItems()`/`clearCart()`/`mergeGuestCart()`,
+все с проверкой владельца через общий `validateCartOwner()` (бросает
+исключение при пустом/двойном ключе). Проверено против реальной БД
+(`mikhail700.beget.tech`, с подтверждения пользователя): `install.php`
+дважды подряд без ошибок, структура сверена; временным скриптом в
+scratchpad — изоляция владельца, слияние Вариант+цвет, clamp образца,
+`mergeGuestCart()` (суммирование, идемпотентность повторного вызова),
+недоступность чужой строки для update/remove. `composer test` 84/84
+(+14 `CartTest`).
+Отклонение от плана `TASK.md`: `CART_MAX_QUANTITY` определена в
+`Core/Cart.php`, а не в `config/config.php` — `tests/bootstrap.php` не
+подключает `config.php` (не идемпотентен по `ROOT_PATH`, требует
+`.env`), тот же принцип, что уже применялся к
+`SEARCH_QUERY_MAX_LENGTH` в `CatalogFilters.php`.
+**Что следующее:** Таск 2 Фазы 2 — добавление в корзину, страница
+корзины, счётчик в шапке (`task-init`).
+
+---

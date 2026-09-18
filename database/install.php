@@ -215,6 +215,7 @@ $pdo->exec("
         product_variant_id  INT NOT NULL,
         color               VARCHAR(100) NULL,
         quantity            INT NOT NULL DEFAULT 1,
+        price_snapshot      DECIMAL(10, 2) NOT NULL,
         created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         KEY idx_cart_items_session (session_id),
         KEY idx_cart_items_user (user_id),
@@ -224,6 +225,17 @@ $pdo->exec("
             FOREIGN KEY (product_variant_id) REFERENCES product_variants (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
+
+// Таблица уже могла быть развёрнута до ADR-033 (Фаза 0), когда
+// price_snapshot ещё не было — та же идемпотентная проверка через
+// information_schema, что и для categories.description (Таск 1 Фазы 1).
+// Колонка не NULL: на момент этого таска cart_items ещё не используется
+// (добавление в корзину — Таск 2), таблица пуста на всех окружениях.
+$columnExists->execute(['table' => 'cart_items', 'column' => 'price_snapshot']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE cart_items ADD COLUMN price_snapshot DECIMAL(10, 2) NOT NULL AFTER quantity;');
+}
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS favorites (

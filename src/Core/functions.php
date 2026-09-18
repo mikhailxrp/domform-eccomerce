@@ -327,6 +327,44 @@ function attemptRememberLogin(): void
     $_SESSION['user_role'] = $user['role'];
 }
 
+// ─── Корзина ────────────────────────────────────────────────────────────
+// Гостевая корзина живёт на отдельной cookie `cart_token`, не на PHP-
+// сессии — та не переживает закрытие браузера/GC на shared-хостинге
+// (`ADR-028`, `ADR-034`). Значение хранится в `cart_items.session_id`
+// (`database.md`).
+
+function cartToken(): string
+{
+    $token = $_COOKIE['cart_token'] ?? null;
+    if (is_string($token) && preg_match('/^[a-f0-9]{64}$/', $token) === 1) {
+        return $token;
+    }
+
+    $token = bin2hex(random_bytes(32));
+    setcookie('cart_token', $token, [
+        'expires'  => time() + CART_COOKIE_DAYS * 86400,
+        'path'     => '/',
+        'secure'   => defined('APP_ENV') && APP_ENV === 'production',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    $_COOKIE['cart_token'] = $token;
+
+    return $token;
+}
+
+/**
+ * Владелец корзины для `Models/Cart.php` — авторизованный пользователь
+ * побеждает гостевой токен, если оба есть (тот же приоритет, что
+ * `currentUser()` для остального приложения).
+ */
+function cartOwner(): array
+{
+    $user = currentUser();
+
+    return $user !== null ? ['user_id' => $user['id']] : ['session_id' => cartToken()];
+}
+
 // ─── Rate limiting ──────────────────────────────────────────────────────
 // Файловый счётчик в storage/cache/rate-limit/ — без Redis/Memcached,
 // подходит для shared-хостинга. Ключ = действие + IP клиента.
