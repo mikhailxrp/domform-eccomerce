@@ -1,75 +1,88 @@
 # Current Task
 
 ## Фаза
-Phase 3 — Онлайн-оплата и касса (`.docs/phases/phase-3.md`, Таск 1)
+Phase 3 — Онлайн-оплата и касса (`.docs/phases/phase-3.md`, Таск 2)
 
-**Статус:** ✅ Завершён — код реализован и проверен через `php -S` +
-`curl` против реальной БД (`mikhail700.beget.tech`): заказ картой на
-сайте → на `/checkout/success` ссылка «перейти к оплате» ведёт на
-`/payment/stub` без id в URL, показывает номер и статус заказа; заказ
-наличными → ссылки нет, прямой заход на `/payment/stub` редиректит на
-`/checkout/success`; без `last_order_id` в сессии → редирект на `/`;
-`composer test` 119/119 (без изменений в чистой логике — новых тестов
-не требовалось); `storage/logs/app.log` — новых ошибок нет. Тестовые
-заказы удалены после проверки.
+**Статус:** ✅ Завершён — последний таск фазы, фаза 3 целиком закрыта.
+Код реализован и проверен: `composer test` 125/125 (6 новых тестов
+`PaymentTest`); `grep -r "SET payment_status" src/` — ровно 2
+вхождения; ручная проверка временным скриптом в scratchpad против
+реальной БД (`mikhail700.beget.tech`): `markOrderPrepaid()` на
+`new`/`unpaid` → `prepaid`/`confirmed`, `prepaid_amount` записана;
+повторный вызов → `false`, без изменений; `markOrderPaidFull()` →
+`paid_full`, `status` не тронут, повторный вызов → `false`; отменённый
+Заказ → `markOrderPrepaid()` фиксирует оплату, но не переоткрывает
+`cancelled`-статус. `storage/logs/app.log` — только ожидаемая `INFO`
+запись из `markOrderPaidFull()`. Тестовые заказы удалены после
+проверки.
 
 ## Задача
-`GET /payment/stub` показывает номер и статус текущего Заказа
-(резолвится через `$_SESSION['last_order_id']`, без id в URL — как
-`/checkout/success`), поясняет, что это демо-проект без реального
-списания, и даёт кнопку «Позвонить/WhatsApp»; на `/checkout/success`
-текущий текст-заглушка про оплату картой заменяется ссылкой на
-`/payment/stub`, видимой только когда `payment_method === 'card_online'`.
+Единственный путь пометить оплату Заказа полученной — `markOrderPrepaid()`
+(предоплата: `payment_status → prepaid`, `prepaid_amount` заполнена,
+статус Заказа `new → confirmed` через существующий
+`transitionOrderStatus()`) и `markOrderPaidFull()` (остаток:
+`payment_status → paid_full`, `orders.status` не трогается) — обе
+атомарны (одна транзакция) и идемпотентны (повторный вызов на уже
+оплаченном Заказе не меняет данные, не бросает исключение). Сумма
+проверяется чистой функцией без БД. UI вызова — Фаза 4, здесь не
+реализуется.
 
 ## Scope — что трогаем
 
-- [x] `config/routes.php` — изменено: добавлен `GET /payment/stub` →
-      `['PaymentController', 'stub']`
-- [x] `src/Controllers/PaymentController.php` — создан: `stub()` —
-      `ensureSessionStarted()`, `last_order_id` из сессии →
-      `findOrderById()`; нет id в сессии или заказ не найден → редирект
-      на `/`; `payment_method !== 'card_online'` → редирект на
-      `/checkout/success`
-- [x] `src/Views/payment/stub.php` — создан: по образцу
-      `checkout/success.php` (шапка/подвал, breadcrumbs, `flash.php`),
-      номер и статус Заказа через `orderStatusLabel()`, текст про
-      демо-проект, кнопки «Позвонить»/«WhatsApp»
-      (`SHOP_PHONE`/`SHOP_WHATSAPP_URL`), ссылка «Вернуться к заказу» →
-      `/checkout/success`
-- [x] `src/Views/checkout/success.php` — изменён: блок
-      `payment_method === 'card_online'` — вместо текста добавлена
-      ссылка на `/payment/stub`
+- [x] `src/Core/Payment.php` — создан: `validatePaymentAmount(string
+      $amount, string $orderTotal, string $alreadyPaid): ?string` —
+      `null`, если сумма корректна (число > 0, не превышает
+      `orderTotal - alreadyPaid`), иначе текст ошибки; сравнение
+      только через `bccomp()`
+- [x] `tests/Unit/PaymentTest.php` — создан: 6 тестов (0/отрицательная
+      сумма, сумма больше остатка, сумма равна остатку, корректная
+      сумма, сумма с лишними знаками после запятой, некорректный формат)
+- [x] `tests/bootstrap.php` — изменён: добавлен
+      `require_once ROOT_PATH . '/src/Core/Payment.php';`
+- [x] `src/Models/Order.php` — изменён: `markOrderPrepaid(int
+      $orderId, string $amount): bool` — транзакция, `UPDATE orders
+      SET payment_status = :prepaid, prepaid_amount = :amount WHERE
+      id = :id AND payment_status = :unpaid` (константы
+      `PAYMENT_STATUS_*`), `rowCount() === 0` → `false` без изменений,
+      иначе `transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED)`;
+      `markOrderPaidFull(int $orderId, string $amount): bool` — тот же
+      паттерн, `payment_status='prepaid' → 'paid_full'`, `orders.status`
+      и `prepaid_amount` не трогаются (в схеме нет колонки под остаток
+      — `orders.total` уже содержит полную сумму); `$amount` уходит в
+      `logInfo()` как аудиторский след, не как запись в БД
 
 ## Out of scope — не трогаем
 
-- Таск 2 этой же фазы: `markOrderPrepaid()`/`markOrderPaidFull()`,
-  `Core/Payment.php`, `PaymentTest.php` — отдельный таск
-- Реальная интеграция с ЮMoney, вебхук, `payment_logs` — не
-  реализуется в портфолио-версии (`ADR-018`)
+- UI Менеджера для вызова этих функций (кнопка «Отметить оплату» и
+  т.п.) — Фаза 4, когда появится Панель менеджера
+- Реальная интеграция с ЮMoney, вебхук, запись в `payment_logs` — не
+  реализуется (`ADR-018`)
 - Фискализация Атол (`FR-PAY-005`) — не реализуется (`Q-007` снят)
-- UI Менеджера для отметки оплаты — Фаза 4
-- Любые изменения в `CheckoutController`, `Models/Order.php`,
-  статусной модели заказа — вне scope этого таска
+- `PaymentController`, `/payment/stub` — уже сделаны Таском 1, не
+  трогаем
+- Диапазон 30–50% предоплаты — не валидируется системой (`FR-PAY-002`:
+  процент вводит Менеджер вручную, не расчёт сайта)
 
 ## Definition of Done
 
-- [x] Заказ с `payment_method='card_online'` → на `/checkout/success`
-      видна ссылка на `/payment/stub`; переход показывает тот же номер
-      и статус Заказа, без id в URL (проверено curl, заказ №15)
-- [x] Заказ с `payment_method` `cash`/`bank_transfer` → ссылки на
-      `/payment/stub` нет; прямой заход на `/payment/stub` для такого
-      Заказа редиректит на `/checkout/success` (проверено curl, заказ №16)
-- [x] Без `last_order_id` в сессии (новая вкладка/другой браузер) →
-      `/payment/stub` редиректит на `/`, чужой Заказ недоступен
-      (проверено curl без cookies)
-- [x] Кнопка «Позвонить/WhatsApp» видна и не отправляет никакую форму
-      (обычные `<a>`-ссылки, `tel:` / внешняя ссылка)
-- [x] Страница читаема на 320px+ (переиспользует те же секции/классы,
-      что `checkout/success.php`), вывод через `e()`, нет inline-стилей
-- [x] Проверить `.docs/dod-global.md` — `composer test` 119/119, новых
-      записей в `storage/logs/app.log` нет, CSRF не требуется (GET-запрос
-      без изменения данных), SQL/бизнес-логики в `PaymentController`/
-      `stub.php` нет
+- [x] `composer test` зелёный (125/125), включая `PaymentTest`:
+      `validatePaymentAmount()` отклоняет 0/отрицательную/превышающую
+      остаток/некорректно отформатированную сумму, принимает корректную
+- [x] `grep -r "SET payment_status" src/` — единственные два вхождения,
+      в `markOrderPrepaid()`/`markOrderPaidFull()`
+- [x] Ручная проверка временным скриптом в scratchpad (не в
+      репозитории) против реальной БД (`mikhail700.beget.tech`): Заказ
+      `new`/`unpaid` → `markOrderPrepaid()` → `prepaid`/`confirmed`,
+      `prepaid_amount` записана; повторный вызов → `false`, данные не
+      изменились; `markOrderPaidFull()` после этого → `paid_full`,
+      `orders.status` не тронут, повторный вызов → `false`; отменённый
+      Заказ (`cancelled`) → `markOrderPrepaid()` помечает оплату, но не
+      переоткрывает статус (переход запрещён таблицей 6.3, функция не
+      бросает исключение)
+- [x] Деньги нигде как `float`
+- [x] Проверить `.docs/dod-global.md` — новых записей в
+      `storage/logs/app.log`, кроме ожидаемой `INFO` из
+      `markOrderPaidFull()`, нет
 
 ## Важные правила
 - Следовать `CLAUDE.md`

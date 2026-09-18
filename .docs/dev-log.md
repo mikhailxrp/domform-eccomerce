@@ -1473,3 +1473,38 @@ shipping→delivered` проходит и заполняет `delivered_at`; о�
 (`markOrderPrepaid()`/`markOrderPaidFull()`, без UI) — `task-init`.
 
 ---
+
+**Дата:** 18.09.2026
+**Что сделано:** Таск 2 Фазы 3 реализован и проверен — последний таск
+фазы, Фаза 3 целиком закрыта. `Core/Payment.php`:
+`validatePaymentAmount()` — чистая проверка суммы (>0, не больше
+остатка, формат `\d+(\.\d{1,2})?`), только `bccomp()`. `Models/Order.php`:
+`markOrderPrepaid()` — транзакция, `UPDATE ... WHERE payment_status='unpaid'`
+(idempotent guard через `rowCount()`), затем
+`transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED)`;
+`markOrderPaidFull()` — тот же паттерн, `'prepaid' → 'paid_full'`. Решение
+по ходу реализации: `markOrderPaidFull()` не пишет `$amount` в
+`prepaid_amount` (как было в черновике `phase-3.md`) — в схеме нет
+колонки под сумму остатка, `orders.total` уже содержит полную сумму, а
+перезапись `prepaid_amount` стёрла бы историю предоплаты; `$amount`
+вместо этого уходит в `logInfo()` как аудиторский след. `composer test`
+125/125 (6 новых `PaymentTest`); `grep -r "SET payment_status" src/` —
+ровно 2 вхождения. Ручная проверка временным скриптом в scratchpad
+против реальной БД (`mikhail700.beget.tech`): `markOrderPrepaid()` на
+`new`/`unpaid` → `prepaid`/`confirmed`; повторный вызов → `false`, без
+изменений; `markOrderPaidFull()` → `paid_full`, `status` не тронут,
+повторный вызов → `false`; отменённый Заказ → `markOrderPrepaid()`
+фиксирует оплату, но не переоткрывает `cancelled`-статус.
+`storage/logs/app.log` — только ожидаемая `INFO`-запись. Тестовые
+заказы удалены.
+
+Закрытие Фазы 3 (`phase-3.md`, «Закрытие фазы»): `_status.md` — Фаза 3
+→ ✅ Завершена, описание строки уточнено под фактический объём
+(страница-заглушка вместо реальной ЮMoney, `FR-PAY-001…004` без `005`);
+`tz-coverage.md` — `FR-PAY-001,003,004` реализовано (портфолио-версия),
+`FR-PAY-002` механизм реализован/UI → Фаза 4, `FR-PAY-005` не
+реализуется (`Q-007` снят, `ADR-018`).
+**Что следующее:** Фаза 4 — Панель менеджера и каталог в админке
+(`phase-init`).
+
+---
