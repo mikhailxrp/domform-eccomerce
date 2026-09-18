@@ -10,6 +10,7 @@ declare(strict_types=1);
 /** @var array{name:string,phone:string,email:string} $prefill */
 /** @var array<string,string> $fulfillmentOptions */
 /** @var array<string,string> $paymentOptions */
+/** @var string $checkoutToken */
 /** @var array<string,string> $old */
 /** @var array<string,bool> $errors */
 
@@ -41,6 +42,7 @@ $breadcrumbs = [['name' => 'Оформление заказа']];
                 <div class="col-lg-7">
                     <form method="post" action="/checkout" id="checkout-form" novalidate>
                         <?= csrfField() ?>
+                        <input type="hidden" name="checkout_token" value="<?= e($checkoutToken) ?>">
                         <div class="checkout-form">
                             <div class="checkout-title">
                                 <h4 class="title">Контактные данные</h4>

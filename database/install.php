@@ -265,6 +265,7 @@ $pdo->exec("
                             ) NOT NULL DEFAULT 'new',
         fulfillment_method  ENUM('delivery', 'pickup') NOT NULL,
         delivery_address    TEXT NULL,
+        comment             TEXT NOT NULL,
         shipping_cost       DECIMAL(10, 2) NULL,
         payment_method      ENUM('card_online', 'cash', 'bank_transfer') NOT NULL,
         payment_status      ENUM('unpaid', 'prepaid', 'paid_full') NOT NULL DEFAULT 'unpaid',
@@ -280,6 +281,17 @@ $pdo->exec("
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
+
+// Таблица уже могла быть развёрнута до ADR-035 (Таск 3 Фазы 2), когда
+// comment ещё не было — та же идемпотентная проверка через
+// information_schema, что и для cart_items.price_snapshot (Таск 1 Фазы 2).
+// Колонка NOT NULL без DEFAULT: orders ещё не используется (создание
+// Заказа — этот же таск), таблица пуста на всех окружениях.
+$columnExists->execute(['table' => 'orders', 'column' => 'comment']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD COLUMN comment TEXT NOT NULL AFTER delivery_address;');
+}
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS order_items (

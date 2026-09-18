@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once ROOT_PATH . '/src/Core/Validation.php';
+
 /**
  * Чистая нормализация и валидация формы оформления заказа — без
  * обращения к БД/сессии (`tests/bootstrap.php` не поднимает сессию),

@@ -17,6 +17,7 @@ return [
         '/search/suggest'          => ['SearchController', 'suggest'],
         '/cart'                    => ['CartController', 'index'],
         '/checkout'                => ['CheckoutController', 'index'],
+        '/checkout/success'        => ['CheckoutController', 'success'],
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],
@@ -34,5 +35,6 @@ return [
         '/cart/remove'             => ['CartController', 'remove'],
         '/cart/clear'              => ['CartController', 'clear'],
         '/checkout/accept-changes' => ['CheckoutController', 'acceptChanges'],
+        '/checkout'                => ['CheckoutController', 'store'],
     ],
 ];

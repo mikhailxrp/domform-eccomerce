@@ -8,6 +8,7 @@ require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Models/RememberToken.php';
 require_once ROOT_PATH . '/src/Models/PasswordReset.php';
 require_once ROOT_PATH . '/src/Models/Cart.php';
+require_once ROOT_PATH . '/src/Models/Order.php';
 require_once ROOT_PATH . '/src/Services/Mailer.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 
@@ -154,6 +155,8 @@ class AuthController
             mergeGuestCart($_COOKIE['cart_token'], $userId);
             refreshCartCount(cartOwner());
         }
+
+        linkGuestOrdersToUser($email, $userId);
 
         setFlash('success', 'Регистрация прошла успешно. Теперь войдите в аккаунт.');
         redirect('/login');
