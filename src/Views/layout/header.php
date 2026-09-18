@@ -12,6 +12,7 @@ $isLoggedIn          = isAuthenticated();
 $userName            = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
 $catalogCategories   = getCategoryTree();
 $currentSearchQuery  = normalizeSearchQuery((string) ($_GET['q'] ?? ''));
+$cartCount           = currentCartCount(cartOwner());
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -122,9 +123,9 @@ $currentSearchQuery  = normalizeSearchQuery((string) ($_GET['q'] ?? ''));
                             </ul>
                         </div>
 
-                        <a class="action" href="#">
+                        <a class="action" href="/cart">
                             <i class="pe-7s-shopbag"></i>
-                            <span class="number">0</span>
+                            <span class="number"><?= e((string) $cartCount) ?></span>
                         </a>
                     </div>
                 </div>
@@ -171,9 +172,9 @@ $currentSearchQuery  = normalizeSearchQuery((string) ($_GET['q'] ?? ''));
                                     <?php endif; ?>
                                 </ul>
                             </div>
-                            <a class="action" href="#">
+                            <a class="action" href="/cart">
                                 <i class="pe-7s-shopbag"></i>
-                                <span class="number">0</span>
+                                <span class="number"><?= e((string) $cartCount) ?></span>
                             </a>
                         </div>
                     </div>

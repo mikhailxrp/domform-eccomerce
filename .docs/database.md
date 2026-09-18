@@ -288,14 +288,21 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | product_variant_id | INT NOT NULL, FK → product_variants.id, ON DELETE CASCADE | было `product_id` → `products.id` (`ADR-010`) — цена и остаток теперь на уровне Варианта, не Товара |
 | color | VARCHAR(100) NULL | выбранный Покупателем цвет — не влияет на артикул/цену (раздел 6.2), только на отображение и снэпшот в `order_items` |
 | quantity | INT NOT NULL DEFAULT 1 | |
+| price_snapshot | DECIMAL(10,2) NOT NULL | цена Варианта на момент добавления в корзину — **только для уведомления** «было / стало» (`FR-CHK-003` правило 1), никогда для суммы: сумма корзины и Заказа всегда пересчитывается из `product_variants` (`ADR-033`) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
 **Индексы:** `INDEX(session_id)`, `INDEX(user_id)`
 
-> Цена здесь никогда не хранится — при чекауте всегда перечитывается из
-> `product_variants` (см. правило "server is the source of truth" в
-> `general.md`). Ровно одно из `session_id` / `user_id` должно быть
+> Цена в `product_variants` — источник истины при чекауте, всегда
+> перечитывается заново (см. правило "server is the source of truth" в
+> `general.md`); `price_snapshot` используется только для сравнения
+> «изменилась ли цена». Ровно одно из `session_id` / `user_id` должно быть
 > заполнено — проверяется в Model, а не constraint'ом БД.
+> `session_id` с Таска 1 Фазы 2 хранит не PHP session id, а значение
+> cookie `cart_token` (32 байта `random_bytes` → 64 hex, 30 дней) — имя
+> колонки не переименовано, изменилась только семантика (`ADR-034`):
+> PHP-сессия не переживает закрытие браузера на shared-хостинге
+> (`ADR-028`), а корзина гостя должна.
 
 ---
 
@@ -335,6 +342,7 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | status | ENUM('new','confirmed','in_production','ready_for_shipment','shipping','delivered','cancelled') NOT NULL DEFAULT 'new' | было `ENUM('created','paid','shipped','cancelled')` — заменено на 7 статусов раздела 6.3 ТЗ (Новый→Подтверждён→[В производстве\|Готов к отгрузке]→Готов к отгрузке→[В доставке\|Доставлен/Собран]→Доставлен/Собран, либо →Отменён); меняется только через одну функцию-переход, см. `php.md` |
 | fulfillment_method | ENUM('delivery','pickup') NOT NULL | способ получения (раздел 6.1: «доставка с адресом или самовывоз») |
 | delivery_address | TEXT NULL | заполняется только при `fulfillment_method='delivery'`; детальная структура полей адреса — вне этого среза (раздел 8 не читался) |
+| comment | TEXT NOT NULL | обязательное поле формы оформления (`FR-CHK-001` п.3-4 — ткань/размер/пожелания по доставке для звонка Менеджера); добавлена Таском 4 Фазы 2 (`ADR-035`) — пропущена при первичном переносе схемы |
 | shipping_cost | DECIMAL(10,2) NULL | стоимость доставки, вносится Менеджером вручную по телефону (`BR-006`: не считается формулой на сайте); NULL — пока не согласована |
 | payment_method | ENUM('card_online','cash','bank_transfer') NOT NULL | способ оплаты (`BR-001`: все комбинации со способом получения разрешены — фильтрации нет) |
 | payment_status | ENUM('unpaid','prepaid','paid_full') NOT NULL DEFAULT 'unpaid' | статус оплаты — отдельная диаграмма раздела 6.3, не совпадает со статусом Заказа |

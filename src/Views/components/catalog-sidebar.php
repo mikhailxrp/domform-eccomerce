@@ -23,7 +23,7 @@ foreach ($categoryTree as $rootCategory) {
 $priceMin = $filters['price_min'] ?? $filterOptions['price_min'];
 $priceMax = $filters['price_max'] ?? $filterOptions['price_max'];
 ?>
-<div class="sidebar">
+<div class="sidebar catalog-sidebar">
     <form id="catalog-filter-form" method="get" action="<?= e($path) ?>">
         <?php if ($category === null && $leafCategories !== []): ?>
             <div class="sidebar-widget">
@@ -48,12 +48,13 @@ $priceMax = $filters['price_max'] ?? $filterOptions['price_max'];
         <?php endif; ?>
 
         <div class="sidebar-widget">
-            <h4 class="widget-title">Наличие</h4>
+            <h4 class="widget-title">Уточнить</h4>
             <div class="widget-checkbox">
                 <ul class="checkbox-items">
+                    <?php // «В наличии» = Вариант-образец (`FR-CAT-002`, `BR-004`); «Со скидкой» появится здесь же в Фазе 6 (`FR-CAT-010`) ?>
                     <li>
                         <input type="checkbox" id="filter-in-stock" name="in_stock" value="1" <?= $filters['in_stock'] ? 'checked' : '' ?>>
-                        <label for="filter-in-stock"> <span></span>Выставочный образец — в наличии</label>
+                        <label for="filter-in-stock"> <span></span>В наличии</label>
                     </li>
                 </ul>
             </div>

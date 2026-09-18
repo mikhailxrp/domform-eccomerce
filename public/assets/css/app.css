@@ -135,6 +135,36 @@
     margin-top: 16px;
 }
 
+/* Верхняя панель каталога (счётчик «N из M товаров», «Сортировка:» и
+   сам select): тема задаёт 18px под Rajdhani — узкий шрифт без
+   кириллицы; для русского текста подставляется обычный sans-serif, и те
+   же 18px выглядят крупнее остального интерфейса. */
+.shop-top-bar {
+    --shop-top-bar-font-size: 14px;
+}
+
+.shop-top-bar .shop-text p,
+.shop-top-bar .shop-sort .title,
+.shop-top-bar .shop-sort .nice-select,
+.shop-top-bar .shop-sort .nice-select .list .option {
+    font-size: var(--shop-top-bar-font-size);
+}
+
+/* Сайдбар каталога занимает всю ширину col-lg-3, а ion.rangeSlider
+   рисует правую ручку по центру края шкалы — она вылезает за колонку
+   и упирается в сетку товаров (гаттера Bootstrap не хватает). На
+   десктопе отодвигаем сайдбар от сетки; на мобильном сайдбар под
+   сеткой во всю ширину — отступ не нужен. */
+.catalog-sidebar {
+    --catalog-sidebar-gap: 30px;
+}
+
+@media only screen and (min-width: 992px) {
+    .catalog-sidebar {
+        padding-right: var(--catalog-sidebar-gap);
+    }
+}
+
 /* Селектор Варианта/цвета на карточке товара (Таск 4) — своя
    BEM-компонента: у темы вообще нет готовой разметки под выбор
    Варианта (`product-details-affiliate.html` — партнёрская витрина без
@@ -274,7 +304,9 @@
    `general.md`/HTML-правилами: никаких inline-стилей). `.page-banner-
    section`/`.page-banner-content` — структура и типографика уже в
    теме (`style.css`), здесь только сам фон. */
-.page-banner-section--product {
+.page-banner-section--product,
+.page-banner-section--catalog,
+.page-banner-section--cart {
     background-image: url('/uploads/baners/page-banner-product.webp');
 }
 
@@ -332,4 +364,212 @@
 .search-suggest__item.active {
     background: #f8f8f8;
     color: #f2a100;
+}
+
+/* Кнопка «Очистить корзину» (Таск 2 Фазы 2) — тот же баг ширины, что
+   уже описан у `.login-register-wrapper .single-form .btn` выше: тема
+   считает ширину кнопки под короткий английский текст
+   (`.cart-btn .right-btn .btn{width:48%}` — рассчитано на 2 кнопки в
+   этом блоке, у нас там всего одна) и обрезает текст через
+   `overflow: hidden` у `.btn`. */
+@media only screen and (max-width: 575px) {
+    .cart-btn .right-btn .btn {
+        width: 100%;
+    }
+}
+
+/* Корзина (Таск 2 Фазы 2) — текст про доставку вместо тема-шного
+   виджета «Calculate Shipping» (вне скоупа, `FR-CART-003`/`BR-006`). */
+.cart-shipping-note {
+    color: #6d707f;
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+/* Позиция, ставшая недоступной из-за конкуренции за Выставочный
+   образец (`is_reserved` в `getCartItems()`) — исключена из суммы
+   корзины, но остаётся в списке, поэтому приглушена визуально. */
+.cart-row--unavailable .product-info .name,
+.cart-row--unavailable .product-total-price .price {
+    opacity: 0.5;
+}
+
+.cart-row__unavailable-note {
+    color: #dc3545;
+    font-size: 13px;
+    margin-top: 5px;
+}
+
+/* Удаление строки — `<button>` внутри POST-формы (CSRF, `general.md`:
+   «POST всегда заканчивается redirect()»), не голая `<a href>` темы —
+   но должна выглядеть и вести себя как оригинальная `.remove`-ссылка.
+   `style.css` красит именно `a` (`a{color:#f2a100}`/`a:hover{color:
+   #c28100}`, `.product-action a{font-size:20px}`) — на `<button>` это
+   не наследуется и без сброса он получает стандартную рамку/фон кнопки
+   браузера. */
+.cart-table .table tbody tr td.product-action button.remove {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: #f2a100;
+    cursor: pointer;
+}
+
+.cart-table .table tbody tr td.product-action button.remove:hover {
+    color: #c28100;
+}
+
+/* Корзина на узких/средних экранах (<992px, Bootstrap `lg`) — 5 колонок
+   таблицы не помещаются по ширине без горизонтальной прокрутки
+   (`.cart-table .table thead tr th.product-thumb{min-width:150px}` и
+   т.д. у темы рассчитаны на десктоп). Классический CSS-приём «таблица
+   → список»: `<thead>` скрыт, каждая `<tr>` становится карточкой
+   товара (фото+название сверху, количество/сумма/удаление — второй
+   строкой), `data-label` на `<td>` (`cart-row.php`) подписывает поля,
+   для которых название колонки не очевидно без заголовка — фото,
+   название и иконка удаления самоочевидны без подписи. Селектор
+   совпадает по специфичности с `style.css` — `app.css` подключён
+   позже (`layout/header.php`), поэтому переопределяет без
+   `!important`. */
+@media only screen and (max-width: 991.98px) {
+    .cart-table .table,
+    .cart-table .table tbody,
+    .cart-table .table tbody tr,
+    .cart-table .table tbody tr td {
+        display: block;
+        width: 100%;
+    }
+
+    .cart-table .table thead {
+        display: none;
+    }
+
+    .cart-table .table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        border: 1px solid #ebebeb;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .cart-table .table tbody tr td {
+        border: 0;
+        padding: 0;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    .cart-table .table tbody tr td.product-thumb {
+        flex: 0 0 80px;
+    }
+
+    .cart-table .table tbody tr td.product-thumb img {
+        width: 80px;
+    }
+
+    .cart-table .table tbody tr td.product-info {
+        flex: 1 1 calc(100% - 80px);
+        padding-left: 15px;
+    }
+
+    .cart-table .table tbody tr td.quantity,
+    .cart-table .table tbody tr td.product-total-price,
+    .cart-table .table tbody tr td.product-action {
+        flex: 0 0 auto;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #ebebeb;
+    }
+
+    .cart-table .table tbody tr td.product-total-price {
+        flex: 1 1 auto;
+        text-align: right;
+    }
+
+    .cart-table .table tbody tr td.product-action {
+        margin-left: auto;
+    }
+
+    .cart-table .table tbody tr td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 12px;
+        color: #6d707f;
+        margin-bottom: 6px;
+    }
+}
+
+/* Индикатор перехода между страницами — полные перезагрузки (без
+   SPA-роутинга), задержка от БД сейчас ощутима (dev-стенд, удалённая
+   БД). Показывается по `beforeunload` (`app.js:initPageLoader()`), не
+   по клику/сабмиту — AJAX-переходы каталога (fetch без реальной
+   навигации) никогда не порождают `beforeunload`, поэтому лоадер
+   физически не может показаться на них по ошибке. */
+.page-loader {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.page-loader.is-active {
+    display: flex;
+}
+
+/* Оформление заказа (Таск 3 Фазы 2) — кнопка «Позвонить/WhatsApp»
+   (`FR-CHK-005`), своя BEM-компонента: у темы нет готовой разметки под
+   этот блок на странице `checkout.html`. */
+.checkout-call {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 30px;
+}
+
+/* Способ получения (доставка/самовывоз, `FR-SHIP-001`) — своя
+   BEM-компонента: `.shipping-list` темы сброшен только внутри
+   `.cart-totals .cart-total-table`, здесь список радиокнопок вне того
+   контекста, сброс списка (`list-style`/отступы) нужен свой. */
+.checkout-fulfillment {
+    padding: 0;
+    margin: 0 0 20px;
+    list-style: none;
+}
+
+/* Позиция, ставшая недоступной или с изменившейся ценой (`FR-CHK-003`)
+   на экране оформления — тот же приём приглушения, что `.cart-row--
+   unavailable` (Таск 2), здесь на строке таблицы «Ваш заказ». */
+.checkout-summary__row--unavailable .Product-name p:first-child,
+.checkout-summary__row--unavailable .Product-price p {
+    opacity: 0.5;
+}
+
+.checkout-summary__note {
+    color: #dc3545;
+    font-size: 13px;
+    margin: 4px 0 0;
+}
+
+.page-loader__spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #eaeaea;
+    border-top-color: #f2a100;
+    border-radius: 50%;
+    animation: page-loader-spin 0.7s linear infinite;
+}
+
+@keyframes page-loader-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
