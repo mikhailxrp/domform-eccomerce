@@ -57,6 +57,25 @@ function createUser(string $name, string $email, string $passwordHash, string $p
     }
 }
 
+/**
+ * Покупатель по телефону (`FR-MGR-002`, ручное создание Заказа) —
+ * только `role = 'customer'`, чтобы Менеджер не мог случайно
+ * привязать Заказ к другому сотруднику. Телефон уже нормализован
+ * (`normalizePhone()`) на всех путях записи (`AuthController`),
+ * поэтому сравнение точное, без `LIKE`.
+ */
+function findCustomerByPhone(string $phone): ?array
+{
+    $stmt = getPdo()->prepare(
+        "SELECT id, name, email, password_hash, phone, role, is_blocked, created_at
+         FROM users WHERE phone = :phone AND role = 'customer' LIMIT 1"
+    );
+    $stmt->execute(['phone' => $phone]);
+    $user = $stmt->fetch();
+
+    return $user !== false ? $user : null;
+}
+
 function updateUserPasswordHash(int $userId, string $passwordHash): void
 {
     $stmt = getPdo()->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');

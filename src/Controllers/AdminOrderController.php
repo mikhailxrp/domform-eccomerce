@@ -6,10 +6,12 @@ namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Order.php';
 require_once ROOT_PATH . '/src/Models/Product.php';
+require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/Payment.php';
 require_once ROOT_PATH . '/src/Core/OrderActions.php';
+require_once ROOT_PATH . '/src/Core/ManualOrder.php';
 
 class AdminOrderController
 {
@@ -296,5 +298,162 @@ class AdminOrderController
 
         setFlash('success', 'Заказ отменён.');
         redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Ручное создание Заказа по звонку/WhatsApp (`FR-MGR-002`, Таск 5
+     * Фазы 4). `?phone=` — необязательный результат мини-формы «Найти»
+     * (без JS это обычный GET-редирект на этот же маршрут,
+     * `admin.js` его дополнительно перехватывает через
+     * `/admin/customers/lookup`, не трогая этот путь).
+     */
+    public function create(): void
+    {
+        requireRole(['manager', 'admin']);
+
+        $lookupPhone = trim((string) input('phone', ''));
+
+        $this->renderCreatePage($lookupPhone, $this->lookupCustomerByPhone($lookupPhone), [], []);
+    }
+
+    public function store(): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+        ensureSessionStarted();
+
+        $submittedToken = (string) input('manual_order_token', '');
+        if ($submittedToken === '' || !hash_equals((string) ($_SESSION['manual_order_token'] ?? ''), $submittedToken)) {
+            redirect('/admin/orders/create');
+        }
+
+        $rawItems      = is_array(input('items', [])) ? input('items', []) : [];
+        $resolvedItems = [];
+        foreach (normalizeManualOrderItems($rawItems) as $item) {
+            if ($item['variant_id'] <= 0 && $item['sku'] !== '') {
+                $item['variant_id'] = findActiveVariantIdBySku($item['sku']) ?? 0;
+            }
+            $resolvedItems[] = $item;
+        }
+
+        $input = normalizeManualOrderInput([
+            'customer_mode'      => input('customer_mode'),
+            'user_id'            => input('user_id'),
+            'guest_name'         => input('guest_name'),
+            'guest_phone'        => input('guest_phone'),
+            'guest_email'        => input('guest_email'),
+            'fulfillment_method' => input('fulfillment_method'),
+            'delivery_address'   => input('delivery_address'),
+            'payment_method'     => input('payment_method'),
+            'comment'            => input('comment'),
+            'prepaid_amount'     => input('prepaid_amount'),
+            'items'              => $resolvedItems,
+        ]);
+
+        $customer = null;
+        if ($input['customer_mode'] === MANUAL_ORDER_CUSTOMER_USER) {
+            $customer = findUserById($input['user_id']);
+        }
+
+        $errors = validateManualOrderInput($input);
+        $errors['user_id'] = $input['customer_mode'] === MANUAL_ORDER_CUSTOMER_USER
+            && ($customer === null || $customer['role'] !== 'customer');
+
+        if (in_array(true, $errors, true)) {
+            $lookupPhone = (string) input('phone', '');
+            $this->renderCreatePage($lookupPhone, $this->lookupCustomerByPhone($lookupPhone), $input, $errors);
+            return;
+        }
+
+        $order = [
+            'user_id'            => $input['customer_mode'] === MANUAL_ORDER_CUSTOMER_USER ? $customer['id'] : null,
+            'guest_name'         => $input['customer_mode'] === MANUAL_ORDER_CUSTOMER_GUEST ? $input['guest_name'] : null,
+            'guest_phone'        => $input['customer_mode'] === MANUAL_ORDER_CUSTOMER_GUEST ? $input['guest_phone'] : null,
+            'guest_email'        => $input['customer_mode'] === MANUAL_ORDER_CUSTOMER_GUEST && $input['guest_email'] !== '' ? $input['guest_email'] : null,
+            'fulfillment_method' => $input['fulfillment_method'],
+            'delivery_address'   => $input['fulfillment_method'] === FULFILLMENT_DELIVERY ? $input['delivery_address'] : null,
+            'comment'            => $input['comment'],
+            'payment_method'     => $input['payment_method'],
+        ];
+
+        $orderItems = array_map(static fn (array $item): array => [
+            'product_variant_id' => $item['variant_id'],
+            'color'              => $item['color'] !== '' ? $item['color'] : null,
+            'quantity'           => $item['quantity'],
+        ], $input['items']);
+
+        $orderId = createOrder($order, $orderItems);
+
+        if ($orderId === null) {
+            setFlash('error', 'Один из товаров стал недоступен — проверьте позиции.');
+            $lookupPhone = (string) input('phone', '');
+            $this->renderCreatePage($lookupPhone, $this->lookupCustomerByPhone($lookupPhone), $input, []);
+            return;
+        }
+
+        markOrderPrepaid($orderId, $input['prepaid_amount']);
+
+        unset($_SESSION['manual_order_token']);
+        setFlash('success', 'Заказ создан.');
+        redirect('/admin/orders/' . $orderId);
+    }
+
+    /**
+     * JSON-подсказка для `admin.js` (прогрессивное улучшение мини-формы
+     * «Найти» на `create()`) — сам поиск и его результат идентичны
+     * нестрогому (без JS) пути через `?phone=`.
+     */
+    public function lookupCustomer(): void
+    {
+        requireRole(['manager', 'admin']);
+
+        header('Content-Type: application/json; charset=utf-8');
+
+        $customer = $this->lookupCustomerByPhone((string) input('phone', ''));
+
+        // Только то, что нужно форме создания Заказа — `findUserById()`/
+        // `findCustomerByPhone()` возвращают полную строку `users`,
+        // включая `password_hash`, которому нельзя попадать в ответ.
+        $safeCustomer = $customer !== null
+            ? ['id' => (int) $customer['id'], 'name' => $customer['name'], 'phone' => $customer['phone']]
+            : null;
+
+        echo json_encode(['customer' => $safeCustomer], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Общий поиск для отображения найденного Покупателя — используется
+     * и в `create()`/`lookupCustomer()`, и при перерисовке формы после
+     * неудачной `store()`, независимо от того, какой `customer_mode`
+     * был реально отправлен (иначе выбор «Оформить как гостя» стирал бы
+     * карточку уже найденного по телефону Покупателя).
+     */
+    private function lookupCustomerByPhone(string $phone): ?array
+    {
+        $normalized = normalizePhone($phone);
+
+        return validatePhone($normalized) ? findCustomerByPhone($normalized) : null;
+    }
+
+    private function renderCreatePage(string $lookupPhone, ?array $foundCustomer, array $old, array $errors): void
+    {
+        ensureSessionStarted();
+        if (empty($_SESSION['manual_order_token'])) {
+            $_SESSION['manual_order_token'] = bin2hex(random_bytes(16));
+        }
+
+        $itemRows = max(MANUAL_ORDER_DEFAULT_ITEM_ROWS, count($old['items'] ?? []));
+
+        render('admin/orders/create', [
+            'title'              => 'Новый заказ',
+            'lookupPhone'        => $lookupPhone,
+            'foundCustomer'      => $foundCustomer,
+            'fulfillmentOptions' => FULFILLMENT_LABELS,
+            'paymentOptions'     => PAYMENT_METHOD_LABELS,
+            'manualOrderToken'   => $_SESSION['manual_order_token'],
+            'old'                => $old,
+            'errors'             => $errors,
+            'itemRows'           => $itemRows,
+        ]);
     }
 }
