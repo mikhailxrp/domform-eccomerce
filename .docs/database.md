@@ -527,6 +527,58 @@ M:N вместо 1:N: «Товар может входить в нескольк
 
 ---
 
+### `sales_channels` _(новая — `ADR-039`)_
+
+Демо-раздел «Каналы продаж» Панели управления: показывает идею сбора
+заявок из нескольких источников (WhatsApp, Авито, Telegram, MAX, сам
+сайт) в одном месте — без реальной интеграции ни с одним из них, тот же
+приём, что страница-заглушка оплаты (`ADR-018`). Заявка клиента вне ТЗ
+(раздел не описан ни в одном `FR-*`).
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| code | VARCHAR(30) NOT NULL UNIQUE | ключ канала (`website`, `whatsapp`, `avito`, `telegram`, `max`) |
+| name | VARCHAR(100) NOT NULL | название для отображения |
+| description | VARCHAR(255) NULL | короткое пояснение под переключателем |
+| icon | VARCHAR(50) NULL | CSS-класс иконки (`bx bxl-whatsapp` и т.п., self-hosted Boxicons из `public/assets/admin/`) |
+| is_locked | TINYINT(1) NOT NULL DEFAULT 0 | `1` только у `website` — это сам магазин, переключатель задизейблен во View, `updateSalesChannels()` не меняет заблокированные строки даже при подделанном POST |
+| is_enabled | TINYINT(1) NOT NULL DEFAULT 0 | состояние переключателя — сохраняется, но ни на что не влияет (демо) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок в списке |
+| updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
+
+**Индексы:** `UNIQUE(code)` — уже задан через `code`
+
+> Строки — фиксированный набор, заводятся один раз сидом в
+> `database/install.php` (`INSERT IGNORE`), не растут динамически.
+
+---
+
+### `integrations` _(новая — `ADR-039`)_
+
+Демо-раздел «Интеграции»: список CRM/учёта/телефонии/рассылок с
+переключателями, тоже без реального подключения — второй экран того же
+решения, что `sales_channels`.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| code | VARCHAR(30) NOT NULL UNIQUE | ключ интеграции (`bitrix24`, `amocrm`, `1c`, `moysklad`, `telephony`, `sms`, `email`) |
+| category | VARCHAR(30) NOT NULL | группа для отображения (`crm`, `accounting`, `telephony`, `marketing`) — подпись группы захардкожена во View, не хранится отдельной таблицей справочника (4 фиксированные группы, заводить справочник ради них избыточно) |
+| name | VARCHAR(100) NOT NULL | название для отображения |
+| description | VARCHAR(255) NULL | короткое пояснение под переключателем |
+| icon | VARCHAR(50) NULL | CSS-класс иконки |
+| is_enabled | TINYINT(1) NOT NULL DEFAULT 0 | состояние переключателя — сохраняется, ни на что не влияет (демо) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок внутри группы |
+| updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
+
+**Индексы:** `UNIQUE(code)` — уже задан через `code`
+
+> Строки — фиксированный набор, заводятся один раз сидом в
+> `database/install.php` (`INSERT IGNORE`), не растут динамически.
+
+---
+
 ## Дополнительные таблицы (примеры для расширения)
 
 Не создаются по умолчанию — паттерн того, как добавлять таблицы под свой

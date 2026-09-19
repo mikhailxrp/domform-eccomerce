@@ -36,6 +36,8 @@ return [
         '/admin/products/create'   => ['AdminProductController', 'create'],
         '/admin/products/{id}/edit' => ['AdminProductController', 'edit'],
         '/admin/reports'           => ['AdminReportController', 'index'],
+        '/admin/sales-channels'    => ['AdminSalesChannelController', 'index'],
+        '/admin/integrations'      => ['AdminIntegrationController', 'index'],
         '/forgot-password'         => ['AuthController', 'showForgot'],
         '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],
@@ -70,5 +72,7 @@ return [
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}'          => ['AdminProductController', 'updateImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}/remove'   => ['AdminProductController', 'deleteImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}/main'     => ['AdminProductController', 'setMainImage'],
+        '/admin/sales-channels'         => ['AdminSalesChannelController', 'update'],
+        '/admin/integrations'           => ['AdminIntegrationController', 'update'],
     ],
 ];

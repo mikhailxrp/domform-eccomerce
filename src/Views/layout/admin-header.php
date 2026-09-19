@@ -17,6 +17,8 @@ $adminNavItems = [
     ['url' => '/admin/categories',    'label' => 'Категории',   'icon' => 'bx bx-category'],
     ['url' => '/admin/customers',     'label' => 'Клиенты',     'icon' => 'bx bx-group'],
     ['url' => '/admin/reports',       'label' => 'Отчёты',      'icon' => 'bx bx-bar-chart-alt-2'],
+    ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
+    ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
 ];
 
 $activeNavUrl    = null;

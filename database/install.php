@@ -426,6 +426,54 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS sales_channels (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        code        VARCHAR(30) NOT NULL UNIQUE,
+        name        VARCHAR(100) NOT NULL,
+        description VARCHAR(255) NULL,
+        icon        VARCHAR(50) NULL,
+        is_locked   TINYINT(1) NOT NULL DEFAULT 0,
+        is_enabled  TINYINT(1) NOT NULL DEFAULT 0,
+        sort_order  INT NOT NULL DEFAULT 0,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    INSERT IGNORE INTO sales_channels (code, name, description, icon, is_locked, is_enabled, sort_order) VALUES
+        ('website',  'Заявки с сайта', 'Заказы, оформленные покупателем на сайте — основной канал, отключить нельзя.', 'bx bx-globe', 1, 1, 1),
+        ('whatsapp', 'WhatsApp', 'Приём и обработка сообщений из WhatsApp Business.', 'bx bxl-whatsapp', 0, 0, 2),
+        ('avito',    'Авито', 'Отклики и сообщения по объявлениям на Авито.', 'bx bx-store-alt', 0, 0, 3),
+        ('telegram', 'Telegram', 'Сообщения из Telegram-бота или канала магазина.', 'bx bxl-telegram', 0, 0, 4),
+        ('max',      'MAX', 'Сообщения из мессенджера MAX.', 'bx bx-chat', 0, 0, 5);
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS integrations (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        code        VARCHAR(30) NOT NULL UNIQUE,
+        category    VARCHAR(30) NOT NULL,
+        name        VARCHAR(100) NOT NULL,
+        description VARCHAR(255) NULL,
+        icon        VARCHAR(50) NULL,
+        is_enabled  TINYINT(1) NOT NULL DEFAULT 0,
+        sort_order  INT NOT NULL DEFAULT 0,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    INSERT IGNORE INTO integrations (code, category, name, description, icon, is_enabled, sort_order) VALUES
+        ('bitrix24', 'crm', 'Битрикс24', 'Передача заказов и карточек клиентов в Битрикс24.', 'bx bx-git-branch', 0, 1),
+        ('amocrm',   'crm', 'amoCRM', 'Передача заказов и сделок в amoCRM.', 'bx bx-git-branch', 0, 2),
+        ('1c',        'accounting', '1С', 'Выгрузка заказов и остатков в 1С:Управление торговлей.', 'bx bx-calculator', 0, 1),
+        ('moysklad',  'accounting', 'МойСклад', 'Синхронизация остатков и заказов с МойСклад.', 'bx bx-calculator', 0, 2),
+        ('telephony', 'telephony', 'IP-телефония', 'Всплывающая карточка клиента при звонке, запись разговоров.', 'bx bx-phone-call', 0, 1),
+        ('sms',       'marketing', 'SMS-рассылки', 'Уведомления клиентам о статусе заказа по SMS.', 'bx bx-message-square-dots', 0, 1),
+        ('email',     'marketing', 'Email-рассылки', 'Автоматические письма клиентам и маркетинговые рассылки.', 'bx bx-mail-send', 0, 2);
+");
+
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");
 

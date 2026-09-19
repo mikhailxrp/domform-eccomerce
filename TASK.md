@@ -1,99 +1,84 @@
 # Current Task
 
 ## Фаза
-Phase 4 — Панель менеджера и каталог в админке (`.docs/phases/phase-4.md`, Таск 10)
+Вне фазы — внеплановая задача заказчика (`ADR-039`, `.docs/planning-log.md`,
+`.docs/dev-log.md` 19.09.2026). Не пункт ТЗ, к `.docs/phases/phase-N.md`
+не привязана. Фаза 4 (`.docs/phases/phase-4.md`) при этом уже
+✅ Завершена — Таск 10 сдан 19.09.2026, «Закрытие фазы» ещё не доведено
+(см. `dev-log.md`).
 
-**Статус:** ✅ Завершён — последний таск Фазы 4. Реализован и проверен
-на реальной БД (`mikhail700.beget.tech`) живой HTTP-сессией через
-`php -S` + `curl`. `composer test` 226/226 (+11 `ReportTest`).
-Подробности — `.docs/dev-log.md`, 19.09.2026.
+**Статус:** ✅ Завершена. Реализовано и проверено на реальной БД
+(`mikhail700.beget.tech`) живой HTTP-сессией через `php -S` + `curl`.
+`composer test` 226/226 (без изменений — новых Model-функций к БД в
+юнит-тестах нет намеренно, `php.md`, «Тестирование»).
 
 ## Задача
-`/admin/reports` (`FR-ADM-005`): выбор периода — сегодня / неделя /
-месяц / произвольный диапазон дат; количество и сумма Заказов за
-период (без `cancelled`), таблица по дням и столбчатая диаграмма
-Chart.js (self-hosted). Сверх двух метрик — ничего (`Q-017`).
+Демо-раздел Панели управления (`manager`+`admin`), тот же приём, что
+страница-заглушка оплаты (`ADR-018`) — показать возможность, не
+реализовать интеграцию:
+- `/admin/sales-channels` («Каналы продаж») — переключатели WhatsApp /
+  Авито / Telegram / MAX / сайт (сайт — заблокированный, всегда
+  включённый пункт) + статичный макет «единого чата» + пояснение, что
+  это демо-версия
+- `/admin/integrations` («Интеграции») — переключатели CRM
+  (Битрикс24/amoCRM), учёта (1С/МойСклад), телефонии, рассылок +
+  пояснение, что это демо-страница
+
+Состояние переключателей сохраняется в новых таблицах
+`sales_channels`/`integrations` (подтверждено пользователем —
+`AskUserQuestion` перед кодом), но реальных подключений не выполняет.
 
 ## Scope — что трогаем
 
-- [x] `src/Core/Report.php` — создать: константа лимита диапазона дат
-      (366) — определена здесь, а не в `config/config.php`, потому что
-      `config.php` не подключается в `tests/bootstrap.php` (тот же
-      приём, что `UPLOAD_MAX_BYTES` в `Core/Upload.php`, Таск 9);
-      `resolveReportPeriod(string $preset, ?string $from, ?string $to,
-      DateTimeImmutable $now): array` — пресеты `today`/`week`/`month`/
-      `custom`, границы `[from, to]` включительно (формат `Y-m-d`),
-      `from ≤ to`, диапазон ≤ лимита — чистая функция, без БД
-- [x] `tests/Unit/ReportTest.php` — создать: все 4 пресета с
-      фиксированным `$now`, невалидные даты произвольного диапазона,
-      `from > to`, диапазон больше лимита (11 тестов)
-- [x] `tests/bootstrap.php` — изменить: добавить `require_once
-      .../Core/Report.php`
-- [x] `src/Models/Report.php` — создать: `getSalesSummary(string
-      $from, string $to): array` (`COUNT(*)`, `SUM(total)` строкой,
-      `status <> 'cancelled'`), `getSalesByDay(string $from, string
-      $to): array` (`GROUP BY DATE(created_at)`, тот же фильтр
-      статуса) — верхняя граница `created_at < DATE_ADD(:to, INTERVAL
-      1 DAY)`, не `BETWEEN`: `created_at` это `TIMESTAMP`, `BETWEEN` с
-      датой без времени обрезал бы последний день диапазона до полуночи
-- [x] `src/Controllers/AdminReportController.php` — создать: `index()`
-      — whitelist пресета, `resolveReportPeriod()` для валидации,
-      ошибка периода → форма с сообщением об ошибке, не 500
-- [x] `src/Views/admin/reports/index.php` — создать: GET-форма периода
-      (пресеты + поля произвольного диапазона), две карточки-метрики
-      (количество/сумма), таблица Заказов по дням, `<canvas>` с
-      данными в `data-*`-атрибутах (JSON через `e()`), пустое
-      состояние при отсутствии Заказов за период
-- [x] `public/assets/admin/libs/chart.js/chart.min.js` — создать:
-      копия из `00-input/admin/assets/libs/chart.js/chart.min.js`
-      (Chart.js v3.9.1, самодостаточный UMD-бандл) — не `chart.umd.js`,
-      как записано в `phase-4.md`: такого файла в исходниках темы нет
-- [x] `public/assets/js/admin.js` — изменить: инициализация диаграммы
-      из `data-*` атрибутов `<canvas>` (IIFE с проверкой наличия
-      элемента — тот же паттерн, что остальные блоки файла)
-- [x] `config/routes.php` — изменить: `GET /admin/reports`
+- [x] `database/install.php` — изменить: таблицы `sales_channels`,
+      `integrations` + сид `INSERT IGNORE` (демо-набор каналов/интеграций)
+- [x] `.docs/database.md` — изменить: обе таблицы, `ADR-039`
+- [x] `.docs/planning-log.md` — изменить: строка `ADR-039`
+- [x] `src/Models/SalesChannel.php` — создать: `getSalesChannels()`,
+      `updateSalesChannels(array $enabledCodes): void` — обновляет
+      только реально существующие и не заблокированные (`is_locked`) коды
+- [x] `src/Models/Integration.php` — создать: `getIntegrations()`,
+      `updateIntegrations(array $enabledCodes): void`
+- [x] `src/Controllers/AdminSalesChannelController.php` — создать:
+      `index()`, `update()` — `requireRole(['manager','admin'])`,
+      `requireCsrf()`
+- [x] `src/Controllers/AdminIntegrationController.php` — создать:
+      `index()` (группировка по `category`), `update()`
+- [x] `src/Views/admin/sales-channels/index.php` — создать: список
+      переключателей + статичный (захардкоженный, не из БД) макет
+      «единого чата» + текст о демо-версии
+- [x] `src/Views/admin/integrations/index.php` — создать: список
+      переключателей по группам + текст о демо-странице
+- [x] `src/Views/layout/admin-header.php` — изменить: два новых пункта
+      сайдбара
+- [x] `config/routes.php` — изменить: `GET`/`POST /admin/sales-channels`,
+      `GET`/`POST /admin/integrations`
 
 ## Out of scope — не трогаем
 
-- Пункт «Отчёты» в сайдбаре (`admin-header.php`) — уже добавлен
-  Таском 1, ссылка на `/admin/reports` есть, просто раньше вела в 404
-- Новые индексы в БД — `INDEX(status)`/`INDEX(created_at)` на
-  `orders` уже есть в схеме, миграция не нужна
-- Любые метрики сверх «количество + сумма Заказов» (средний чек, по
-  способу оплаты, по Товарам и т.п.) — явно исключено `Q-017`
-- Экспорт отчёта (CSV/Excel/печать)
-- ApexCharts/DataTables — решение фазы: только Chart.js, без
-  клиентских плагинов таблиц
+- Реальная интеграция с любым из перечисленных каналов/сервисов —
+  вся страница декларативно демонстрационная
+- `.docs/phases/_status.md` / нумерация Фаз — задача не входит ни в
+  одну Фазу ТЗ
+- «Закрытие Фазы 4» (`tz-coverage.md`/`admin-assembly.md`/`_status.md`)
+  — отдельная, ранее не доведённая задача, эта её не подменяет
 
 ## Definition of Done
 
-- [x] Сумма и количество за период совпадают с `SELECT COUNT(*),
-      SUM(total) FROM orders WHERE status <> 'cancelled' AND
-      created_at BETWEEN …` (ручная сверка на реальной БД);
-      отменённые Заказы не входят — проверено: диапазон
-      2026-09-18…2026-09-19 дал `2` / `501 000 ₽`, посчитано вручную
-      по трём реальным Заказам в БД (2 confirmed + 1 cancelled на
-      89 000 ₽, корректно исключён); пресет «сегодня» отдельно дал `1`
-      / `170 000 ₽` — верно исключил вчерашний Заказ
-- [x] Пресеты «сегодня/неделя/месяц» дают ожидаемые границы —
-      `ReportTest` с фиксированным `$now` (11/11); `from > to` и мусор
-      в датах произвольного диапазона → ошибка формы, не 500 —
-      проверено вживую: «Начальная дата позже конечной.», «Укажите обе
-      даты диапазона.», «Некорректный формат даты — укажите
-      ГГГГ-ММ-ДД.» (для `2026-13-45`, переполнение месяца) — все три
-      без 500
-- [x] Пустой период (нет Заказов) → пустое состояние, `<canvas>` не
-      падает и не рисует мусор — проверено (диапазон 2000 года):
-      «За выбранный период Заказов нет.», `<script>` с Chart.js не
-      рендерится вовсе, когда список по дням пуст
-- [x] Суммы приходят из Model строками (не float), `formatPrice()`
-      вызывается только во View — код-ревью
-- [x] Диаграмма грузится из `public/assets/admin/libs/chart.js/`, без
-      CDN; `customer`/незалогиненный по прямому URL `/admin/reports`
-      → редирект, без утечки данных — проверено (302, до рендера
-      данных дело не доходит)
-- [x] `ReportTest` зелёный отдельно, `composer test` зелёный целиком —
-      226/226 (+11 `ReportTest`)
+- [x] `install.php` дважды подряд без ошибок; обе таблицы и сид на
+      месте — проверено
+- [x] Гость по обоим маршрутам (GET и POST) → редирект `/login`;
+      `customer` → редирект `/` (проверено подстановкой `user_id` в
+      файл PHP-сессии, реальный пароль сидового аккаунта не хранится в
+      репозитории)
+- [x] `admin`/`manager` видят обе страницы (200), ни одного `http://`
+      в HTML — проверено под `admin` (пароль из `.env`)
+- [x] Переключатель канала/интеграции сохраняется в БД; `website`
+      (`is_locked=1`) не меняется даже прямым POST; несуществующий код
+      в `channels[]`/`integrations[]` не создаёт строку и не вызывает
+      ошибку — все три случая проверены на реальной БД
+- [x] POST без `_csrf` → 419
+- [x] `composer test` зелёный — 226/226, без регрессий
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
