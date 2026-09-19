@@ -255,3 +255,38 @@
         }
     });
 })();
+
+// Диаграмма отчёта по продажам (Таск 10 Фазы 4) — данные приходят из
+// `data-*` (JSON, уже посчитан на сервере), не запрашиваются отдельно;
+// `chart.min.js` подключается только на этой странице
+// (`admin/reports/index.php`), поэтому `Chart` есть не всегда — блок
+// просто ничего не делает на остальных страницах админки.
+(() => {
+    const canvas = document.getElementById('report-chart');
+    if (!canvas || typeof Chart === 'undefined') {
+        return;
+    }
+
+    const labels = JSON.parse(canvas.dataset.labels || '[]');
+    const values = JSON.parse(canvas.dataset.values || '[]');
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Сумма заказов, ₽',
+                data: values,
+                backgroundColor: '#0d6efd',
+            }],
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true },
+            },
+            plugins: {
+                legend: { display: false },
+            },
+        },
+    });
+})();

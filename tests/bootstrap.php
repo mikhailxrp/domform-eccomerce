@@ -19,3 +19,4 @@ require_once ROOT_PATH . '/src/Core/ManualOrder.php';
 require_once ROOT_PATH . '/src/Core/Slug.php';
 require_once ROOT_PATH . '/src/Core/ProductForm.php';
 require_once ROOT_PATH . '/src/Core/Upload.php';
+require_once ROOT_PATH . '/src/Core/Report.php';

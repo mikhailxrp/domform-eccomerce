@@ -35,6 +35,7 @@ return [
         '/admin/products'          => ['AdminProductController', 'index'],
         '/admin/products/create'   => ['AdminProductController', 'create'],
         '/admin/products/{id}/edit' => ['AdminProductController', 'edit'],
+        '/admin/reports'           => ['AdminReportController', 'index'],
         '/forgot-password'         => ['AuthController', 'showForgot'],
         '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],
