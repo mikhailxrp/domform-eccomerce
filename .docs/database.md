@@ -56,6 +56,9 @@ M:N связи Товар↔Категория, а не 1:N. Оставить с
 | is_blocked | TINYINT(1) NOT NULL DEFAULT 0 | блокировка учётной записи Менеджера Администратором (`FR-ADM-007` правило 3) — колонки не было в схеме, найдено ревью перед `phase-init` (`ADR-025`, `Q-DEV-011` в `tz-coverage.md`); заблокированный пользователь не проходит `AUTH`, но запись и его прошлые Заказы не удаляются |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
+**Индексы:** `INDEX(phone)` — поиск Заказа по телефону Покупателя в
+Панели управления (`FR-MGR-001` правило 2, Таск 2 Фазы 4, `ADR-037`)
+
 ---
 
 ### `password_resets` _(новая — `ADR-027`)_
@@ -349,10 +352,14 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | prepaid_amount | DECIMAL(10,2) NULL | сумма внесённой предоплаты (30–50%, точный процент — решение Владельца по звонку, `AS-003`); NULL пока не внесена |
 | total | DECIMAL(10,2) NOT NULL | |
 | delivered_at | TIMESTAMP NULL | момент перехода в `delivered` — нужен только для расчёта окончания гарантии (18 мес., раздел 6.1); Гарантия отдельной таблицей не хранится (`ADR-013`) |
+| cancel_note | TEXT NULL | комментарий отмены; обязателен для ветки «нестандартный размер» (`FR-ORD-002` правило 3), проверяется в `validateCancelInput()`, не CHECK — добавлена Таском 3 Фазы 4 (`ADR-038`) |
+| prepayment_refunded | TINYINT(1) NOT NULL DEFAULT 0 | отметка «предоплата возвращена переводом на карту» — форма отмены не даёт закрыть отмену без неё, если `payment_status ≠ unpaid` (`FR-ORD-002` правило 7); добавлена Таском 3 Фазы 4 (`ADR-038`) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
-**Индексы:** `INDEX(user_id)`, `INDEX(status)`, `INDEX(created_at)`
+**Индексы:** `INDEX(user_id)`, `INDEX(status)`, `INDEX(created_at)`,
+`INDEX(guest_phone)` — поиск гостевого Заказа по телефону в Панели
+управления (`FR-MGR-001` правило 2, Таск 2 Фазы 4, `ADR-037`)
 
 > Исключение из общего правила «`user_id` → CASCADE»: если удалить
 > пользователя, заказы должны остаться (бухгалтерия/история), поэтому здесь
@@ -517,6 +524,58 @@ M:N вместо 1:N: «Товар может входить в нескольк
 
 **Индексы:** `INDEX(is_active, sort_order)` — выборка активных баннеров
 в порядке показа
+
+---
+
+### `sales_channels` _(новая — `ADR-039`)_
+
+Демо-раздел «Каналы продаж» Панели управления: показывает идею сбора
+заявок из нескольких источников (WhatsApp, Авито, Telegram, MAX, сам
+сайт) в одном месте — без реальной интеграции ни с одним из них, тот же
+приём, что страница-заглушка оплаты (`ADR-018`). Заявка клиента вне ТЗ
+(раздел не описан ни в одном `FR-*`).
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| code | VARCHAR(30) NOT NULL UNIQUE | ключ канала (`website`, `whatsapp`, `avito`, `telegram`, `max`) |
+| name | VARCHAR(100) NOT NULL | название для отображения |
+| description | VARCHAR(255) NULL | короткое пояснение под переключателем |
+| icon | VARCHAR(50) NULL | CSS-класс иконки (`bx bxl-whatsapp` и т.п., self-hosted Boxicons из `public/assets/admin/`) |
+| is_locked | TINYINT(1) NOT NULL DEFAULT 0 | `1` только у `website` — это сам магазин, переключатель задизейблен во View, `updateSalesChannels()` не меняет заблокированные строки даже при подделанном POST |
+| is_enabled | TINYINT(1) NOT NULL DEFAULT 0 | состояние переключателя — сохраняется, но ни на что не влияет (демо) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок в списке |
+| updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
+
+**Индексы:** `UNIQUE(code)` — уже задан через `code`
+
+> Строки — фиксированный набор, заводятся один раз сидом в
+> `database/install.php` (`INSERT IGNORE`), не растут динамически.
+
+---
+
+### `integrations` _(новая — `ADR-039`)_
+
+Демо-раздел «Интеграции»: список CRM/учёта/телефонии/рассылок с
+переключателями, тоже без реального подключения — второй экран того же
+решения, что `sales_channels`.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| code | VARCHAR(30) NOT NULL UNIQUE | ключ интеграции (`bitrix24`, `amocrm`, `1c`, `moysklad`, `telephony`, `sms`, `email`) |
+| category | VARCHAR(30) NOT NULL | группа для отображения (`crm`, `accounting`, `telephony`, `marketing`) — подпись группы захардкожена во View, не хранится отдельной таблицей справочника (4 фиксированные группы, заводить справочник ради них избыточно) |
+| name | VARCHAR(100) NOT NULL | название для отображения |
+| description | VARCHAR(255) NULL | короткое пояснение под переключателем |
+| icon | VARCHAR(50) NULL | CSS-класс иконки |
+| is_enabled | TINYINT(1) NOT NULL DEFAULT 0 | состояние переключателя — сохраняется, ни на что не влияет (демо) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок внутри группы |
+| updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
+
+**Индексы:** `UNIQUE(code)` — уже задан через `code`
+
+> Строки — фиксированный набор, заводятся один раз сидом в
+> `database/install.php` (`INSERT IGNORE`), не растут динамически.
 
 ---
 

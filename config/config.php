@@ -42,5 +42,23 @@ define('SHOP_PHONE', '+7 900 000-00-00');
 define('SHOP_PHONE_TEL', '+79000000000');
 define('SHOP_WHATSAPP_URL', 'https://wa.me/79000000000');
 
+// Панель управления — Заказы (`.docs/phases/phase-4.md`, Таск 2)
+define('ADMIN_ORDERS_PER_PAGE', 20);
+
+// Панель управления — подсказки поиска Варианта при редактировании
+// состава Заказа (`.docs/phases/phase-4.md`, Таск 4)
+define('ADMIN_VARIANT_SEARCH_LIMIT', 10);
+
+// Панель управления — Клиенты (`.docs/phases/phase-4.md`, Таск 6)
+define('ADMIN_CUSTOMERS_PER_PAGE', 20);
+
+// Панель управления — Товары (`.docs/phases/phase-4.md`, Таск 7)
+define('ADMIN_PRODUCTS_PER_PAGE', 20);
+
+// Панель управления — фото Вариантов (`.docs/phases/phase-4.md`, Таск 9)
+// Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
+// комментарий, tests/bootstrap.php не подключает config.php).
+define('UPLOAD_PRODUCTS_DIR', ROOT_PATH . '/public/uploads/products');
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

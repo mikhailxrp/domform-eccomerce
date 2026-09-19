@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/OrderStatus.php';
+require_once ROOT_PATH . '/src/Core/Validation.php';
 
 /**
  * `$order['user_id']` либо `$order['guest_name']`/`guest_phone`/
@@ -146,6 +147,25 @@ function findOrderById(int $id): ?array
     return $order !== false ? $order : null;
 }
 
+/**
+ * Все 7 статусов всегда присутствуют в результате (0, если Заказов
+ * нет) — дашборд Панели управления показывает счётчик по каждому,
+ * а не только по тем, что реально встретились в `orders`.
+ */
+function countOrdersByStatus(): array
+{
+    $counts = array_fill_keys(array_keys(ORDER_STATUS_LABELS), 0);
+
+    $stmt = getPdo()->query('SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status');
+    foreach ($stmt->fetchAll() as $row) {
+        if (array_key_exists($row['status'], $counts)) {
+            $counts[$row['status']] = (int) $row['cnt'];
+        }
+    }
+
+    return $counts;
+}
+
 function getOrderItems(int $orderId): array
 {
     $stmt = getPdo()->prepare('SELECT * FROM order_items WHERE order_id = :order_id ORDER BY id');
@@ -210,13 +230,55 @@ function transitionOrderStatus(int $orderId, string $to): bool
 }
 
 /**
- * Отмена по звонку Менеджеру (`FR-ORD-002` правило 4, `BR-007`) —
- * стандартная ветка: снятие Резерва при отмене — Фаза 5 (`phase-2.md`,
- * «Решения фазы»), здесь не реализовано.
+ * Отмена по звонку Менеджеру (`FR-ORD-002`, `BR-007`). `$note`/
+ * `$prepaymentRefunded` — уже провалидированы `validateCancelInput()`
+ * до вызова (обязательность зависит от ветки/`payment_status`, Model
+ * этого не проверяет повторно). Переход статуса и запись `cancel_note`/
+ * `prepayment_refunded` — одна транзакция: либо применяются оба факта,
+ * либо ни одного; сам `UPDATE orders SET status` — по-прежнему только
+ * внутри `transitionOrderStatus()` (`php.md`). Снятие Резерва при
+ * отмене — Фаза 5 (`phase-2.md`, «Решения фазы»), здесь не
+ * реализовано.
  */
-function cancelOrder(int $orderId): bool
+function cancelOrder(int $orderId, string $note = '', bool $prepaymentRefunded = false): bool
 {
-    return transitionOrderStatus($orderId, ORDER_STATUS_CANCELLED);
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        if (!transitionOrderStatus($orderId, ORDER_STATUS_CANCELLED)) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $stmt = $pdo->prepare('
+            UPDATE orders
+            SET cancel_note = :note, prepayment_refunded = :refunded
+            WHERE id = :id
+        ');
+        $stmt->execute([
+            'note'     => $note !== '' ? $note : null,
+            'refunded' => $prepaymentRefunded ? 1 : 0,
+            'id'       => $orderId,
+        ]);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Стоимость доставки (`BR-006`) — вносится вручную, отдельно от
+ * `orders.total`, не пересчитывает его. `$cost === null` — сброс в
+ * `NULL` (доставка ещё не согласована).
+ */
+function setOrderShippingCost(int $orderId, ?string $cost): void
+{
+    $stmt = getPdo()->prepare('UPDATE orders SET shipping_cost = :cost WHERE id = :id');
+    $stmt->execute(['cost' => $cost, 'id' => $orderId]);
 }
 
 /**
@@ -317,4 +379,292 @@ function linkGuestOrdersToUser(string $email, int $userId): int
     $stmt->execute(['user_id' => $userId, 'email' => $email]);
 
     return $stmt->rowCount();
+}
+
+/**
+ * `$filters['status']` — один из `ORDER_STATUS_*` либо `null` (без
+ * фильтра). `$filters['search']` — сырая строка из формы: число →
+ * совпадение по `orders.id`, телефон в любом написании → сравнение по
+ * `normalizePhone()` с уже нормализованными `users.phone`/
+ * `orders.guest_phone` (обе колонки нормализуются при записи —
+ * `AuthController`/`Checkout.php`). Строка, из которой не удалось
+ * извлечь ни номер, ни телефон, даёт заведомо пустой результат, а не
+ * полный список (иначе поиск «не нашёл» выглядел бы как «фильтр не
+ * применился»).
+ */
+function buildAdminOrderFilterConditions(array $filters): array
+{
+    $conditions = [];
+    $params     = [];
+
+    $status = $filters['status'] ?? null;
+    if ($status !== null) {
+        $conditions[]      = 'o.status = :status';
+        $params['status'] = $status;
+    }
+
+    $search = trim((string) ($filters['search'] ?? ''));
+    if ($search !== '') {
+        $searchConditions = [];
+
+        if (ctype_digit($search)) {
+            $searchConditions[]     = 'o.id = :search_id';
+            $params['search_id']    = (int) $search;
+        }
+
+        $normalizedPhone = normalizePhone($search);
+        if ($normalizedPhone !== '') {
+            $searchConditions[]              = 'o.guest_phone = :search_phone_guest';
+            $searchConditions[]              = 'u.phone = :search_phone_user';
+            $params['search_phone_guest']    = $normalizedPhone;
+            $params['search_phone_user']     = $normalizedPhone;
+        }
+
+        $conditions[] = $searchConditions !== [] ? '(' . implode(' OR ', $searchConditions) . ')' : '1 = 0';
+    }
+
+    return [$conditions, $params];
+}
+
+function bindAdminOrderFilterParams(PDOStatement $stmt, array $params): void
+{
+    foreach ($params as $key => $value) {
+        $stmt->bindValue(":{$key}", $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    }
+}
+
+/**
+ * Все Заказы независимо от источника — сайт или ручное создание
+ * Менеджером (`FR-ORD-004`, `FR-MGR-001` правило 1); `LEFT JOIN users`,
+ * потому что гостевой Заказ не ссылается ни на одну строку `users`.
+ */
+function getAdminOrders(array $filters, int $page, int $perPage): array
+{
+    [$conditions, $params] = buildAdminOrderFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+    $offset   = ($page - 1) * $perPage;
+
+    $stmt = getPdo()->prepare("
+        SELECT o.*, u.name AS user_name
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        {$whereSql}
+        ORDER BY o.created_at DESC, o.id DESC
+        LIMIT :limit OFFSET :offset
+    ");
+    bindAdminOrderFilterParams($stmt, $params);
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
+function countAdminOrders(array $filters): int
+{
+    [$conditions, $params] = buildAdminOrderFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+
+    $stmt = getPdo()->prepare("
+        SELECT COUNT(*)
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        {$whereSql}
+    ");
+    bindAdminOrderFilterParams($stmt, $params);
+    $stmt->execute();
+
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Пересчитывает `orders.total` из актуальных `order_items` (снэпшот
+ * `price` × `quantity`, не текущая цена Варианта) — вызывается только
+ * изнутри чужой транзакции (`addOrderItem()`/`updateOrderItemQuantity()`/
+ * `removeOrderItem()`), сама транзакцию не открывает и не коммитит.
+ */
+function recalculateOrderTotal(PDO $pdo, int $orderId): void
+{
+    $stmt = $pdo->prepare('SELECT price, quantity FROM order_items WHERE order_id = :order_id');
+    $stmt->execute(['order_id' => $orderId]);
+
+    $total = '0.00';
+    foreach ($stmt->fetchAll() as $row) {
+        $total = bcadd($total, bcmul((string) $row['price'], (string) $row['quantity'], 2), 2);
+    }
+
+    $update = $pdo->prepare('UPDATE orders SET total = :total WHERE id = :id');
+    $update->execute(['total' => $total, 'id' => $orderId]);
+}
+
+/**
+ * Добавляет позицию к уже существующему Заказу (`FR-ORD-003`, Таск 4
+ * Фазы 4) — тот же снэпшот, что `createOrder()`: Вариант перечитывается
+ * из `product_variants` внутри транзакции (`FOR UPDATE`), клиент не
+ * присылает цену/характеристики. Неактивный/несуществующий Вариант →
+ * `false`, ничего не пишется. Пересчёт `total` — в той же транзакции.
+ */
+function addOrderItem(int $orderId, int $variantId, ?string $color, int $qty): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            SELECT pv.id, pv.price, pv.sku, pv.material, pv.mechanism_type,
+                   pv.is_showroom_sample, pv.is_active, p.name AS product_name
+            FROM product_variants pv
+            INNER JOIN products p ON p.id = pv.product_id
+            WHERE pv.id = :id
+            FOR UPDATE
+        ');
+        $stmt->execute(['id' => $variantId]);
+        $variant = $stmt->fetch();
+
+        if ($variant === false || (int) $variant['is_active'] === 0) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $quantity = clampCartQuantity($qty, (bool) $variant['is_showroom_sample']);
+
+        $insert = $pdo->prepare('
+            INSERT INTO order_items (
+                order_id, product_variant_id, product_name, variant_sku,
+                variant_material, variant_mechanism, variant_color, price, quantity
+            ) VALUES (
+                :order_id, :product_variant_id, :product_name, :variant_sku,
+                :variant_material, :variant_mechanism, :variant_color, :price, :quantity
+            )
+        ');
+        $insert->execute([
+            'order_id'           => $orderId,
+            'product_variant_id' => $variant['id'],
+            'product_name'       => $variant['product_name'],
+            'variant_sku'        => $variant['sku'],
+            'variant_material'   => $variant['material'],
+            'variant_mechanism'  => $variant['mechanism_type'],
+            'variant_color'      => $color,
+            'price'              => $variant['price'],
+            'quantity'           => $quantity,
+        ]);
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * `$itemId` обязан принадлежать `$orderId` — оба условия в одном
+ * `WHERE` защищают от подстановки чужого `itemId` в форме. Образец
+ * (`is_showroom_sample` снэпшота Варианта, если он ещё не удалён
+ * физически) всегда остаётся 1 — `clampCartQuantity()`.
+ */
+function updateOrderItemQuantity(int $orderId, int $itemId, int $qty): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare('
+            SELECT oi.id, pv.is_showroom_sample
+            FROM order_items oi
+            LEFT JOIN product_variants pv ON pv.id = oi.product_variant_id
+            WHERE oi.id = :item_id AND oi.order_id = :order_id
+            FOR UPDATE
+        ');
+        $stmt->execute(['item_id' => $itemId, 'order_id' => $orderId]);
+        $item = $stmt->fetch();
+
+        if ($item === false) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $quantity = clampCartQuantity($qty, (bool) ($item['is_showroom_sample'] ?? false));
+
+        $update = $pdo->prepare('UPDATE order_items SET quantity = :quantity WHERE id = :id AND order_id = :order_id');
+        $update->execute(['quantity' => $quantity, 'id' => $itemId, 'order_id' => $orderId]);
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Последняя Позиция Заказа не удаляется — это отмена, не редактирование
+ * состава (`FR-ORD-002` правило 6): `false` без изменений, чужой
+ * `itemId` — тоже `false` (`rowCount()` покажет 0 совпадений).
+ */
+function removeOrderItem(int $orderId, int $itemId): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM order_items WHERE order_id = :order_id');
+        $countStmt->execute(['order_id' => $orderId]);
+        if ((int) $countStmt->fetchColumn() <= 1) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        $delete = $pdo->prepare('DELETE FROM order_items WHERE id = :id AND order_id = :order_id');
+        $delete->execute(['id' => $itemId, 'order_id' => $orderId]);
+
+        if ($delete->rowCount() === 0) {
+            $pdo->rollBack();
+            return false;
+        }
+
+        recalculateOrderTotal($pdo, $orderId);
+
+        $pdo->commit();
+        return true;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Заказ + контакт клиента одним массивом: `is_guest` и
+ * `customer_name`/`customer_phone`/`customer_email` вычислены здесь,
+ * чтобы View не решала сама, откуда брать контакт — `users` или
+ * `guest_*` (ровно один источник, `validateOrderContact()`).
+ */
+function findOrderForAdmin(int $id): ?array
+{
+    $stmt = getPdo()->prepare('
+        SELECT o.*, u.name AS user_name, u.phone AS user_phone, u.email AS user_email
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.id = :id
+        LIMIT 1
+    ');
+    $stmt->execute(['id' => $id]);
+    $order = $stmt->fetch();
+
+    if ($order === false) {
+        return null;
+    }
+
+    $isGuest = $order['user_id'] === null;
+
+    $order['is_guest']       = $isGuest;
+    $order['customer_name']  = $isGuest ? $order['guest_name'] : $order['user_name'];
+    $order['customer_phone'] = $isGuest ? $order['guest_phone'] : $order['user_phone'];
+    $order['customer_email'] = $isGuest ? $order['guest_email'] : $order['user_email'];
+
+    return $order;
 }

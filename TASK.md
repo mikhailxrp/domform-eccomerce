@@ -1,88 +1,85 @@
 # Current Task
 
 ## Фаза
-Phase 3 — Онлайн-оплата и касса (`.docs/phases/phase-3.md`, Таск 2)
+Вне фазы — внеплановая задача заказчика (`ADR-039`, `.docs/planning-log.md`,
+`.docs/dev-log.md` 19.09.2026). Не пункт ТЗ, к `.docs/phases/phase-N.md`
+не привязана. Фаза 4 (`.docs/phases/phase-4.md`) при этом уже
+✅ Завершена — Таск 10 сдан 19.09.2026, «Закрытие фазы» ещё не доведено
+(см. `dev-log.md`).
 
-**Статус:** ✅ Завершён — последний таск фазы, фаза 3 целиком закрыта.
-Код реализован и проверен: `composer test` 125/125 (6 новых тестов
-`PaymentTest`); `grep -r "SET payment_status" src/` — ровно 2
-вхождения; ручная проверка временным скриптом в scratchpad против
-реальной БД (`mikhail700.beget.tech`): `markOrderPrepaid()` на
-`new`/`unpaid` → `prepaid`/`confirmed`, `prepaid_amount` записана;
-повторный вызов → `false`, без изменений; `markOrderPaidFull()` →
-`paid_full`, `status` не тронут, повторный вызов → `false`; отменённый
-Заказ → `markOrderPrepaid()` фиксирует оплату, но не переоткрывает
-`cancelled`-статус. `storage/logs/app.log` — только ожидаемая `INFO`
-запись из `markOrderPaidFull()`. Тестовые заказы удалены после
-проверки.
+**Статус:** ✅ Завершена. Реализовано и проверено на реальной БД
+(`mikhail700.beget.tech`) живой HTTP-сессией через `php -S` + `curl`.
+`composer test` 226/226 (без изменений — новых Model-функций к БД в
+юнит-тестах нет намеренно, `php.md`, «Тестирование»).
 
 ## Задача
-Единственный путь пометить оплату Заказа полученной — `markOrderPrepaid()`
-(предоплата: `payment_status → prepaid`, `prepaid_amount` заполнена,
-статус Заказа `new → confirmed` через существующий
-`transitionOrderStatus()`) и `markOrderPaidFull()` (остаток:
-`payment_status → paid_full`, `orders.status` не трогается) — обе
-атомарны (одна транзакция) и идемпотентны (повторный вызов на уже
-оплаченном Заказе не меняет данные, не бросает исключение). Сумма
-проверяется чистой функцией без БД. UI вызова — Фаза 4, здесь не
-реализуется.
+Демо-раздел Панели управления (`manager`+`admin`), тот же приём, что
+страница-заглушка оплаты (`ADR-018`) — показать возможность, не
+реализовать интеграцию:
+- `/admin/sales-channels` («Каналы продаж») — переключатели WhatsApp /
+  Авито / Telegram / MAX / сайт (сайт — заблокированный, всегда
+  включённый пункт) + статичный макет «единого чата» + пояснение, что
+  это демо-версия
+- `/admin/integrations` («Интеграции») — переключатели CRM
+  (Битрикс24/amoCRM), учёта (1С/МойСклад), телефонии, рассылок +
+  пояснение, что это демо-страница
+
+Состояние переключателей сохраняется в новых таблицах
+`sales_channels`/`integrations` (подтверждено пользователем —
+`AskUserQuestion` перед кодом), но реальных подключений не выполняет.
 
 ## Scope — что трогаем
 
-- [x] `src/Core/Payment.php` — создан: `validatePaymentAmount(string
-      $amount, string $orderTotal, string $alreadyPaid): ?string` —
-      `null`, если сумма корректна (число > 0, не превышает
-      `orderTotal - alreadyPaid`), иначе текст ошибки; сравнение
-      только через `bccomp()`
-- [x] `tests/Unit/PaymentTest.php` — создан: 6 тестов (0/отрицательная
-      сумма, сумма больше остатка, сумма равна остатку, корректная
-      сумма, сумма с лишними знаками после запятой, некорректный формат)
-- [x] `tests/bootstrap.php` — изменён: добавлен
-      `require_once ROOT_PATH . '/src/Core/Payment.php';`
-- [x] `src/Models/Order.php` — изменён: `markOrderPrepaid(int
-      $orderId, string $amount): bool` — транзакция, `UPDATE orders
-      SET payment_status = :prepaid, prepaid_amount = :amount WHERE
-      id = :id AND payment_status = :unpaid` (константы
-      `PAYMENT_STATUS_*`), `rowCount() === 0` → `false` без изменений,
-      иначе `transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED)`;
-      `markOrderPaidFull(int $orderId, string $amount): bool` — тот же
-      паттерн, `payment_status='prepaid' → 'paid_full'`, `orders.status`
-      и `prepaid_amount` не трогаются (в схеме нет колонки под остаток
-      — `orders.total` уже содержит полную сумму); `$amount` уходит в
-      `logInfo()` как аудиторский след, не как запись в БД
+- [x] `database/install.php` — изменить: таблицы `sales_channels`,
+      `integrations` + сид `INSERT IGNORE` (демо-набор каналов/интеграций)
+- [x] `.docs/database.md` — изменить: обе таблицы, `ADR-039`
+- [x] `.docs/planning-log.md` — изменить: строка `ADR-039`
+- [x] `src/Models/SalesChannel.php` — создать: `getSalesChannels()`,
+      `updateSalesChannels(array $enabledCodes): void` — обновляет
+      только реально существующие и не заблокированные (`is_locked`) коды
+- [x] `src/Models/Integration.php` — создать: `getIntegrations()`,
+      `updateIntegrations(array $enabledCodes): void`
+- [x] `src/Controllers/AdminSalesChannelController.php` — создать:
+      `index()`, `update()` — `requireRole(['manager','admin'])`,
+      `requireCsrf()`
+- [x] `src/Controllers/AdminIntegrationController.php` — создать:
+      `index()` (группировка по `category`), `update()`
+- [x] `src/Views/admin/sales-channels/index.php` — создать: список
+      переключателей + статичный (захардкоженный, не из БД) макет
+      «единого чата» + текст о демо-версии
+- [x] `src/Views/admin/integrations/index.php` — создать: список
+      переключателей по группам + текст о демо-странице
+- [x] `src/Views/layout/admin-header.php` — изменить: два новых пункта
+      сайдбара
+- [x] `config/routes.php` — изменить: `GET`/`POST /admin/sales-channels`,
+      `GET`/`POST /admin/integrations`
 
 ## Out of scope — не трогаем
 
-- UI Менеджера для вызова этих функций (кнопка «Отметить оплату» и
-  т.п.) — Фаза 4, когда появится Панель менеджера
-- Реальная интеграция с ЮMoney, вебхук, запись в `payment_logs` — не
-  реализуется (`ADR-018`)
-- Фискализация Атол (`FR-PAY-005`) — не реализуется (`Q-007` снят)
-- `PaymentController`, `/payment/stub` — уже сделаны Таском 1, не
-  трогаем
-- Диапазон 30–50% предоплаты — не валидируется системой (`FR-PAY-002`:
-  процент вводит Менеджер вручную, не расчёт сайта)
+- Реальная интеграция с любым из перечисленных каналов/сервисов —
+  вся страница декларативно демонстрационная
+- `.docs/phases/_status.md` / нумерация Фаз — задача не входит ни в
+  одну Фазу ТЗ
+- «Закрытие Фазы 4» (`tz-coverage.md`/`admin-assembly.md`/`_status.md`)
+  — отдельная, ранее не доведённая задача, эта её не подменяет
 
 ## Definition of Done
 
-- [x] `composer test` зелёный (125/125), включая `PaymentTest`:
-      `validatePaymentAmount()` отклоняет 0/отрицательную/превышающую
-      остаток/некорректно отформатированную сумму, принимает корректную
-- [x] `grep -r "SET payment_status" src/` — единственные два вхождения,
-      в `markOrderPrepaid()`/`markOrderPaidFull()`
-- [x] Ручная проверка временным скриптом в scratchpad (не в
-      репозитории) против реальной БД (`mikhail700.beget.tech`): Заказ
-      `new`/`unpaid` → `markOrderPrepaid()` → `prepaid`/`confirmed`,
-      `prepaid_amount` записана; повторный вызов → `false`, данные не
-      изменились; `markOrderPaidFull()` после этого → `paid_full`,
-      `orders.status` не тронут, повторный вызов → `false`; отменённый
-      Заказ (`cancelled`) → `markOrderPrepaid()` помечает оплату, но не
-      переоткрывает статус (переход запрещён таблицей 6.3, функция не
-      бросает исключение)
-- [x] Деньги нигде как `float`
-- [x] Проверить `.docs/dod-global.md` — новых записей в
-      `storage/logs/app.log`, кроме ожидаемой `INFO` из
-      `markOrderPaidFull()`, нет
+- [x] `install.php` дважды подряд без ошибок; обе таблицы и сид на
+      месте — проверено
+- [x] Гость по обоим маршрутам (GET и POST) → редирект `/login`;
+      `customer` → редирект `/` (проверено подстановкой `user_id` в
+      файл PHP-сессии, реальный пароль сидового аккаунта не хранится в
+      репозитории)
+- [x] `admin`/`manager` видят обе страницы (200), ни одного `http://`
+      в HTML — проверено под `admin` (пароль из `.env`)
+- [x] Переключатель канала/интеграции сохраняется в БД; `website`
+      (`is_locked=1`) не меняется даже прямым POST; несуществующий код
+      в `channels[]`/`integrations[]` не создаёт строку и не вызывает
+      ошибку — все три случая проверены на реальной БД
+- [x] POST без `_csrf` → 419
+- [x] `composer test` зелёный — 226/226, без регрессий
+- [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
 - Следовать `CLAUDE.md`

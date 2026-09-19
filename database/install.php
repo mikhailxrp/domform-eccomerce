@@ -26,7 +26,8 @@ $pdo->exec("
         phone         VARCHAR(20) NULL,
         role          ENUM('customer', 'manager', 'admin') NOT NULL DEFAULT 'customer',
         is_blocked    TINYINT(1) NOT NULL DEFAULT 0,
-        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_users_phone (phone)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
@@ -272,11 +273,14 @@ $pdo->exec("
         prepaid_amount      DECIMAL(10, 2) NULL,
         total               DECIMAL(10, 2) NOT NULL,
         delivered_at        TIMESTAMP NULL,
+        cancel_note         TEXT NULL,
+        prepayment_refunded TINYINT(1) NOT NULL DEFAULT 0,
         created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_orders_user (user_id),
         KEY idx_orders_status (status),
         KEY idx_orders_created (created_at),
+        KEY idx_orders_guest_phone (guest_phone),
         CONSTRAINT fk_orders_user
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -291,6 +295,38 @@ $columnExists->execute(['table' => 'orders', 'column' => 'comment']);
 
 if ((int) $columnExists->fetchColumn() === 0) {
     $pdo->exec('ALTER TABLE orders ADD COLUMN comment TEXT NOT NULL AFTER delivery_address;');
+}
+
+// Таблица уже могла быть развёрнута до формы отмены Таска 3 Фазы 4
+// (`ADR-038`) — та же идемпотентная проверка. `prepayment_refunded`
+// с DEFAULT 0 безопасно добавлять и на непустую таблицу (в отличие от
+// `comment` выше, у которого не было DEFAULT).
+$columnExists->execute(['table' => 'orders', 'column' => 'cancel_note']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD COLUMN cancel_note TEXT NULL AFTER delivered_at;');
+}
+
+$columnExists->execute(['table' => 'orders', 'column' => 'prepayment_refunded']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD COLUMN prepayment_refunded TINYINT(1) NOT NULL DEFAULT 0 AFTER cancel_note;');
+}
+
+// Индексы под поиск Заказа по телефону в Панели управления (`ADR-037`,
+// Таск 2 Фазы 4) — та же идемпотентная проверка, что для
+// `idx_variant_images_color`/`idx_variants_material` выше: таблицы уже
+// могли быть развёрнуты раньше, без этих индексов.
+$indexExists->execute(['table' => 'users', 'index_name' => 'idx_users_phone']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE users ADD INDEX idx_users_phone (phone);');
+}
+
+$indexExists->execute(['table' => 'orders', 'index_name' => 'idx_orders_guest_phone']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE orders ADD INDEX idx_orders_guest_phone (guest_phone);');
 }
 
 $pdo->exec("
@@ -388,6 +424,54 @@ $pdo->exec("
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         KEY idx_banners_active_sort (is_active, sort_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS sales_channels (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        code        VARCHAR(30) NOT NULL UNIQUE,
+        name        VARCHAR(100) NOT NULL,
+        description VARCHAR(255) NULL,
+        icon        VARCHAR(50) NULL,
+        is_locked   TINYINT(1) NOT NULL DEFAULT 0,
+        is_enabled  TINYINT(1) NOT NULL DEFAULT 0,
+        sort_order  INT NOT NULL DEFAULT 0,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    INSERT IGNORE INTO sales_channels (code, name, description, icon, is_locked, is_enabled, sort_order) VALUES
+        ('website',  'Заявки с сайта', 'Заказы, оформленные покупателем на сайте — основной канал, отключить нельзя.', 'bx bx-globe', 1, 1, 1),
+        ('whatsapp', 'WhatsApp', 'Приём и обработка сообщений из WhatsApp Business.', 'bx bxl-whatsapp', 0, 0, 2),
+        ('avito',    'Авито', 'Отклики и сообщения по объявлениям на Авито.', 'bx bx-store-alt', 0, 0, 3),
+        ('telegram', 'Telegram', 'Сообщения из Telegram-бота или канала магазина.', 'bx bxl-telegram', 0, 0, 4),
+        ('max',      'MAX', 'Сообщения из мессенджера MAX.', 'bx bx-chat', 0, 0, 5);
+");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS integrations (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        code        VARCHAR(30) NOT NULL UNIQUE,
+        category    VARCHAR(30) NOT NULL,
+        name        VARCHAR(100) NOT NULL,
+        description VARCHAR(255) NULL,
+        icon        VARCHAR(50) NULL,
+        is_enabled  TINYINT(1) NOT NULL DEFAULT 0,
+        sort_order  INT NOT NULL DEFAULT 0,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
+    INSERT IGNORE INTO integrations (code, category, name, description, icon, is_enabled, sort_order) VALUES
+        ('bitrix24', 'crm', 'Битрикс24', 'Передача заказов и карточек клиентов в Битрикс24.', 'bx bx-git-branch', 0, 1),
+        ('amocrm',   'crm', 'amoCRM', 'Передача заказов и сделок в amoCRM.', 'bx bx-git-branch', 0, 2),
+        ('1c',        'accounting', '1С', 'Выгрузка заказов и остатков в 1С:Управление торговлей.', 'bx bx-calculator', 0, 1),
+        ('moysklad',  'accounting', 'МойСклад', 'Синхронизация остатков и заказов с МойСклад.', 'bx bx-calculator', 0, 2),
+        ('telephony', 'telephony', 'IP-телефония', 'Всплывающая карточка клиента при звонке, запись разговоров.', 'bx bx-phone-call', 0, 1),
+        ('sms',       'marketing', 'SMS-рассылки', 'Уведомления клиентам о статусе заказа по SMS.', 'bx bx-message-square-dots', 0, 1),
+        ('email',     'marketing', 'Email-рассылки', 'Автоматические письма клиентам и маркетинговые рассылки.', 'bx bx-mail-send', 0, 2);
 ");
 
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):

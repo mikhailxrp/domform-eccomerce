@@ -384,7 +384,13 @@
             return variant.images[0];
         }
 
-        /** Миниатюры принадлежат текущему Варианту — при смене материала перестраиваем весь ряд. */
+        /**
+         * Миниатюры принадлежат текущему Варианту — при смене материала
+         * перестраиваем весь ряд. Фото без цвета (необязательное поле
+         * формы загрузки, Таск 9 Фазы 4) не дедуплицируются между собой —
+         * ключ по `image.path`, а не по `color` (`null`/`''` у всех
+         * таких фото совпадал бы, показывалось бы только одно).
+         */
         function renderThumbnails(variant) {
             if (!$thumbnails.length) {
                 return;
@@ -393,13 +399,15 @@
 
             var seen = {};
             variant.images.forEach(function (image) {
-                if (!image.color || seen[image.color]) {
+                var key = image.color || ('__nocolor__' + image.path);
+                if (seen[key]) {
                     return;
                 }
-                seen[image.color] = true;
+                seen[key] = true;
                 jQuery('<button type="button" class="details-gallery-thumbs__item"><img></button>')
-                    .attr('data-color', image.color)
-                    .find('img').attr('src', image.path).attr('alt', image.color)
+                    .attr('data-color', image.color || '')
+                    .attr('data-path', image.path)
+                    .find('img').attr('src', image.path).attr('alt', image.color || '')
                     .end()
                     .appendTo($thumbnails);
             });
@@ -425,6 +433,10 @@
             $thumbnails.children('.details-gallery-thumbs__item').removeClass('active');
             if (selectedColor) {
                 $thumbnails.find('.details-gallery-thumbs__item[data-color="' + selectedColor + '"]').addClass('active');
+            } else {
+                // Фото без цвета — подсветить хотя бы первую миниатюру,
+                // раз ни одна не соответствует выбранному цвету.
+                $thumbnails.children('.details-gallery-thumbs__item').first().addClass('active');
             }
 
             if (image && $mainImage.length) {
@@ -459,8 +471,23 @@
         });
 
         jQuery(document).on('click', '#product-thumbnails .details-gallery-thumbs__item', function () {
+            var color = jQuery(this).attr('data-color');
+
+            // Фото без цвета — просто общий ракурс товара, не выбор цвета:
+            // меняем только главное фото, Вариант/цвет/цену не трогаем
+            // (иначе `findImage()` не найдёт пустой `color` среди фото
+            // Варианта и молча откатится на images[0]).
+            if (!color) {
+                $thumbnails.children('.details-gallery-thumbs__item').removeClass('active');
+                jQuery(this).addClass('active');
+                if ($mainImage.length) {
+                    $mainImage.attr('src', jQuery(this).attr('data-path'));
+                }
+                return;
+            }
+
             var variantId = selectedVariantId !== null ? selectedVariantId : (variants[0] ? variants[0].id : null);
-            renderVariant(variantId, jQuery(this).attr('data-color'));
+            renderVariant(variantId, color);
         });
 
         $root.on('submit', '.product-variant-selector__cart-form', function (event) {

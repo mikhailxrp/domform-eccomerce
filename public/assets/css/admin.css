@@ -1,0 +1,65 @@
+/* Панель управления — точечные переопределения темы Valex, саму тему не трогаем (по аналогии с app.css витрины). */
+
+/* Иконка пункта сайдбара из styles.min.css задаёт line-height:34px при
+   height:1.375rem — глиф иконки визуально вылезает за пределы своего
+   бокса и не совпадает по центру с подписью пункта. Flex-центрирование
+   содержимого не зависит от метрик конкретного шрифта иконок. */
+.app-sidebar .side-menu__icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+
+/* На ширине ≤991.98px тема сама скрывает .main-sidebar-header (логотип
+   над списком пунктов) и убирает у .main-sidebar отступ под него —
+   открытое мобильное меню начинается пунктом «Дашборд» вплотную к
+   верхнему краю экрана. Возвращаем логотип и его высоту (4rem — то же
+   значение, что тема использует на десктопе), чтобы список пунктов не
+   был прижат к краю. */
+@media (max-width: 991.98px) {
+    .main-sidebar-header {
+        display: flex !important;
+    }
+
+    .main-sidebar {
+        margin-block-start: 4rem !important;
+    }
+}
+
+/* Вся строка списка Заказов ведёт на карточку Заказа (admin.js), не
+   только ссылка «№…» — курсор показывает это до клика. */
+.admin-orders-table__row {
+    cursor: pointer;
+}
+
+/* styles.min.css глобально снимает background-image у .btn-close
+   (Valex рисует крестик через дочернюю иконку шрифта — есть только в
+   разметке карточек их темы, не в общем components/flash.php витрины)
+   — крестик закрытия алерта становился невидимым. Возвращаем крестик
+   через ту же CSS-переменную --bs-btn-close-bg, что объявляет сам
+   Bootstrap на .btn-close — своей иконки не добавляем. */
+.alert .btn-close {
+    background-image: var(--bs-btn-close-bg) !important;
+}
+
+/* Редактирование состава Заказа (Таск 4 Фазы 4). */
+.order-items-table__quantity-input {
+    width: 5rem;
+}
+
+.variant-picker__suggestions {
+    z-index: 10;
+}
+
+/* Фото Вариантов (Таск 9 Фазы 4) — квадратная миниатюра вместо
+   фиксированной высоты: карточки разной ширины (адаптивная сетка) не
+   растягивают фото в прямоугольник. */
+.variant-photo-card__image {
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+}
+
+.variant-photo-card__order-input {
+    width: 3.5rem;
+}

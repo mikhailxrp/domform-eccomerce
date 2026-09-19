@@ -14,12 +14,19 @@ include ROOT_PATH . '/src/Views/layout/header.php';
 $firstVariant = $variants[0];
 $firstImage   = $firstVariant['images'][0] ?? null;
 
+// Фото без цвета (общие ракурсы товара, необязательное поле формы
+// загрузки — `admin/products/form.php`, Таск 9 Фазы 4) раньше молча
+// выбрасывались из галереи: ключом дедупликации был сам `color`, а
+// `null` пропускался условием. Теперь каждое такое фото получает
+// собственный ключ по пути — не дедуплицируется с другими и не
+// пропадает, в отличие от цветных фото (одно фото на цвет, как раньше).
 $thumbnails = [];
 foreach ($firstVariant['images'] as $image) {
-    if ($image['color'] === null || isset($thumbnails[$image['color']])) {
+    $key = $image['color'] ?? ('__nocolor__' . $image['path']);
+    if (isset($thumbnails[$key])) {
         continue;
     }
-    $thumbnails[$image['color']] = $image;
+    $thumbnails[$key] = $image;
 }
 ?>
 
@@ -60,6 +67,7 @@ foreach ($firstVariant['images'] as $image) {
                                     type="button"
                                     class="details-gallery-thumbs__item<?= $index === 0 ? ' active' : '' ?>"
                                     data-color="<?= e((string) $image['color']) ?>"
+                                    data-path="<?= e($image['path']) ?>"
                                 >
                                     <img src="<?= e($image['path']) ?>" alt="<?= e((string) $image['color']) ?>">
                                 </button>
