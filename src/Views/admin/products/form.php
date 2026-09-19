@@ -36,7 +36,7 @@ $specErrors    = $errors['specs'] ?? [];
     <div class="alert alert-danger">Для публикации добавьте хотя бы один активный Вариант с ценой — иначе снимите отметку «Опубликован».</div>
 <?php endif; ?>
 
-<form method="post" action="<?= e($formAction) ?>">
+<form method="post" action="<?= e($formAction) ?>" id="product-form">
     <?= csrfField() ?>
 
     <div class="card custom-card">
@@ -191,7 +191,36 @@ $specErrors    = $errors['specs'] ?? [];
         </div>
     </div>
 
-    <button type="submit" class="btn btn-primary mb-4"><?= $isEdit ? 'Сохранить' : 'Создать' ?></button>
+    <?php if (!$isEdit): ?>
+        <button type="submit" class="btn btn-primary mb-4">Создать</button>
+    <?php endif; ?>
 </form>
+
+<?php if ($isEdit): ?>
+    <div class="card custom-card">
+        <div class="card-header">
+            <div class="card-title">Фото по Вариантам</div>
+        </div>
+        <div class="card-body">
+            <?php if (($product['variants'] ?? []) === []): ?>
+                <p class="text-muted small mb-0">У Товара пока нет Вариантов — добавьте и сохраните хотя бы один выше.</p>
+            <?php else: ?>
+                <?php $productId = (int) $product['id']; ?>
+                <?php foreach ($product['variants'] as $variant): ?>
+                    <?php include ROOT_PATH . '/src/Views/components/admin/variant-photos.php'; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php
+    // Кнопка сохранения полей Товара вынесена сюда — визуально последним
+    // шагом после фото, хотя физически отправляет форму `#product-form`
+    // (атрибут `form`, HTML5): вложить саму форму сюда нельзя — блок
+    // фото Варианта уже содержит свои `<form>` (`variant-photos.php`), а
+    // вложенные `<form>` в HTML недопустимы.
+    ?>
+    <button type="submit" form="product-form" class="btn btn-primary mb-4">Сохранить</button>
+<?php endif; ?>
 
 <?php include ROOT_PATH . '/src/Views/layout/admin-footer.php'; ?>

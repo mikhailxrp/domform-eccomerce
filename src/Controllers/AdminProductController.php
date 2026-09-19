@@ -9,6 +9,8 @@ require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 require_once ROOT_PATH . '/src/Core/ProductForm.php';
+require_once ROOT_PATH . '/src/Core/Upload.php';
+require_once ROOT_PATH . '/src/Services/FileUpload.php';
 
 class AdminProductController
 {
@@ -159,6 +161,89 @@ class AdminProductController
 
         setFlash('success', 'Товар обновлён.');
         redirect('/admin/products');
+    }
+
+    public function uploadImage(string $productId, string $variantId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        if (findProductForToggle((int) $productId) === null) {
+            abort404();
+        }
+
+        $file         = $_FILES['image'] ?? ['error' => UPLOAD_ERR_NO_FILE];
+        $detectedMime = detectUploadedMime((string) ($file['tmp_name'] ?? ''));
+        $error        = validateUploadedImage($file, $detectedMime);
+
+        if ($error !== null) {
+            setFlash('error', $error);
+            redirect('/admin/products/' . $productId . '/edit');
+        }
+
+        $path = storeProductImage($file);
+        if ($path === null) {
+            setFlash('error', 'Не удалось сохранить файл.');
+            redirect('/admin/products/' . $productId . '/edit');
+        }
+
+        $color = trim((string) input('color', ''));
+
+        $imageId = addVariantImage((int) $productId, (int) $variantId, [
+            'color'      => $color !== '' ? $color : null,
+            'is_swatch'  => (bool) input('is_swatch', false),
+            'path'       => $path,
+            'sort_order' => (int) input('sort_order', 0),
+        ]);
+
+        if ($imageId === null) {
+            deleteStoredFile($path);
+            abort404();
+        }
+
+        setFlash('success', 'Фото добавлено.');
+        redirect('/admin/products/' . $productId . '/edit');
+    }
+
+    public function updateImage(string $productId, string $variantId, string $imageId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $color   = trim((string) input('color', ''));
+        $updated = updateVariantImage((int) $productId, (int) $variantId, (int) $imageId, [
+            'color'      => $color !== '' ? $color : null,
+            'is_swatch'  => (bool) input('is_swatch', false),
+            'sort_order' => (int) input('sort_order', 0),
+        ]);
+
+        setFlash($updated ? 'success' : 'error', $updated ? 'Фото обновлено.' : 'Не удалось обновить фото.');
+        redirect('/admin/products/' . $productId . '/edit');
+    }
+
+    public function deleteImage(string $productId, string $variantId, string $imageId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $path = deleteVariantImage((int) $productId, (int) $variantId, (int) $imageId);
+        if ($path !== null) {
+            deleteStoredFile($path);
+        }
+
+        setFlash($path !== null ? 'success' : 'error', $path !== null ? 'Фото удалено.' : 'Не удалось удалить фото.');
+        redirect('/admin/products/' . $productId . '/edit');
+    }
+
+    public function setMainImage(string $productId, string $variantId, string $imageId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $updated = setMainVariantImage((int) $productId, (int) $variantId, (int) $imageId);
+
+        setFlash($updated ? 'success' : 'error', $updated ? 'Главное фото изменено.' : 'Не удалось изменить главное фото.');
+        redirect('/admin/products/' . $productId . '/edit');
     }
 
     private function collectRawInput(): array

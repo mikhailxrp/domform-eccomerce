@@ -726,7 +726,12 @@ function findProductForAdmin(int $id): ?array
         }
     }
 
-    $product['variants']            = getAllProductVariants($id);
+    $product['variants'] = getAllProductVariants($id);
+    foreach ($product['variants'] as &$variant) {
+        $variant['images'] = getVariantImagesForAdmin((int) $variant['id']);
+    }
+    unset($variant);
+
     $product['specs']               = getProductSpecs($id);
     $product['category_ids']        = array_map(static fn (array $row): int => (int) $row['category_id'], $categoryRows);
     $product['primary_category_id'] = $primaryRow !== null ? (int) $primaryRow['category_id'] : 0;
@@ -979,6 +984,179 @@ function getVariantImages(array $variantIds): array
     $stmt->execute($variantIds);
 
     return $stmt->fetchAll();
+}
+
+/**
+ * Фото одного Варианта для Панели управления (`FR-ADM-001`, Таск 9
+ * Фазы 4) — с `id` каждой строки, в отличие от `getVariantImages()`
+ * (только для витрины, группирует сразу несколько Вариантов и `id` ей
+ * не нужен).
+ */
+function getVariantImagesForAdmin(int $variantId): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT id, color, is_swatch, path, sort_order, is_main
+        FROM variant_images
+        WHERE product_variant_id = :variant_id
+        ORDER BY sort_order ASC, id ASC
+    ');
+    $stmt->execute(['variant_id' => $variantId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * `$productId`/`$variantId` — из URL, принадлежность проверяется прямо
+ * здесь (не отдельным `find*`) — чужой Вариант или чужой Товар просто
+ * не находится, `null` трактуется Controller'ом как отказ. Первое фото
+ * Варианта становится главным автоматически — иначе Вариант остаётся
+ * без главного фото до первого ручного переключения.
+ */
+function addVariantImage(int $productId, int $variantId, array $data): ?int
+{
+    $pdo = getPdo();
+
+    $check = $pdo->prepare(
+        'SELECT id FROM product_variants WHERE id = :variant_id AND product_id = :product_id LIMIT 1'
+    );
+    $check->execute(['variant_id' => $variantId, 'product_id' => $productId]);
+    if ($check->fetch() === false) {
+        return null;
+    }
+
+    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM variant_images WHERE product_variant_id = :variant_id');
+    $countStmt->execute(['variant_id' => $variantId]);
+    $isFirstImage = (int) $countStmt->fetchColumn() === 0;
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO variant_images (product_variant_id, color, is_swatch, path, sort_order, is_main)
+         VALUES (:variant_id, :color, :is_swatch, :path, :sort_order, :is_main)'
+    );
+    $stmt->execute([
+        'variant_id' => $variantId,
+        'color'      => $data['color'],
+        'is_swatch'  => $data['is_swatch'] ? 1 : 0,
+        'path'       => $data['path'],
+        'sort_order' => $data['sort_order'],
+        'is_main'    => $isFirstImage ? 1 : 0,
+    ]);
+
+    return (int) $pdo->lastInsertId();
+}
+
+/**
+ * Цвет/образец/порядок — не `is_main` (отдельная `setMainVariantImage()`,
+ * своя транзакция «снять со всех — поставить одной»).
+ */
+function updateVariantImage(int $productId, int $variantId, int $imageId, array $data): bool
+{
+    $stmt = getPdo()->prepare('
+        UPDATE variant_images vi
+        INNER JOIN product_variants pv ON pv.id = vi.product_variant_id
+        SET vi.color = :color, vi.is_swatch = :is_swatch, vi.sort_order = :sort_order
+        WHERE vi.id = :image_id AND vi.product_variant_id = :variant_id AND pv.product_id = :product_id
+    ');
+    $stmt->execute([
+        'color'      => $data['color'],
+        'is_swatch'  => $data['is_swatch'] ? 1 : 0,
+        'sort_order' => $data['sort_order'],
+        'image_id'   => $imageId,
+        'variant_id' => $variantId,
+        'product_id' => $productId,
+    ]);
+
+    return $stmt->rowCount() > 0;
+}
+
+/**
+ * Возвращает путь удалённой строки — файл стирает
+ * `deleteStoredFile()` (Controller), Model файловую систему не трогает.
+ * Если удалённое фото было главным, а у Варианта остались другие —
+ * следующее по `sort_order` становится главным в той же транзакции,
+ * чтобы Вариант не остался без главного фото.
+ */
+function deleteVariantImage(int $productId, int $variantId, int $imageId): ?string
+{
+    $pdo = getPdo();
+
+    $stmt = $pdo->prepare('
+        SELECT vi.path, vi.is_main
+        FROM variant_images vi
+        INNER JOIN product_variants pv ON pv.id = vi.product_variant_id
+        WHERE vi.id = :image_id AND vi.product_variant_id = :variant_id AND pv.product_id = :product_id
+        LIMIT 1
+    ');
+    $stmt->execute(['image_id' => $imageId, 'variant_id' => $variantId, 'product_id' => $productId]);
+    $image = $stmt->fetch();
+
+    if ($image === false) {
+        return null;
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $delete = $pdo->prepare('DELETE FROM variant_images WHERE id = :image_id');
+        $delete->execute(['image_id' => $imageId]);
+
+        if ((int) $image['is_main'] === 1) {
+            $next = $pdo->prepare('
+                SELECT id FROM variant_images
+                WHERE product_variant_id = :variant_id
+                ORDER BY sort_order ASC, id ASC
+                LIMIT 1
+            ');
+            $next->execute(['variant_id' => $variantId]);
+            $nextId = $next->fetchColumn();
+
+            if ($nextId !== false) {
+                $setMain = $pdo->prepare('UPDATE variant_images SET is_main = 1 WHERE id = :id');
+                $setMain->execute(['id' => $nextId]);
+            }
+        }
+
+        $pdo->commit();
+        return $image['path'];
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * В транзакции: снимает `is_main` со всех фото Варианта, затем
+ * выставляет ровно указанному — «ровно одно главное фото» не
+ * наблюдается нарушенным между двумя отдельными запросами.
+ */
+function setMainVariantImage(int $productId, int $variantId, int $imageId): bool
+{
+    $pdo = getPdo();
+
+    $check = $pdo->prepare('
+        SELECT vi.id
+        FROM variant_images vi
+        INNER JOIN product_variants pv ON pv.id = vi.product_variant_id
+        WHERE vi.id = :image_id AND vi.product_variant_id = :variant_id AND pv.product_id = :product_id
+        LIMIT 1
+    ');
+    $check->execute(['image_id' => $imageId, 'variant_id' => $variantId, 'product_id' => $productId]);
+    if ($check->fetch() === false) {
+        return false;
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $reset = $pdo->prepare('UPDATE variant_images SET is_main = 0 WHERE product_variant_id = :variant_id');
+        $reset->execute(['variant_id' => $variantId]);
+
+        $setMain = $pdo->prepare('UPDATE variant_images SET is_main = 1 WHERE id = :image_id');
+        $setMain->execute(['image_id' => $imageId]);
+
+        $pdo->commit();
+        return true;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }
 
 function getProductSpecs(int $productId): array

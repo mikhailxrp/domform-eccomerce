@@ -55,5 +55,10 @@ define('ADMIN_CUSTOMERS_PER_PAGE', 20);
 // Панель управления — Товары (`.docs/phases/phase-4.md`, Таск 7)
 define('ADMIN_PRODUCTS_PER_PAGE', 20);
 
+// Панель управления — фото Вариантов (`.docs/phases/phase-4.md`, Таск 9)
+// Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
+// комментарий, tests/bootstrap.php не подключает config.php).
+define('UPLOAD_PRODUCTS_DIR', ROOT_PATH . '/public/uploads/products');
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

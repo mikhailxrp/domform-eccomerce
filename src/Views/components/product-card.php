@@ -11,13 +11,18 @@ $metaText   = trim(
 );
 $isListView = ($viewMode ?? 'grid') === 'list';
 
-// Фото темы из сидов (product-details/*) не рассчитаны на пропорции
-// мини-карточки — до реальной фотосъёмки (Фаза 4, FR-ADM-001) везде
-// заглушка из набора темы под сетку каталога (assets/images/product/,
-// 13 файлов), детерминированно по id товара, а не реальный
-// $product['image_path'].
+// Фото тем из сидов (product-details/*) не рассчитаны на пропорции
+// мини-карточки — заглушка из набора темы под сетку каталога
+// (assets/images/product/, 13 файлов), детерминированно по id товара.
+// Реальное фото с Таска 9 Фазы 4 (`uploads/products/...`) показывается
+// вместо заглушки; сидовые пути (`assets/images/...`) её не заменяют —
+// решение зафиксировано при планировании таска.
 $placeholderNumber = str_pad((string) ((($product['id'] - 1) % 13) + 1), 2, '0', STR_PAD_LEFT);
-$imageUrl           = '/assets/images/product/product-' . $placeholderNumber . '.jpg';
+$uploadedImagePath = $product['image_path'] ?? null;
+$isUploadedPhoto    = $uploadedImagePath !== null && str_starts_with(ltrim($uploadedImagePath, '/'), 'uploads/products/');
+$imageUrl           = $isUploadedPhoto
+    ? '/' . ltrim($uploadedImagePath, '/')
+    : '/assets/images/product/product-' . $placeholderNumber . '.jpg';
 
 ob_start();
 ?>

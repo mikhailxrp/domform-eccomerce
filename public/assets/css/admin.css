@@ -51,3 +51,15 @@
 .variant-picker__suggestions {
     z-index: 10;
 }
+
+/* Фото Вариантов (Таск 9 Фазы 4) — квадратная миниатюра вместо
+   фиксированной высоты: карточки разной ширины (адаптивная сетка) не
+   растягивают фото в прямоугольник. */
+.variant-photo-card__image {
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+}
+
+.variant-photo-card__order-input {
+    width: 3.5rem;
+}

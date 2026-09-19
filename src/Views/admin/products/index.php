@@ -20,6 +20,9 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
     <div>
         <h4 class="mb-0">Товары</h4>
     </div>
+    <div>
+        <a href="/admin/products/create" class="btn btn-primary">Добавить товар</a>
+    </div>
 </div>
 
 <div class="card custom-card">
