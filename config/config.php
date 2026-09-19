@@ -49,5 +49,11 @@ define('ADMIN_ORDERS_PER_PAGE', 20);
 // состава Заказа (`.docs/phases/phase-4.md`, Таск 4)
 define('ADMIN_VARIANT_SEARCH_LIMIT', 10);
 
+// Панель управления — Клиенты (`.docs/phases/phase-4.md`, Таск 6)
+define('ADMIN_CUSTOMERS_PER_PAGE', 20);
+
+// Панель управления — Товары (`.docs/phases/phase-4.md`, Таск 7)
+define('ADMIN_PRODUCTS_PER_PAGE', 20);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

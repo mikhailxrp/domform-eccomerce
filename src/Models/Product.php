@@ -443,6 +443,206 @@ function findActiveVariantIdBySku(string $sku): ?int
 }
 
 /**
+ * Условия `WHERE`/параметры для списка Товаров в Панели управления
+ * (Таск 7 Фазы 4) — общие для `getAdminProducts()`/`countAdminProducts()`,
+ * тот же принцип, что `buildAdminOrderFilterConditions()` в
+ * `Order.php`: список и счётчик не должны разойтись по условиям.
+ * Фильтр по категории — `EXISTS` на `product_categories` целиком, не
+ * только на основную (`is_primary`) — Товар в двух категориях должен
+ * быть виден в обеих, как и в каталоге витрины
+ * (`buildCatalogFilterConditions()`).
+ */
+function buildAdminProductFilterConditions(array $filters): array
+{
+    $conditions = [];
+    $params     = [];
+
+    $categoryId = $filters['category_id'] ?? null;
+    if ($categoryId !== null) {
+        $conditions[]           = 'EXISTS (
+            SELECT 1 FROM product_categories pcf
+            WHERE pcf.product_id = p.id AND pcf.category_id = :category_id
+        )';
+        $params['category_id'] = $categoryId;
+    }
+
+    $status = $filters['status'] ?? null;
+    if ($status === 'active') {
+        $conditions[] = 'p.is_active = 1';
+    } elseif ($status === 'hidden') {
+        $conditions[] = 'p.is_active = 0';
+    }
+
+    $search = trim((string) ($filters['search'] ?? ''));
+    if ($search !== '') {
+        $likeTerm = escapeLikeValue($search) . '%';
+
+        if (mb_strlen($search) >= 3) {
+            $fulltextTerm  = buildFulltextTerm($search);
+            $nameCondition = $fulltextTerm !== ''
+                ? 'MATCH(p.name, p.description) AGAINST (:search_fulltext IN BOOLEAN MODE)'
+                : '0 = 1';
+            if ($fulltextTerm !== '') {
+                $params['search_fulltext'] = $fulltextTerm;
+            }
+        } else {
+            $nameCondition          = 'p.name LIKE :search_name';
+            $params['search_name'] = $likeTerm;
+        }
+
+        $conditions[]           = "({$nameCondition} OR EXISTS (
+            SELECT 1 FROM product_variants pvs
+            WHERE pvs.product_id = p.id AND pvs.sku LIKE :search_sku
+        ))";
+        $params['search_sku'] = $likeTerm;
+    }
+
+    return [$conditions, $params];
+}
+
+function bindAdminProductFilterParams(PDOStatement $stmt, array $params): void
+{
+    foreach ($params as $key => $value) {
+        $stmt->bindValue(":{$key}", $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    }
+}
+
+/**
+ * Список Товаров для `/admin/products` (`FR-ADM-001`, `admin-
+ * assembly.md`) — основная категория (`is_primary = 1`), количество
+ * Вариантов и диапазон их цен одним `LEFT JOIN` на агрегат (без N+1),
+ * флаг Выставочного образца — если он есть хотя бы у одного Варианта.
+ * Фото — отдельным батч-запросом (`attachAdminProductPhoto()`), тем же
+ * приёмом, что `attachCheapestVariant()` для витрины, но без фильтра
+ * `is_active` — скрытый Товар в админке должен показывать своё фото,
+ * не пустое место. Диапазон цен, наоборот, — только по активным
+ * Вариантам (`phase-4.md`, Таск 7: «диапазон цен — из активных
+ * Вариантов») — деактивированный Вариант не продаётся, его цена не
+ * должна попадать в диапазон, который видит Менеджер; количество
+ * Вариантов при этом считается по всем (активным и нет) — это
+ * управленческая информация о структуре Товара, не о витрине.
+ */
+function getAdminProducts(array $filters, int $page, int $perPage): array
+{
+    $pdo = getPdo();
+
+    [$conditions, $params] = buildAdminProductFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+    $offset   = ($page - 1) * $perPage;
+
+    $stmt = $pdo->prepare("
+        SELECT
+            p.id, p.name, p.slug, p.is_active, p.is_featured,
+            c.name AS category_name,
+            COALESCE(vc.variant_count, 0) AS variant_count,
+            vc.min_price, vc.max_price,
+            COALESCE(vc.has_sample, 0) AS has_showroom_sample
+        FROM products p
+        LEFT JOIN product_categories pc ON pc.product_id = p.id AND pc.is_primary = 1
+        LEFT JOIN categories c ON c.id = pc.category_id
+        LEFT JOIN (
+            SELECT product_id, COUNT(*) AS variant_count,
+                   MIN(CASE WHEN is_active = 1 THEN price END) AS min_price,
+                   MAX(CASE WHEN is_active = 1 THEN price END) AS max_price,
+                   MAX(is_showroom_sample) AS has_sample
+            FROM product_variants
+            GROUP BY product_id
+        ) vc ON vc.product_id = p.id
+        {$whereSql}
+        ORDER BY p.created_at DESC
+        LIMIT :limit OFFSET :offset
+    ");
+    bindAdminProductFilterParams($stmt, $params);
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    if ($products === []) {
+        return [];
+    }
+
+    return attachAdminProductPhoto($pdo, $products);
+}
+
+function countAdminProducts(array $filters): int
+{
+    [$conditions, $params] = buildAdminProductFilterConditions($filters);
+    $whereSql = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+
+    $stmt = getPdo()->prepare("SELECT COUNT(*) FROM products p {$whereSql}");
+    bindAdminProductFilterParams($stmt, $params);
+    $stmt->execute();
+
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Главное фото самого дешёвого Варианта — тот же батч-приём, что
+ * `attachCheapestVariant()`, но намеренно без `pv.is_active = 1`: это
+ * список для Менеджера/Администратора, скрытый Товар должен быть узнаваем
+ * по фото, а не показывать пустую карточку.
+ */
+function attachAdminProductPhoto(PDO $pdo, array $products): array
+{
+    $productIds   = array_column($products, 'id');
+    $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+
+    $stmt = $pdo->prepare("
+        SELECT ranked.product_id, img.path AS image_path
+        FROM (
+            SELECT pv.*, ROW_NUMBER() OVER (PARTITION BY pv.product_id ORDER BY pv.price ASC, pv.id ASC) AS rn
+            FROM product_variants pv
+            WHERE pv.product_id IN ({$placeholders})
+        ) ranked
+        LEFT JOIN (
+            SELECT vi.*, ROW_NUMBER() OVER (
+                PARTITION BY vi.product_variant_id ORDER BY vi.is_main DESC, vi.sort_order ASC, vi.id ASC
+            ) AS rn2
+            FROM variant_images vi
+        ) img ON img.product_variant_id = ranked.id AND img.rn2 = 1
+        WHERE ranked.rn = 1
+    ");
+    $stmt->execute($productIds);
+
+    $imageByProduct = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $imageByProduct[(int) $row['product_id']] = $row['image_path'];
+    }
+
+    return array_map(static function (array $product) use ($imageByProduct): array {
+        $product['image_path'] = $imageByProduct[(int) $product['id']] ?? null;
+        return $product;
+    }, $products);
+}
+
+/**
+ * Текущее состояние для `AdminProductController::toggle()` — нужно
+ * знать `is_active` до переключения (текст уведомления «скрыт»/«снова
+ * виден») и отличить несуществующий Товар от существующего.
+ */
+function findProductForToggle(int $id): ?array
+{
+    $stmt = getPdo()->prepare('SELECT id, is_active FROM products WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $id]);
+    $product = $stmt->fetch();
+
+    return $product !== false ? $product : null;
+}
+
+/**
+ * Товар не удаляется физически — только скрывается/показывается
+ * (`database.md`, `ADR-004`); `order_items` уже оформленных Заказов
+ * хранят собственный снэпшот и не ссылаются на `products` напрямую, так
+ * что скрытие никак их не задевает.
+ */
+function setProductActive(int $id, bool $active): void
+{
+    $stmt = getPdo()->prepare('UPDATE products SET is_active = :active WHERE id = :id');
+    $stmt->execute(['active' => $active ? 1 : 0, 'id' => $id]);
+}
+
+/**
  * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
  * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
  * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный
