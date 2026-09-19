@@ -17,3 +17,4 @@ require_once ROOT_PATH . '/src/Core/Payment.php';
 require_once ROOT_PATH . '/src/Core/OrderActions.php';
 require_once ROOT_PATH . '/src/Core/ManualOrder.php';
 require_once ROOT_PATH . '/src/Core/Slug.php';
+require_once ROOT_PATH . '/src/Core/ProductForm.php';

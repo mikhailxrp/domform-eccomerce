@@ -8,6 +8,7 @@ require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
+require_once ROOT_PATH . '/src/Core/ProductForm.php';
 
 class AdminProductController
 {
@@ -75,5 +76,148 @@ class AdminProductController
 
         setFlash('success', (bool) $product['is_active'] ? 'Товар скрыт.' : 'Товар снова виден на витрине.');
         redirect('/admin/products');
+    }
+
+    public function create(): void
+    {
+        requireRole(['manager', 'admin']);
+
+        $this->renderForm(null, [], []);
+    }
+
+    public function store(): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $input  = normalizeProductInput($this->collectRawInput());
+        $errors = validateProductInput($input);
+        $this->markConflictingSkus($input, $errors, 0);
+
+        if (productFormHasErrors($errors)) {
+            $this->renderForm(null, $input, $errors);
+            return;
+        }
+
+        $id = createProductWithVariants($input, $input['variants'], $input['specs'], $input['category_ids'], $input['primary_category_id']);
+
+        if ($id === null) {
+            setFlash('error', 'Один из артикулов уже занят другим товаром — проверьте Варианты.');
+            $this->renderForm(null, $input, []);
+            return;
+        }
+
+        setFlash('success', 'Товар создан.');
+        redirect('/admin/products');
+    }
+
+    public function edit(string $id): void
+    {
+        requireRole(['manager', 'admin']);
+
+        $product = findProductForAdmin((int) $id);
+        if ($product === null) {
+            abort404();
+        }
+
+        $this->renderForm($product, $product, []);
+    }
+
+    public function update(string $id): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $product = findProductForAdmin((int) $id);
+        if ($product === null) {
+            abort404();
+        }
+
+        $input  = normalizeProductInput($this->collectRawInput());
+        $errors = validateProductInput($input);
+        $this->markConflictingSkus($input, $errors, (int) $id);
+
+        if (productFormHasErrors($errors)) {
+            $this->renderForm($product, $input, $errors);
+            return;
+        }
+
+        $updated = updateProductWithVariants(
+            (int) $id,
+            $input,
+            $input['variants'],
+            $input['specs'],
+            $input['category_ids'],
+            $input['primary_category_id']
+        );
+
+        if (!$updated) {
+            setFlash('error', 'Один из артикулов уже занят другим товаром — проверьте Варианты.');
+            $this->renderForm($product, $input, []);
+            return;
+        }
+
+        setFlash('success', 'Товар обновлён.');
+        redirect('/admin/products');
+    }
+
+    private function collectRawInput(): array
+    {
+        return [
+            'name'                => input('name'),
+            'slug'                => input('slug'),
+            'description'         => input('description'),
+            'is_featured'         => input('is_featured'),
+            'is_active'           => input('is_active'),
+            'categories'          => input('categories', []),
+            'primary_category_id' => input('primary_category_id'),
+            'specs'               => input('specs', []),
+            'variants'            => input('variants', []),
+        ];
+    }
+
+    /**
+     * `sku`, занятый Вариантом другого Товара в БД (не только внутри
+     * формы, это уже проверил `validateProductInput()`) — точечная
+     * ошибка поля через предварительный `SELECT`, а не только перехват
+     * SQLSTATE 23000 при записи: так конкретный ряд Варианта
+     * подсвечивается, а не общее сообщение «что-то не так». Сама
+     * попытка записи всё равно защищена перехватом 1062 в
+     * `createProductWithVariants()`/`updateProductWithVariants()` — на
+     * случай гонки между этой проверкой и сохранением.
+     */
+    private function markConflictingSkus(array $input, array &$errors, int $excludeProductId): void
+    {
+        $skus = array_values(array_filter(array_column($input['variants'], 'sku'), static fn (string $sku): bool => $sku !== ''));
+        if ($skus === []) {
+            return;
+        }
+
+        $conflicting = findConflictingSkus($skus, $excludeProductId);
+        if ($conflicting === []) {
+            return;
+        }
+
+        foreach ($input['variants'] as $index => $variant) {
+            if (in_array(mb_strtolower($variant['sku']), $conflicting, true)) {
+                $errors['variants'][$index]['sku_taken'] = true;
+            }
+        }
+    }
+
+    private function renderForm(?array $product, array $old, array $errors): void
+    {
+        $variantRows = max(PRODUCT_FORM_DEFAULT_VARIANT_ROWS, count($old['variants'] ?? []));
+        $specRows    = max(PRODUCT_FORM_DEFAULT_SPEC_ROWS, count($old['specs'] ?? []));
+
+        render('admin/products/form', [
+            'title'       => $product === null ? 'Новый товар' : 'Редактирование товара',
+            'product'     => $product,
+            'categories'  => getCategoriesFlat(),
+            'old'         => $old,
+            'errors'      => $errors,
+            'variantRows' => $variantRows,
+            'specRows'    => $specRows,
+        ]);
     }
 }

@@ -643,6 +643,283 @@ function setProductActive(int $id, bool $active): void
 }
 
 /**
+ * `sku`, уже занятые Вариантами ДРУГИХ Товаров (`$excludeProductId` —
+ * `0` при создании, id редактируемого Товара при правке — свои же
+ * прежние артикулы не конфликт) — точечная ошибка поля в Controller'е,
+ * до попытки записи (`AdminProductController::markConflictingSkus()`).
+ * Возвращает найденные `sku` в нижнем регистре — сравнение с формой
+ * регистронезависимое, как и сам `UNIQUE` на `utf8mb4_unicode_ci`.
+ */
+function findConflictingSkus(array $skus, int $excludeProductId): array
+{
+    if ($skus === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($skus), '?'));
+    $stmt         = getPdo()->prepare("
+        SELECT sku FROM product_variants
+        WHERE sku IN ({$placeholders}) AND product_id != ?
+    ");
+    $stmt->execute([...array_values($skus), $excludeProductId]);
+
+    return array_map('mb_strtolower', array_column($stmt->fetchAll(), 'sku'));
+}
+
+/**
+ * Все Варианты Товара для формы редактирования (Таск 8 Фазы 4) —
+ * в отличие от `getProductVariants()` (только `is_active = 1`, для
+ * витрины), здесь и деактивированные тоже: Менеджер должен видеть и
+ * снова включить ранее убранный Вариант, не только активные.
+ */
+function getAllProductVariants(int $productId): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT id, sku, material, mechanism_type, price, production_time,
+               is_showroom_sample, discount_percent, is_active
+        FROM product_variants
+        WHERE product_id = :product_id
+        ORDER BY id ASC
+    ');
+    $stmt->execute(['product_id' => $productId]);
+
+    return $stmt->fetchAll();
+}
+
+function getProductCategoryIds(int $productId): array
+{
+    $stmt = getPdo()->prepare(
+        'SELECT category_id, is_primary FROM product_categories WHERE product_id = :product_id'
+    );
+    $stmt->execute(['product_id' => $productId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Товар для формы редактирования (`FR-ADM-001`, Таск 8 Фазы 4) — со
+ * всеми Вариантами (не только активными), характеристиками и списком
+ * категорий с выделенной основной. Форма (`admin/products/form.php`)
+ * ожидает именно эту форму: `category_ids` — плоский список int,
+ * `primary_category_id` — `0`, если основная почему-то не выставлена
+ * (не должно происходить при обычной работе через эту же форму, но
+ * `getProductCategoryIds()` не гарантирует это на уровне БД).
+ */
+function findProductForAdmin(int $id): ?array
+{
+    $stmt = getPdo()->prepare(
+        'SELECT id, name, slug, description, is_active, is_featured FROM products WHERE id = :id LIMIT 1'
+    );
+    $stmt->execute(['id' => $id]);
+    $product = $stmt->fetch();
+
+    if ($product === false) {
+        return null;
+    }
+
+    $categoryRows = getProductCategoryIds($id);
+    $primaryRow   = null;
+    foreach ($categoryRows as $categoryRow) {
+        if ((int) $categoryRow['is_primary'] === 1) {
+            $primaryRow = $categoryRow;
+            break;
+        }
+    }
+
+    $product['variants']            = getAllProductVariants($id);
+    $product['specs']               = getProductSpecs($id);
+    $product['category_ids']        = array_map(static fn (array $row): int => (int) $row['category_id'], $categoryRows);
+    $product['primary_category_id'] = $primaryRow !== null ? (int) $primaryRow['category_id'] : 0;
+
+    return $product;
+}
+
+/**
+ * Пересобирает `product_categories` Товара — `DELETE` всех строк и
+ * `INSERT` нового набора, тот же приём, что `product_specs`
+ * (`syncProductSpecs()`) — набор категорий целиком заменяется формой
+ * при каждом сохранении, не патчится построчно.
+ */
+function syncProductCategories(PDO $pdo, int $productId, array $categoryIds, int $primaryId): void
+{
+    $delete = $pdo->prepare('DELETE FROM product_categories WHERE product_id = :product_id');
+    $delete->execute(['product_id' => $productId]);
+
+    $insert = $pdo->prepare(
+        'INSERT INTO product_categories (product_id, category_id, is_primary)
+         VALUES (:product_id, :category_id, :is_primary)'
+    );
+    foreach ($categoryIds as $categoryId) {
+        $insert->execute([
+            'product_id'  => $productId,
+            'category_id' => $categoryId,
+            'is_primary'  => $categoryId === $primaryId ? 1 : 0,
+        ]);
+    }
+}
+
+function syncProductSpecs(PDO $pdo, int $productId, array $specs): void
+{
+    $delete = $pdo->prepare('DELETE FROM product_specs WHERE product_id = :product_id');
+    $delete->execute(['product_id' => $productId]);
+
+    $insert = $pdo->prepare(
+        'INSERT INTO product_specs (product_id, name, value, sort_order)
+         VALUES (:product_id, :name, :value, :sort_order)'
+    );
+    foreach (array_values($specs) as $index => $spec) {
+        $insert->execute([
+            'product_id' => $productId,
+            'name'       => $spec['name'],
+            'value'      => $spec['value'],
+            'sort_order' => $index,
+        ]);
+    }
+}
+
+/**
+ * `$variants` — Вариант с `id > 0`, принадлежащий этому Товару
+ * (сверено с `$ownedIds`, прочитанным из БД до цикла, не с доверием к
+ * тому, что прислала форма) → `UPDATE`; иначе (новый, `id = 0`, или
+ * `id` чужого Товара — `dod-global.md`: чужие данные не трогаем) →
+ * `INSERT` новой строки, подменённый чужой `id` просто игнорируется.
+ * Существующий Вариант, отсутствующий среди `$variants` (снят с
+ * формы), → `is_active = 0`, не `DELETE` — Варианты физически не
+ * удаляются (`ADR-004`), на них могут ссылаться `order_items`.
+ */
+function syncProductVariants(PDO $pdo, int $productId, array $variants): void
+{
+    $ownedStmt = $pdo->prepare('SELECT id FROM product_variants WHERE product_id = :product_id');
+    $ownedStmt->execute(['product_id' => $productId]);
+    $ownedIds = array_map('intval', array_column($ownedStmt->fetchAll(), 'id'));
+
+    $updateStmt = $pdo->prepare(
+        'UPDATE product_variants
+         SET sku = :sku, material = :material, mechanism_type = :mechanism_type,
+             price = :price, production_time = :production_time,
+             is_showroom_sample = :is_showroom_sample, discount_percent = :discount_percent,
+             is_active = :is_active
+         WHERE id = :id AND product_id = :product_id'
+    );
+    $insertStmt = $pdo->prepare(
+        'INSERT INTO product_variants (
+            product_id, sku, material, mechanism_type, price, production_time,
+            is_showroom_sample, discount_percent, is_active
+        ) VALUES (
+            :product_id, :sku, :material, :mechanism_type, :price, :production_time,
+            :is_showroom_sample, :discount_percent, :is_active
+        )'
+    );
+
+    $submittedIds = [];
+
+    foreach ($variants as $variant) {
+        $params = [
+            'sku'                => $variant['sku'],
+            'material'           => $variant['material'],
+            'mechanism_type'     => $variant['mechanism_type'] !== '' ? $variant['mechanism_type'] : null,
+            'price'              => $variant['price'],
+            'production_time'    => $variant['production_time'],
+            'is_showroom_sample' => $variant['is_showroom_sample'] ? 1 : 0,
+            'discount_percent'   => $variant['discount_percent'] !== '' ? $variant['discount_percent'] : null,
+            'is_active'          => $variant['is_active'] ? 1 : 0,
+        ];
+
+        if ($variant['id'] > 0 && in_array($variant['id'], $ownedIds, true)) {
+            $updateStmt->execute($params + ['id' => $variant['id'], 'product_id' => $productId]);
+            $submittedIds[] = $variant['id'];
+        } else {
+            $insertStmt->execute($params + ['product_id' => $productId]);
+            $submittedIds[] = (int) $pdo->lastInsertId();
+        }
+    }
+
+    $missingIds = array_diff($ownedIds, $submittedIds);
+    if ($missingIds !== []) {
+        $placeholders   = implode(',', array_fill(0, count($missingIds), '?'));
+        $deactivateStmt = $pdo->prepare("UPDATE product_variants SET is_active = 0 WHERE id IN ({$placeholders})");
+        $deactivateStmt->execute(array_values($missingIds));
+    }
+}
+
+/**
+ * Дубликат `sku` (UNIQUE в БД, `SQLSTATE 23000`/MySQL 1062) — либо с
+ * чужим Товаром (в форме уникальность внутри неё уже проверена
+ * `validateProductInput()`), либо гонка параллельного сохранения —
+ * откат всей транзакции и `null`, тот же паттерн, что `createUser()`/
+ * `createCategory()`.
+ */
+function createProductWithVariants(array $product, array $variants, array $specs, array $categoryIds, int $primaryId): ?int
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare(
+            'INSERT INTO products (name, slug, description, is_active, is_featured)
+             VALUES (:name, :slug, :description, :is_active, :is_featured)'
+        );
+        $stmt->execute([
+            'name'        => $product['name'],
+            'slug'        => $product['slug'],
+            'description' => $product['description'] !== '' ? $product['description'] : null,
+            'is_active'   => $product['is_active'] ? 1 : 0,
+            'is_featured' => $product['is_featured'] ? 1 : 0,
+        ]);
+        $productId = (int) $pdo->lastInsertId();
+
+        syncProductCategories($pdo, $productId, $categoryIds, $primaryId);
+        syncProductSpecs($pdo, $productId, $specs);
+        syncProductVariants($pdo, $productId, $variants);
+
+        $pdo->commit();
+        return $productId;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        if (($e->errorInfo[1] ?? null) === 1062) {
+            return null;
+        }
+        throw $e;
+    }
+}
+
+function updateProductWithVariants(int $id, array $product, array $variants, array $specs, array $categoryIds, int $primaryId): bool
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare(
+            'UPDATE products
+             SET name = :name, slug = :slug, description = :description,
+                 is_active = :is_active, is_featured = :is_featured
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'name'        => $product['name'],
+            'slug'        => $product['slug'],
+            'description' => $product['description'] !== '' ? $product['description'] : null,
+            'is_active'   => $product['is_active'] ? 1 : 0,
+            'is_featured' => $product['is_featured'] ? 1 : 0,
+            'id'          => $id,
+        ]);
+
+        syncProductCategories($pdo, $id, $categoryIds, $primaryId);
+        syncProductSpecs($pdo, $id, $specs);
+        syncProductVariants($pdo, $id, $variants);
+
+        $pdo->commit();
+        return true;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        if (($e->errorInfo[1] ?? null) === 1062) {
+            return false;
+        }
+        throw $e;
+    }
+}
+
+/**
  * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
  * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
  * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный

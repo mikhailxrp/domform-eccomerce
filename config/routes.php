@@ -33,6 +33,8 @@ return [
         '/admin/categories/create' => ['AdminCategoryController', 'create'],
         '/admin/categories/{id}/edit' => ['AdminCategoryController', 'edit'],
         '/admin/products'          => ['AdminProductController', 'index'],
+        '/admin/products/create'   => ['AdminProductController', 'create'],
+        '/admin/products/{id}/edit' => ['AdminProductController', 'edit'],
         '/forgot-password'         => ['AuthController', 'showForgot'],
         '/reset-password/{token}'  => ['AuthController', 'showReset'],
     ],
@@ -61,5 +63,7 @@ return [
         '/admin/categories/{id}'        => ['AdminCategoryController', 'update'],
         '/admin/categories/{id}/delete' => ['AdminCategoryController', 'delete'],
         '/admin/products/{id}/toggle'   => ['AdminProductController', 'toggle'],
+        '/admin/products'               => ['AdminProductController', 'store'],
+        '/admin/products/{id}'          => ['AdminProductController', 'update'],
     ],
 ];

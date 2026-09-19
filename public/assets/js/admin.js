@@ -167,3 +167,91 @@
         }
     });
 })();
+
+// Добавление/удаление блока Варианта на форме Товара (Таск 8 Фазы 4) —
+// тот же приём клонирования `<template>` с `__INDEX__`, что у позиций
+// Заказа (Таск 5), под свои data-атрибуты (`variant-row`, не
+// `variant-picker` — форма Товара не ищет Вариант по артикулу, поля
+// вводятся вручную).
+(() => {
+    const container = document.querySelector('[data-variant-row-list]');
+    const addButton = document.querySelector('[data-variant-row-add]');
+    const template  = document.querySelector('[data-variant-row-template]');
+
+    if (!container || !addButton || !template) {
+        return;
+    }
+
+    let nextIndex = container.querySelectorAll('[data-variant-row]').length;
+
+    addButton.addEventListener('click', () => {
+        const html    = template.innerHTML.replaceAll('__INDEX__', String(nextIndex));
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html.trim();
+
+        if (wrapper.firstElementChild) {
+            container.append(wrapper.firstElementChild);
+            nextIndex += 1;
+        }
+    });
+
+    container.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('[data-variant-row-remove]');
+        if (!removeButton) {
+            return;
+        }
+        removeButton.closest('[data-variant-row]')?.remove();
+    });
+})();
+
+// Добавление/удаление строки характеристики на форме Товара (Таск 8
+// Фазы 4) — тот же приём, что блок Варианта выше.
+(() => {
+    const container = document.querySelector('[data-spec-row-list]');
+    const addButton = document.querySelector('[data-spec-row-add]');
+    const template  = document.querySelector('[data-spec-row-template]');
+
+    if (!container || !addButton || !template) {
+        return;
+    }
+
+    let nextIndex = container.querySelectorAll('[data-spec-row]').length;
+
+    addButton.addEventListener('click', () => {
+        const html    = template.innerHTML.replaceAll('__INDEX__', String(nextIndex));
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html.trim();
+
+        if (wrapper.firstElementChild) {
+            container.append(wrapper.firstElementChild);
+            nextIndex += 1;
+        }
+    });
+
+    container.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('[data-spec-row-remove]');
+        if (!removeButton) {
+            return;
+        }
+        removeButton.closest('[data-spec-row]')?.remove();
+    });
+})();
+
+// «Основная» категория доступна только среди отмеченных (Таск 8 Фазы
+// 4) — снятие чекбокса категории снимает и её радио «основная», если
+// оно было выбрано; без JS ту же связку проверяет
+// `validateProductInput()` на сервере.
+(() => {
+    document.addEventListener('change', (event) => {
+        const checkbox = event.target.closest('[data-category-checkbox]');
+        if (!checkbox || checkbox.checked) {
+            return;
+        }
+
+        const option = checkbox.closest('[data-category-option]');
+        const radio  = option?.querySelector('[data-category-primary]');
+        if (radio) {
+            radio.checked = false;
+        }
+    });
+})();
