@@ -672,3 +672,35 @@
 .reviews-empty {
     color: #777;
 }
+
+/* Отзывы о магазине на Главной (`FR-HOME-007`, Таск 6 Фазы 6) — макета
+   у карточки нет (`C-009`: «карточки готовит исполнитель доработки, не
+   отдельный дизайнер»), звёзды переиспользуют `.review-list__stars`
+   выше. */
+.store-review-card {
+    height: 100%;
+    padding: 24px;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.store-review-card__header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.store-review-card__name {
+    font-weight: 600;
+}
+
+.store-review-card__text {
+    margin-bottom: 12px;
+    color: #494949;
+}
+
+.store-review-card__date {
+    font-size: 13px;
+    color: #777;
+}

@@ -61,6 +61,9 @@ define('ADMIN_RETURNS_PER_PAGE', 20);
 // Панель управления — Отзывы (`.docs/phases/phase-6.md`, Таск 5)
 define('ADMIN_REVIEWS_PER_PAGE', 20);
 
+// Главная — размер блоков Товаров/отзывов (`.docs/phases/phase-6.md`, Таск 6)
+define('HOME_BLOCK_LIMIT', 8);
+
 // Панель управления — фото Вариантов (`.docs/phases/phase-4.md`, Таск 9)
 // Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
 // комментарий, tests/bootstrap.php не подключает config.php).

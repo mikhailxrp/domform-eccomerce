@@ -1410,3 +1410,85 @@ function attachCheapestVariant(PDO $pdo, array $products): array
         ];
     }, $products);
 }
+
+/**
+ * Блок «Хиты продаж» Главной (`FR-HOME-004`) — ручная отметка
+ * `is_featured`, тот же формат строки, что `getRelatedProducts()`
+ * (через `attachCheapestVariant()`, рендерится тем же `product-card.php`).
+ */
+function getFeaturedProducts(int $limit): array
+{
+    $pdo      = getPdo();
+    $priceSql = discountedPriceSql('pv');
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.is_active = 1 AND p.is_featured = 1
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    return $products !== [] ? attachCheapestVariant($pdo, $products) : [];
+}
+
+/**
+ * Блок «Новинки» Главной (`FR-HOME-005`) — 8 последних добавленных
+ * Товаров по дате создания; Товар без активных Вариантов не попадает
+ * (`INNER JOIN` требует хотя бы один).
+ */
+function getNewestProducts(int $limit): array
+{
+    $pdo      = getPdo();
+    $priceSql = discountedPriceSql('pv');
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.is_active = 1
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    return $products !== [] ? attachCheapestVariant($pdo, $products) : [];
+}
+
+/**
+ * Блок «Товары со скидкой» Главной (`FR-HOME-008`) — тот же критерий
+ * отбора, что фильтр каталога `on_sale` (`FR-CAT-010`, Таск 3 Фазы 6):
+ * хотя бы один активный Вариант с `discount_percent > 0`. `EXISTS` не
+ * умножает строки — `GROUP BY` не нужен, в отличие от `INNER JOIN` выше.
+ */
+function getDiscountedProducts(int $limit): array
+{
+    $pdo      = getPdo();
+    $priceSql = discountedPriceSql('pv');
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.is_active = 1 AND EXISTS (
+            SELECT 1 FROM product_variants pv2
+            WHERE pv2.product_id = p.id AND pv2.is_active = 1 AND pv2.discount_percent > 0
+        )
+        GROUP BY p.id, p.name, p.slug, p.created_at
+        ORDER BY p.created_at DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    return $products !== [] ? attachCheapestVariant($pdo, $products) : [];
+}

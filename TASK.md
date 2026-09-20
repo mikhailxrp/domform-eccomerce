@@ -2,156 +2,151 @@
 
 ## Фаза
 Phase 6 — Скидки, отзывы и главная страница
-(`.docs/phases/phase-6.md`), Таск 5 из 6.
+(`.docs/phases/phase-6.md`), Таск 6 из 6 (последний в фазе).
 
-**Статус:** ✅ Завершён 20.09.2026. Проверено на реальной БД живым HTTP
-(`php -S` + `curl`, cookie-сессия) на реальной строке `reviews` (id=7)
-и через временный customer-аккаунт для проверки роли. `composer test`
-— 296/296 (было 295/295, +1). Все тестовые строки/аккаунты удалены
-после проверки, `id=7` возвращён в исходный `pending`.
+**Статус:** ✅ Завершён 20.09.2026. Фаза 6 закрыта целиком. Проверено
+на реальной БД живым HTTP (`php -S` + `curl`): `install.php` дважды
+подряд без дублей `banners`, временная отметка `is_featured` + временный
+отзыв о магазине (оба удалены после проверки) корректно включили блоки
+«Хиты» и «Отзывы» в правильном порядке, «Новинки» — ровно 8 карточек,
+«Товары со скидкой» — реальная скидка 32 000 → 25 600 ₽. `composer
+test` — 296/296 (без изменений, регрессия). Реализация полностью
+соответствует плану ниже, дополнительных отклонений в процессе
+кодирования не потребовалось.
 
 ## Задача
-`FR-ADM-004` — `/admin/reviews`: очередь модерации с фильтром по
-статусу (по умолчанию `pending`), тип «о Товаре» (ссылка на Товар) /
-«о магазине», действия «Одобрить» / «Отклонить», бейдж с числом
-`pending` в сайдбаре. Плюс форма ручного добавления отзыва о магазине
-(`FR-HOME-007` правило 5: Владелец переносит отзывы из
-Instagram/WhatsApp) — `product_id = NULL`, сразу `approved`. Автор
-отклонённого отзыва не уведомляется (`FR-ADM-004` правило 3).
+`FR-HOME-001, 004…008` — слайдер главной читает баннеры из `banners`;
+блоки Товаров «Хиты продаж» (`is_featured`), «Новинки» (8 последних по
+`created_at`), «Товары со скидкой» (хотя бы один активный Вариант со
+скидкой); блок «Отзывы о магазине» сразу после «Хитов» (`C-009`,
+`FR-HOME-007` правило 1) — одобренные отзывы с `product_id IS NULL`.
+Каждый блок Товаров/отзывов скрыт целиком, если пуст (`FR-HOME-004/007/
+008`).
 
-Три уточнения против черновика `phase-6.md` по факту сверки с кодом
-(первые два обсуждены и подтверждены пользователем перед реализацией,
-третье — решение, принятое в процессе кодирования по образцу уже
-одобренного паттерна Таска 4, не требовало отдельного подтверждения):
+Порядок блоков на странице — ТЗ жёстко фиксирует только соседство
+«Хиты → Отзывы» (`FR-HOME-007` правило 1); остальное — Слайдер →
+Benefit («О компании») → Хиты продаж → Отзывы о магазине → Новинки →
+Товары со скидкой (Benefit остаётся на своём текущем месте сразу после
+слайдера, дальше — по порядку самого ТЗ в 8.0 `HOME`).
 
-1. **`config/config.php` добавлен в Scope** — черновик фазы не включал
-   его, но `AdminReviewController::index()` не может вызвать
-   `buildPagination()` без своей константы (по образцу
-   `ADMIN_ORDERS_PER_PAGE`, `ADMIN_RETURNS_PER_PAGE` и т.д., уже
-   заведённых построчно в этом файле).
-2. **`setReviewStatus()` не может полагаться только на
-   `rowCount()`** — соединение PDO не выставляет
-   `MYSQL_ATTR_FOUND_ROWS` (`Core/Database.php`), поэтому `UPDATE ...
-   WHERE id = :id` на уже `approved` строке тоже вернёт
-   `rowCount() === 0`, как и на несуществующем `id`. DoD различает эти
-   два случая (повторное «Одобрить» — успех, несуществующий id —
-   «не найден»), значит при `rowCount() === 0` нужна отдельная
-   проверка существования строки, а не единственный сигнал
-   `rowCount()`.
-3. **`storeShopReview()` при ошибке валидации — прямой рендер
-   `index()` с `$old`/`$errors`, не `setFlash()` + `redirect`** (как
-   исходно записано в Scope ниже): `setFlash()` хранит только строку,
-   массив ошибок по полям не переживёт редирект — тот же приём, что
-   `ReviewController::store()` (Таск 4) и `AdminCategoryController`
-   уже используют в проекте; без этого `dod-global.md` («Некорректные
-   данные — поля подсвечиваются с ошибкой») не выполняется для формы
-   отзыва о магазине.
+Три уточнения против черновика `phase-6.md` по факту сверки с кодом/
+схемой БД (обсуждены и подтверждены пользователем перед реализацией):
+
+1. **Сид `banners` в `install.php` не может быть `INSERT IGNORE`, «как
+   `sales_channels`»** — у `sales_channels`/`integrations` есть
+   `UNIQUE(code)`, на который опирается `IGNORE`; у `banners` нет
+   уникального ключа кроме автоинкрементного `id` (`database.md`).
+   Повторный `INSERT IGNORE` вставил бы дубли — нарушение DoD
+   «`install.php` дважды подряд без дублей». Сидим через явную
+   проверку `SELECT COUNT(*) FROM banners` — только если пусто.
+2. **`HOME_BLOCK_LIMIT = 8` заводится в `config/config.php`** (черновик
+   фазы не указывал место) — по аналогии с `CATALOG_PER_PAGE`/
+   `SEARCH_SUGGEST_LIMIT`, тем же «сколько штук показывать».
+3. **Блок «О компании» (`FR-HOME-006`) не пересобирается** — секция
+   Benefit в `home.php` (три пункта: «Изготовление под заказ / Оплата /
+   Доставка», сделана в Фазе 0/1) уже и есть требуемый «текстово-
+   визуальный блок»: отдельного макета «About Us» на главной в теме
+   `00-input/design/index.html` нет вообще (только виджет в футере с
+   тем же названием, к главной не относится). В этом таске секция не
+   меняется по содержанию, только по месту в `home.php`.
 
 ## Scope — что трогаем
 
-- [x] `config/config.php` — изменить: константа `ADMIN_REVIEWS_PER_PAGE`
-      (по аналогии с `ADMIN_RETURNS_PER_PAGE`)
-- [x] `src/Models/Review.php` — изменить:
-      `getAdminReviews(array $filters, int $page, int $perPage): array`
-      (`LEFT JOIN products` для ссылки на Товар и его `slug`/`name`, по
-      образцу `getAdminReturns()`), `countAdminReviews(array $filters):
-      int`, `setReviewStatus(int $id, string $status): bool` (см.
-      уточнение 2 выше — при `rowCount() === 0` дополнительно проверяет
-      существование строки, чтобы вернуть `true` на идемпотентном
-      повторе и `false` только когда `id` реально не существует),
-      `countPendingReviews(): int`, `createStoreReview(array $data):
-      int` (`product_id = NULL`, `status = 'approved'` сразу в
-      `INSERT`, без отдельного `setReviewStatus()`; сигнатура — `int`,
-      не `?int` из черновика: у отзыва о магазине нет уникальных
-      ограничений, которые могли бы дать `INSERT` провалиться)
-- [x] `src/Controllers/AdminReviewController.php` — создать:
-      `index(array $storeReviewOld = [], array $storeReviewErrors = [])`
-      — `requireRole(['manager','admin'])`, статус из
-      `input('status', 'pending')` через whitelist
-      `REVIEW_STATUS_PENDING/_APPROVED/_REJECTED` (иначе — `pending`, по
-      образцу `AdminOrderController::index()`), `countAdminReviews()` +
-      `buildPagination()` + `getAdminReviews()`, `render('admin/reviews/
-      index', ...)`; `approve(string $id)` / `reject(string $id)` —
-      `requireRole(...)`, `requireCsrf()`, `setReviewStatus()` →
-      `false` → `setFlash('error', 'Отзыв не найден.')`, `true` →
-      `setFlash('success', ...)`, оба варианта `redirect('/admin/
-      reviews')`; `storeShopReview()` — `requireRole(...)`,
-      `requireCsrf()`, `normalizeReviewInput()` → `validateReviewInput()`
-      (тот же валидатор формы витрины, `product_id` не участвует в
-      проверке) → при ошибке `$this->index($input, $errors)` без
-      редиректа (см. уточнение 3), при успехе `createStoreReview()` +
-      `setFlash('success', ...)` + `redirect('/admin/reviews')`
-- [x] `src/Views/admin/reviews/index.php` — создать: фильтр статуса
-      (select, как `admin/orders/index.php`), список (автор, рейтинг,
-      тип со ссылкой на Товар при `product_id` / «о магазине», дата,
-      текст, кнопки «Одобрить»/«Отклонить» — показаны всегда, действие
-      идемпотентно на бэкенде), пустое состояние, серверная пагинация
-      (`paginationLinks`, `prevUrl`/`nextUrl`, по образцу
-      `admin/returns/index.php`), форма добавления отзыва о магазине
-      (имя, email, рейтинг, текст, `csrfField()`, подсветка ошибок по
-      полю через `$storeReviewOld`/`$storeReviewErrors`)
-- [x] `src/Views/layout/admin-header.php` — изменить: пункт «Отзывы»
-      (`/admin/reviews`) в `$adminNavItems` с бейджем — количество
-      считается прямым вызовом `countPendingReviews()` внутри этого
-      файла (по образцу `currentUser()`/`requestPath()`, вызываемых там
-      же напрямую, без передачи через `render()`), требует
-      `Models/Review.php`
-- [x] `config/routes.php` — изменить: `GET /admin/reviews` →
-      `['AdminReviewController', 'index']`,
-      `POST /admin/reviews` → `['AdminReviewController',
-      'storeShopReview']`,
-      `POST /admin/reviews/{id}/approve` → `['AdminReviewController',
-      'approve']`,
-      `POST /admin/reviews/{id}/reject` → `['AdminReviewController',
-      'reject']`
-- [x] `tests/Unit/ReviewTest.php` — изменить: кейс на
-      `validateReviewInput()` для формы отзыва о магазине (те же
-      данные, но без `product_id` в входном массиве — подтверждает, что
-      валидатор не завязан на его наличие)
+- [x] `config/config.php` — изменить: константа `HOME_BLOCK_LIMIT = 8`
+      (см. уточнение 2)
+- [x] `src/Models/Product.php` — изменить: `getFeaturedProducts(int
+      $limit): array` (`p.is_featured = 1`, `INNER JOIN
+      product_variants pv ON pv.product_id = p.id AND pv.is_active = 1`,
+      `GROUP BY`, `ORDER BY p.created_at DESC`, по образцу
+      `getRelatedProducts()`), `getNewestProducts(int $limit): array`
+      (тот же JOIN/GROUP BY, без фильтра `is_featured`),
+      `getDiscountedProducts(int $limit): array` (`EXISTS (SELECT 1
+      FROM product_variants pvX WHERE pvX.product_id = p.id AND
+      pvX.is_active = 1 AND pvX.discount_percent > 0)` — то же условие,
+      что `on_sale` в `buildCatalogFilterConditions()`, Таск 3); везде
+      `p.is_active = 1`, непустой результат прогоняется через
+      `attachCheapestVariant($pdo, $products)` (уже готова, без N+1)
+- [x] `src/Models/Banner.php` — создать: `getActiveBanners(): array`
+      (`SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order,
+      id`)
+- [x] `database/install.php` — изменить: сид 3 баннеров (переносятся
+      текущие слайды `home.php`: заголовок + `/assets/images/slider/
+      slider-item-N.png`, без подзаголовка — в схеме `banners` нет
+      отдельного поля под него, `title` = заголовку слайда), обёрнут в
+      `if ((int) $pdo->query('SELECT COUNT(*) FROM banners')
+      ->fetchColumn() === 0)` (см. уточнение 1, не `INSERT IGNORE`)
+- [x] `src/Models/Review.php` — изменить: `getApprovedStoreReviews(int
+      $limit): array` (`WHERE product_id IS NULL AND status =
+      'approved' ORDER BY created_at DESC LIMIT`, по образцу
+      `getApprovedProductReviews()`)
+- [x] `src/Controllers/HomeController.php` — изменить: `index()`
+      собирает `$banners`, `$featuredProducts`, `$storeReviews`,
+      `$newestProducts`, `$discountedProducts` (все — `HOME_BLOCK_LIMIT`)
+      и передаёt в `render('home', ...)`
+- [x] `src/Views/home.php` — переписать: слайдер строится из `$banners`
+      (`foreach`, без хардкода 3 слайдов), порядок секций — см.
+      «Задача» выше; каждый блок Товаров/отзывов подключается только
+      при непустом массиве (пустой — секция не рендерится совсем, не
+      пустая сетка)
+- [x] `src/Views/components/home-product-section.php` — создать:
+      принимает `$heading`/`$products`, оборачивает в `.shop-product-
+      wrapper > .row` + `foreach` с `include product-card.php`
+      (`$viewMode = 'grid'`) — тот же приём, что `catalog-grid.php`/
+      `product/show.php` («Похожие товары»); ничего не рендерит при
+      пустом `$products`
+- [x] `src/Views/components/store-review-card.php` — создать: имя,
+      рейтинг (звёзды — тот же приём заливки, что `review-list.php`),
+      текст, дата — новая карточка (`C-009`: макета нет, карточки
+      готовит исполнитель)
+- [x] `public/assets/css/app.css` — изменить: стили `.store-review-
+      card` (BEM, mobile-first)
 
 ## Out of scope — не трогаем
 
-- Уведомление автора отзыва (email/SMS) при отклонении/одобрении —
-  `FR-ADM-004` правило 3 прямо запрещает это для отклонения; для
-  одобрения ТЗ уведомление не требует
-- Блоки Главной, включая «Отзывы о магазине» и их вывод на `/` (Таск 6)
-- `src/Views/product/show.php`, `review-form.php`, `review-list.php` —
-  витринная часть отзывов уже сделана в Таске 4, не трогали
-- Изменение схемы БД / `database/install.php` — `reviews` заведена с
-  Фазы 0 (`ADR-015`)
-- Массовые действия (одобрить/отклонить несколько отзывов сразу) — не
-  в ТЗ, каждая строка — отдельное действие
-- Редактирование текста отзыва Менеджером — ТЗ не описывает такую
-  функцию, только одобрение/отклонение
+- Редактирование баннеров/текста «О компании» в Панели управления
+  (`FR-ADM-003` → Фаза 8) — баннеры только читаются, UI управления не
+  строится
+- Содержимое секции Benefit («О компании») — не меняется, только
+  положение в `home.php` (см. уточнение 3)
+- Средний рейтинг/сводка по отзывам о магазине — ТЗ (`FR-HOME-007`)
+  требует только карточки отзывов, не агрегат
+- Иконка «в избранное» на мини-карточке (`FR-CAT-009` → Фаза 7)
+- Меню категорий и поиск в шапке (`FR-HOME-002/003`) — уже сделаны в
+  Фазе 1, в этом таске только регрессионная проверка, без правок кода
+- `src/Views/components/product-card.php` — переиспользуется как есть,
+  не меняется
+- Изменение схемы БД — `banners`/`is_featured`/`discount_percent`
+  заведены в Фазе 0 (`ADR-015/023/024`)
 - Любой рефакторинг за пределами перечисленных файлов
 
 ## Definition of Done
 
-- [x] Одобрение → отзыв появляется на карточке Товара; отклонение → не
-      появляется, никаких писем/СМС автору — проверено живым HTTP на
-      реальной БД: `id=7` → `approved` → появился на
-      `/product/shkaf-klassik` (средняя оценка «3.0 из 5»); → `rejected`
-      → пропал
-- [x] Повторное «Одобрить» на уже `approved` — успех (идемпотентно, не
-      «не найден»); запрос с несуществующим `id=999999` → flash «Отзыв
-      не найден.», строка в `reviews` не создана и не изменена —
-      проверено
-- [x] Отзыв о магазине из формы: в БД `product_id IS NULL`,
-      `status = 'approved'` сразу после отправки — проверено (запись с
-      кириллическим именем через percent-encoded файл, обойдя тот же
-      Bash `--data-urlencode`-артефакт, что и в Таске 4); пустая форма
-      → все 4 поля подсвечены `is-invalid`, значения сохранены при
-      повторном показе
-- [x] Фильтр `pending`/`approved`/`rejected`/без параметра (все) —
-      проверено; мусорное значение `?status=garbage` → 200, откат к
-      `pending`, не 500; бейдж в сайдбаре виден на любой странице
-      Панели (`/admin/orders` тоже) и совпадает с фактическим числом
-      `pending`
-- [x] `customer` (временный тестовый аккаунт) по `/admin/reviews` (GET
-      и POST) → редирект на `/`; незалогиненный → `/login`; POST без
-      CSRF-токена → 419 — проверено, действие не выполняется ни в
-      одном из случаев
-- [x] `composer test` зелёный (296/296, было 295/295, +1)
+- [x] Отметка «хит» у Товара / скидка у Варианта / одобренный отзыв о
+      магазине → появляется в своём блоке; снятие последнего →
+      блок исчезает целиком, не показывает пустую сетку — проверено на
+      реальной БД (временные `is_featured`/отзыв о магазине, удалены
+      после проверки)
+- [x] «Новинки» — ровно 8 по `created_at DESC`; неактивный Товар и
+      Товар без активных Вариантов не попадают ни в один из трёх блоков
+- [x] Блок отзывов о магазине стоит сразу после «Хитов продаж»; отзыв о
+      Товаре (`product_id` заполнен) в нём не показывается; `pending`
+      — не видна
+- [x] Слайдер показывает строки `banners` в порядке `sort_order`;
+      `php database/install.php` дважды подряд — ровно 3 строки
+      `banners`, без дублей
+- [x] Мини-карточки блоков показывают старую/новую цену (Таск 2,
+      проверено на реальной скидке 32 000 → 25 600 ₽) и ведут на
+      карточку товара; один батч-запрос `attachCheapestVariant()` на
+      блок, без N+1
+- [x] Меню категорий и поиск в шапке работают на главной — регрессия
+      (`/catalog`, `/search` → 200); секция Benefit («О компании») на
+      месте и не сломана
+- [x] В HTML нет внешних адресов; весь вывод через `e()`/
+      `formatPrice()`
+- [x] `composer test` зелёный (296/296, без изменений — регрессия;
+      новых чистых функций без побочных эффектов в этом таске нет,
+      Model-функции ходят в БД, юнит-тестом не покрываются по
+      `dod-global.md`)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
@@ -159,5 +154,5 @@ Instagram/WhatsApp) — `product_id = NULL`, сразу `approved`. Автор
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
-- На каждый шаг — чем проверяется (пункт DoD / unit-тест / ручная
-  проверка на реальной БД/HTTP), не только что сделать
+- На каждый шаг — чем проверяется (пункт DoD / ручная проверка на
+  реальной БД/HTTP), не только что сделать

@@ -54,6 +54,26 @@ function getApprovedProductReviews(int $productId): array
 }
 
 /**
+ * Блок «Отзывы о магазине» Главной (`FR-HOME-007`) — одобренные отзывы
+ * с `product_id IS NULL`, ограничены `HOME_BLOCK_LIMIT`; отзывы о
+ * конкретном Товаре сюда не попадают (`FR-HOME-007` правило 3).
+ */
+function getApprovedStoreReviews(int $limit): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT id, name, rating, text, created_at
+        FROM reviews
+        WHERE product_id IS NULL AND status = \'approved\'
+        ORDER BY created_at DESC, id DESC
+        LIMIT :limit
+    ');
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
+/**
  * Очередь модерации `/admin/reviews` (Таск 5, `FR-ADM-004`) — тип «о
  * Товаре»/«о магазине» определяется на Views по `product_id`,
  * `LEFT JOIN products` даёт `slug`/`name` для ссылки. `$filters['status']
