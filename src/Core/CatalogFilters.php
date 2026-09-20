@@ -26,6 +26,7 @@ function normalizeCatalogFilters(array $query): array
         'price_min'    => $priceMin,
         'price_max'    => $priceMax,
         'in_stock'     => normalizeCatalogInStock($query['in_stock'] ?? null),
+        'on_sale'      => normalizeCatalogOnSale($query['on_sale'] ?? null),
     ];
 }
 
@@ -85,6 +86,16 @@ function normalizeCatalogInStock(mixed $value): bool
 }
 
 /**
+ * Фильтр «Со скидкой» (`FR-CAT-010`, Таск 3 Фазы 6) — тот же контракт,
+ * что `normalizeCatalogInStock()`: только `'1'` включает фильтр, любое
+ * другое значение (включая мусор) — «не применён».
+ */
+function normalizeCatalogOnSale(mixed $value): bool
+{
+    return $value === '1' || $value === 1 || $value === true;
+}
+
+/**
  * Query-строка фильтров без `page` (пагинация добавляет её сама) — для
  * ссылок пагинации и «Сбросить фильтры». Значения по умолчанию не
  * попадают в строку, URL остаётся чистым, когда фильтр не применён.
@@ -110,6 +121,9 @@ function buildCatalogQueryString(array $filters): string
     }
     if (!empty($filters['in_stock'])) {
         $params['in_stock'] = '1';
+    }
+    if (!empty($filters['on_sale'])) {
+        $params['on_sale'] = '1';
     }
 
     return http_build_query($params);

@@ -2776,3 +2776,40 @@ class="price">` у бездискидочной; `/checkout` — сумма 29 7
 **Что следующее:** Таск 3 Фазы 6 — фильтр каталога «Со скидкой».
 
 ---
+
+**Дата:** 20.09.2026
+**Что сделано:** Таск 3 Фазы 6 — фильтр каталога «Со скидкой»
+(`FR-CAT-010`). Реализовано зеркально уже существующему фильтру
+«В наличии»: `normalizeCatalogOnSale()` в `Core/CatalogFilters.php`
+(только `'1'` включает, остальное — «не применён»), ключ `on_sale` в
+`normalizeCatalogFilters()`/`buildCatalogQueryString()`, условие
+`EXISTS (... pv5.discount_percent > 0)` в
+`buildCatalogFilterConditions()` (`Models/Product.php`), чекбокс в
+`catalog-sidebar.php` на уже отмеченном в разметке месте. `Catalog
+Controller.php`, `SearchController.php` и `app.js` не менялись —
+контроллер уже передаёт `$_GET` целиком в `normalizeCatalogFilters()`,
+у страницы поиска сайдбара с фильтрами нет вовсе, а JS уже слушает все
+поля `#catalog-filter-form`. Новый индекс в БД не заводился — `EXISTS`
+уже ограничен по индексированному `product_id`, тот же паттерн, что у
+`in_stock`/цвета, которые тоже работают без отдельного индекса под
+условие внутри `EXISTS`.
+
+Проверено на реальной БД живым HTTP (`php -S` + `curl`) — без создания
+тестовых данных, на уже существующей реальной скидке 20% на «Шкаф
+распашной «Классик»» (`shkaf-klassik`): `on_sale=1` вернул ровно этот
+Товар; `on_sale=yes` (мусор) → 200, фильтр не применён, не 500;
+сочетание с категорией, не содержащей этот Товар, → пустое состояние
+«Ничего не найдено» (AND-логика подтверждена); чекбокс в сайдбаре
+показывает `checked`; «Сбросить фильтры» ведёт на чистый `/catalog`.
+Никаких изменений в БД не делал — тестовых данных на уборку не было.
+
+`composer test`: 274/274 (было 271/271, +3 — `testOnSaleAcceptsOnly
+StringOne`, `testOnSaleIgnoresGarbageValue`,
+`testBuildCatalogQueryStringOmitsOnSaleWhenNotApplied`, плюс расширены
+`testDefaultsOnEmptyQuery` и `testBuildCatalogQueryStringIncludes
+ActiveFilters`).
+
+**Что следующее:** Таск 4 Фазы 6 — отзывы о Товаре: форма и блок на
+карточке.
+
+---

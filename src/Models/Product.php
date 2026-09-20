@@ -13,8 +13,9 @@ require_once ROOT_PATH . '/src/Core/Price.php';
  *
  * `$filters` — нормализованный массив из `normalizeCatalogFilters()`
  * (`CatalogFilters.php`): `category_ids`/`colors` — int[]/string[],
- * `price_min`/`price_max` — ?int, `in_stock` — bool. Все ключи
- * необязательны — отсутствующий/пустой означает «фильтр не применён».
+ * `price_min`/`price_max` — ?int, `in_stock`/`on_sale` — bool. Все
+ * ключи необязательны — отсутствующий/пустой означает «фильтр не
+ * применён».
  */
 function getCatalogProducts(array $filters, string $sort, int $page, int $perPage): array
 {
@@ -188,6 +189,18 @@ function buildCatalogFilterConditions(array $filters): array
                   SELECT 1 FROM reserves r4
                   WHERE r4.product_variant_id = pv4.id AND r4.status = 'active'
               )
+        )";
+    }
+
+    if (!empty($filters['on_sale'])) {
+        // Товар «со скидкой» — хотя бы один активный Вариант с
+        // заполненным `discount_percent` (`FR-DISC-001` правило 4,
+        // `FR-CAT-010`, Таск 3 Фазы 6). `> 0` — тот же контракт, что
+        // `hasDiscount()`/`discountedPriceSql()` (`ADR-041`): `NULL`
+        // и `0` трактуются как «скидки нет».
+        $conditions[] = "EXISTS (
+            SELECT 1 FROM product_variants pv5
+            WHERE pv5.product_id = p.id AND pv5.is_active = 1 AND pv5.discount_percent > 0
         )";
     }
 
