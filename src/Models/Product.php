@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Core/Database.php';
+require_once ROOT_PATH . '/src/Core/Price.php';
 
 /**
  * Список Товаров каталога — цена и фото на карточке берутся от самого
@@ -30,9 +31,10 @@ function getCatalogProducts(array $filters, string $sort, int $page, int $perPag
 
     $whereSql = implode(' AND ', $where);
     $offset   = ($page - 1) * $perPage;
+    $priceSql = discountedPriceSql('pv');
 
     $stmt = $pdo->prepare("
-        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
         FROM products p
         INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
         WHERE {$whereSql}
@@ -83,9 +85,13 @@ function getFilterOptions(?int $categoryId): array
     $categoryJoin = $categoryId !== null
         ? 'INNER JOIN product_categories pc ON pc.product_id = p.id AND pc.category_id = :category_id'
         : '';
+    $priceSql = discountedPriceSql('pv');
 
+    // Границы — по эффективной (скидочной) цене: фильтр `price_min`/
+    // `price_max` (`buildCatalogFilterConditions()`) сравнивает с ней же,
+    // иначе слайдер предлагал бы диапазон шире, чем реально отбирает.
     $priceStmt = $pdo->prepare("
-        SELECT MIN(pv.price) AS price_min, MAX(pv.price) AS price_max
+        SELECT MIN({$priceSql}) AS price_min, MAX({$priceSql}) AS price_max
         FROM products p
         INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
         {$categoryJoin}
@@ -153,13 +159,17 @@ function buildCatalogFilterConditions(array $filters): array
     $priceMin = $filters['price_min'] ?? null;
     $priceMax = $filters['price_max'] ?? null;
     if ($priceMin !== null || $priceMax !== null) {
+        // Сравнение — по эффективной (скидочной) цене Варианта
+        // (`discountedPriceSql()`, `ADR-041`), не по сырой `pv3.price` —
+        // границы слайдера (`getFilterOptions()`) построены по ней же.
+        $priceSql3        = discountedPriceSql('pv3');
         $priceConditions = ['pv3.is_active = 1'];
         if ($priceMin !== null) {
-            $priceConditions[]    = 'pv3.price >= :price_min';
+            $priceConditions[]    = "{$priceSql3} >= :price_min";
             $params['price_min'] = $priceMin;
         }
         if ($priceMax !== null) {
-            $priceConditions[]    = 'pv3.price <= :price_max';
+            $priceConditions[]    = "{$priceSql3} <= :price_max";
             $params['price_max'] = $priceMax;
         }
         $priceWhere   = implode(' AND ', $priceConditions);
@@ -221,10 +231,11 @@ function searchProducts(string $q, string $sort, int $page, int $perPage): array
         default      => 'p.created_at DESC',
     };
 
-    $offset = ($page - 1) * $perPage;
+    $offset   = ($page - 1) * $perPage;
+    $priceSql = discountedPriceSql('pv');
 
     $stmt = $pdo->prepare("
-        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
         FROM products p
         INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
         WHERE p.is_active = 1 AND ({$where})
@@ -272,9 +283,10 @@ function suggestProducts(string $q, int $limit): array
     $pdo = getPdo();
 
     [$where, $params] = buildSearchConditions($q);
+    $priceSql = discountedPriceSql('pv');
 
     $stmt = $pdo->prepare("
-        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
         FROM products p
         INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
         WHERE p.is_active = 1 AND ({$where})
@@ -395,8 +407,11 @@ function searchVariantsForAdmin(string $q, int $limit): array
         $params        = ['name_term' => $likeTerm];
     }
 
+    $priceSql = discountedPriceSql('pv');
+
     $stmt = $pdo->prepare("
-        SELECT pv.id, pv.sku, pv.price, pv.material, pv.mechanism_type,
+        SELECT pv.id, pv.sku, {$priceSql} AS price, pv.price AS old_price,
+               pv.discount_percent, pv.material, pv.mechanism_type,
                pv.is_showroom_sample, p.name AS product_name
         FROM product_variants pv
         INNER JOIN products p ON p.id = pv.product_id
@@ -1058,9 +1073,12 @@ function findProductBySlug(string $slug): ?array
 
 function getProductVariants(int $productId): array
 {
+    $priceSql = discountedPriceSql('pv');
+
     $stmt = getPdo()->prepare("
         SELECT
-            pv.id, pv.sku, pv.material, pv.mechanism_type, pv.price,
+            pv.id, pv.sku, pv.material, pv.mechanism_type,
+            {$priceSql} AS price, pv.price AS old_price, pv.discount_percent,
             pv.production_time, pv.is_showroom_sample,
             EXISTS (
                 SELECT 1 FROM reserves r
@@ -1068,7 +1086,7 @@ function getProductVariants(int $productId): array
             ) AS has_active_reserve
         FROM product_variants pv
         WHERE pv.product_id = :product_id AND pv.is_active = 1
-        ORDER BY pv.price ASC, pv.id ASC
+        ORDER BY {$priceSql} ASC, pv.id ASC
     ");
     $stmt->execute(['product_id' => $productId]);
 
@@ -1291,10 +1309,11 @@ function getProductSpecs(int $productId): array
  */
 function getRelatedProducts(int $productId, int $categoryId, int $limit): array
 {
-    $pdo = getPdo();
+    $pdo      = getPdo();
+    $priceSql = discountedPriceSql('pv');
 
-    $stmt = $pdo->prepare('
-        SELECT p.id, p.name, p.slug, MIN(pv.price) AS min_price
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price
         FROM products p
         INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
         INNER JOIN product_categories pc ON pc.product_id = p.id AND pc.category_id = :category_id
@@ -1302,7 +1321,7 @@ function getRelatedProducts(int $productId, int $categoryId, int $limit): array
         GROUP BY p.id, p.name, p.slug, p.created_at
         ORDER BY p.created_at DESC
         LIMIT :limit
-    ');
+    ");
     $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
     $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -1317,19 +1336,30 @@ function getRelatedProducts(int $productId, int $categoryId, int $limit): array
 }
 
 /**
- * Добавляет к каждому Товару данные самого дешёвого активного Варианта
- * (id/материал/цвет/фото) одним батч-запросом — без N+1 на страницу
- * каталога.
+ * Добавляет к каждому Товару данные самого дешёвого (по эффективной,
+ * скидочной цене — `ADR-041`) активного Варианта (id/материал/цвет/
+ * фото/цена) одним батч-запросом — без N+1 на страницу каталога.
+ * `min_price`/`min_old_price`/`discount_percent` пересчитываются здесь
+ * же из найденного Варианта, а не копируются из `$product['min_price']`
+ * (агрегата вызывающего запроса) — иначе «самый дешёвый по скидке»
+ * Вариант и показанная цена рисковали бы разойтись при расхождении
+ * критериев сортировки.
  */
 function attachCheapestVariant(PDO $pdo, array $products): array
 {
-    $productIds  = array_column($products, 'id');
+    $productIds   = array_column($products, 'id');
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+    $priceSql     = discountedPriceSql('pv');
 
     $stmt = $pdo->prepare("
-        SELECT ranked.product_id, ranked.id AS variant_id, ranked.material, img.path AS image_path, img.color
+        SELECT
+            ranked.product_id, ranked.id AS variant_id, ranked.material,
+            ranked.price AS old_price, ranked.discount_percent,
+            img.path AS image_path, img.color
         FROM (
-            SELECT pv.*, ROW_NUMBER() OVER (PARTITION BY pv.product_id ORDER BY pv.price ASC, pv.id ASC) AS rn
+            SELECT pv.*, ROW_NUMBER() OVER (
+                PARTITION BY pv.product_id ORDER BY {$priceSql} ASC, pv.id ASC
+            ) AS rn
             FROM product_variants pv
             WHERE pv.is_active = 1 AND pv.product_id IN ({$placeholders})
         ) ranked
@@ -1350,16 +1380,20 @@ function attachCheapestVariant(PDO $pdo, array $products): array
 
     return array_map(static function (array $product) use ($variantByProduct): array {
         $variant = $variantByProduct[(int) $product['id']] ?? null;
+        $oldPrice        = $variant['old_price'] ?? null;
+        $discountPercent = $variant['discount_percent'] ?? null;
 
         return [
-            'id'         => (int) $product['id'],
-            'name'       => $product['name'],
-            'slug'       => $product['slug'],
-            'min_price'  => $product['min_price'],
-            'variant_id' => $variant !== null ? (int) $variant['variant_id'] : null,
-            'material'   => $variant['material'] ?? null,
-            'color'      => $variant['color'] ?? null,
-            'image_path' => $variant['image_path'] ?? null,
+            'id'                => (int) $product['id'],
+            'name'              => $product['name'],
+            'slug'              => $product['slug'],
+            'min_price'         => $oldPrice !== null ? discountedPrice((string) $oldPrice, $discountPercent) : $product['min_price'],
+            'min_old_price'     => $oldPrice !== null && hasDiscount($discountPercent) ? $oldPrice : null,
+            'discount_percent'  => $discountPercent,
+            'variant_id'        => $variant !== null ? (int) $variant['variant_id'] : null,
+            'material'          => $variant['material'] ?? null,
+            'color'             => $variant['color'] ?? null,
+            'image_path'        => $variant['image_path'] ?? null,
         ];
     }, $products);
 }

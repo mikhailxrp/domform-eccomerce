@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
+require_once ROOT_PATH . '/src/Core/Price.php';
 require_once ROOT_PATH . '/src/Core/OrderStatus.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
 require_once ROOT_PATH . '/src/Core/Reserve.php';
@@ -46,7 +47,7 @@ function createOrder(array $order, array $items): ?int
 
     try {
         $variantStmt = $pdo->prepare('
-            SELECT pv.id, pv.price, pv.sku, pv.material, pv.mechanism_type,
+            SELECT pv.id, pv.price, pv.discount_percent, pv.sku, pv.material, pv.mechanism_type,
                    pv.is_showroom_sample, pv.is_active, p.name AS product_name
             FROM product_variants pv
             INNER JOIN products p ON p.id = pv.product_id
@@ -79,8 +80,13 @@ function createOrder(array $order, array $items): ?int
                 }
             }
 
-            $lineTotal = bcmul((string) $variant['price'], (string) $item['quantity'], 2);
-            $total     = bcadd($total, $lineTotal, 2);
+            // Снэпшот `order_items.price` — по эффективной (скидочной)
+            // цене (`ADR-041`, `FR-DISC-002` правило 2): более позднее
+            // снятие скидки в Панели управления задним числом её не
+            // меняет — та же гарантия, что уже давала сырая цена.
+            $effectivePrice = discountedPrice((string) $variant['price'], $variant['discount_percent']);
+            $lineTotal      = bcmul($effectivePrice, (string) $item['quantity'], 2);
+            $total          = bcadd($total, $lineTotal, 2);
 
             $orderItems[] = [
                 'product_variant_id' => $variant['id'],
@@ -89,7 +95,7 @@ function createOrder(array $order, array $items): ?int
                 'variant_material'   => $variant['material'],
                 'variant_mechanism'  => $variant['mechanism_type'],
                 'variant_color'      => $item['color'],
-                'price'              => $variant['price'],
+                'price'              => $effectivePrice,
                 'quantity'           => $item['quantity'],
             ];
         }
@@ -567,7 +573,7 @@ function addOrderItem(int $orderId, int $variantId, ?string $color, int $qty): b
 
     try {
         $stmt = $pdo->prepare('
-            SELECT pv.id, pv.price, pv.sku, pv.material, pv.mechanism_type,
+            SELECT pv.id, pv.price, pv.discount_percent, pv.sku, pv.material, pv.mechanism_type,
                    pv.is_showroom_sample, pv.is_active, p.name AS product_name
             FROM product_variants pv
             INNER JOIN products p ON p.id = pv.product_id
@@ -582,7 +588,8 @@ function addOrderItem(int $orderId, int $variantId, ?string $color, int $qty): b
             return false;
         }
 
-        $quantity = clampCartQuantity($qty, (bool) $variant['is_showroom_sample']);
+        $quantity       = clampCartQuantity($qty, (bool) $variant['is_showroom_sample']);
+        $effectivePrice = discountedPrice((string) $variant['price'], $variant['discount_percent']);
 
         $insert = $pdo->prepare('
             INSERT INTO order_items (
@@ -601,7 +608,7 @@ function addOrderItem(int $orderId, int $variantId, ?string $color, int $qty): b
             'variant_material'   => $variant['material'],
             'variant_mechanism'  => $variant['mechanism_type'],
             'variant_color'      => $color,
-            'price'              => $variant['price'],
+            'price'              => $effectivePrice,
             'quantity'           => $quantity,
         ]);
 
