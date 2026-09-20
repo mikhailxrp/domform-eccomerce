@@ -2319,3 +2319,50 @@ Model-путь у него тот же, что у `markPrepaid()`.
 снятие при отмене.
 
 ---
+
+**Дата:** 20.09.2026
+**Что сделано:** Фаза 5, Таск 2 — списание при доставке и снятие при
+отмене (`TASK.md`, `phase-5.md`). `FR-STOCK-004`, `FR-STOCK-001`
+правило 4, `BR-007` (STOCK-эффекты).
+- `src/Models/Reserve.php`: `fulfillOrderReserves(PDO, int)` — активные
+  резервы Заказа → `fulfilled` + `released_at`, у их Вариантов
+  `is_showroom_sample = 0`; `releaseOrderReserves(PDO, int)` → `released`
+  + `released_at`, флаг не трогается; общий `updateOrderReservesStatus()`;
+  `markOrderVariantsAsShowroomSample(PDO, int)` — `is_showroom_sample = 1`
+  у всех активных Вариантов позиций Заказа.
+- `transitionOrderStatus()` — транзакция «владеет или участвует»
+  (`beginTransaction()` только при `!inTransaction()`), на `delivered`
+  вызывает списание той же транзакцией; `cancelOrder()` — четвёртый
+  аргумент `$markAsSample`, после перехода `releaseOrderReserves()` и
+  при флаге `markOrderVariantsAsShowroomSample()`.
+- `validateCancelInput()` — ключ `mark_as_sample`: ошибка при флаге в
+  ветке `non_standard`; +3 теста в `OrderActionsTest`. `composer test`
+  235/235.
+- `show.php` — чекбокс «Вариант уже изготовлен — оставить как
+  Выставочный образец» с `form-text`-подсказкой; `cancel()` читает флаг,
+  отдельный flash при ошибке, прокидывает в Model.
+
+Проверено на реальной БД: (1) сценарий через Model-функции — доставка
+Заказа с резервом → `fulfilled`/`released_at`/флаг 0/`delivered_at`;
+промежуточные переходы резерв не трогают; отмена с резервом →
+`released`, флаг остаётся 1, следующий Заказ на образец проходит
+предоплату; отмена `in_production` с флагом → оба Варианта стали
+образцами; отмена без флага флаги не меняет; атомарность —
+`RENAME TABLE reserves` на время вызова: сбой в `releaseOrderReserves()`
+→ статус `confirmed` и `cancel_note NULL`, сбой в
+`fulfillOrderReserves()` → статус `ready_for_shipment`, `delivered_at
+NULL`, `inTransaction() === false` в обоих случаях, после снятия сбоя
+доставка проходит; (2) живой HTTP (`php -S` + `curl`, `admin`): модалка
+содержит чекбокс; нестандарт + флаг → flash-ошибка, Заказ не отменён;
+стандарт + флаг → `cancelled`, Вариант — образец (на витрине
+`is_showroom_sample: true` в `data-variants`); переход `to=delivered` →
+`fulfilled`, флаг 0; POST без `_csrf` → 419; лог сервера без ошибок.
+Тестовые Заказы удалены, флаги Вариантов восстановлены.
+
+Не проверено: вёрстка модалки на 320px в реальном браузере (нет
+браузера в сессии — тот же пробел, что в Фазе 4).
+
+**Что следующее:** Таск 3 Фазы 5 — управление Резервом в карточке
+Заказа (срок, ручное снятие).
+
+---

@@ -256,11 +256,16 @@ $orderId = (string) $order['id'];
                             <textarea id="cancel-note" name="note" class="form-control" rows="3"></textarea>
                         </div>
                         <?php if ($order['payment_status'] !== PAYMENT_STATUS_UNPAID): ?>
-                            <div class="form-check">
+                            <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" name="refund_confirmed" id="refund-confirmed" value="1">
                                 <label class="form-check-label" for="refund-confirmed">Предоплата возвращена переводом на карту</label>
                             </div>
                         <?php endif; ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="mark_as_sample" id="mark-as-sample" value="1" aria-describedby="mark-as-sample-help">
+                            <label class="form-check-label" for="mark-as-sample">Вариант уже изготовлен — оставить как Выставочный образец</label>
+                            <div id="mark-as-sample-help" class="form-text">Только для стандартного размера; образцами будут отмечены все Варианты Заказа.</div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Закрыть</button>

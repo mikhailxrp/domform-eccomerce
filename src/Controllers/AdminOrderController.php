@@ -295,6 +295,7 @@ class AdminOrderController
             'branch'           => (string) input('branch', ''),
             'note'             => trim((string) input('note', '')),
             'refund_confirmed' => (string) input('refund_confirmed', '') === '1',
+            'mark_as_sample'   => (string) input('mark_as_sample', '') === '1',
         ];
 
         $errors = validateCancelInput($input, $order['payment_status']);
@@ -311,8 +312,12 @@ class AdminOrderController
             setFlash('error', 'Отметьте возврат предоплаты.');
             redirect('/admin/orders/' . $id);
         }
+        if ($errors['mark_as_sample']) {
+            setFlash('error', 'Оставить Вариант Выставочным образцом можно только при отмене стандартного размера.');
+            redirect('/admin/orders/' . $id);
+        }
 
-        cancelOrder((int) $id, $input['note'], $input['refund_confirmed']);
+        cancelOrder((int) $id, $input['note'], $input['refund_confirmed'], $input['mark_as_sample']);
 
         setFlash('success', 'Заказ отменён.');
         redirect('/admin/orders/' . $id);

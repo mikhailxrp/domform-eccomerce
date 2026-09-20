@@ -89,3 +89,71 @@ function findCompetingReserveForOrder(int $orderId): ?array
 
     return $reserve === false ? null : $reserve;
 }
+
+/**
+ * Списание (`FR-STOCK-004`, глоссарий 6.1): активные Резервы Заказа →
+ * `fulfilled`, у их Вариантов снимается отметка образца — физический
+ * экземпляр продан, повторно образцом он сам не становится. Идёт по
+ * резервам, не по всем позициям-образцам: резерв — источник истины, чей
+ * это образец (позиция без резерва флаг не трогает). Вызывается внутри
+ * транзакции `transitionOrderStatus()` на переходе в «Доставлен/Собран».
+ */
+function fulfillOrderReserves(PDO $pdo, int $orderId): void
+{
+    $variantStmt = $pdo->prepare('
+        UPDATE product_variants pv
+        INNER JOIN reserves r ON r.product_variant_id = pv.id
+        INNER JOIN order_items oi ON oi.id = r.order_item_id
+        SET pv.is_showroom_sample = 0
+        WHERE oi.order_id = :order_id AND r.status = :status
+    ');
+    $variantStmt->execute(['order_id' => $orderId, 'status' => RESERVE_STATUS_ACTIVE]);
+
+    updateOrderReservesStatus($pdo, $orderId, RESERVE_STATUS_FULFILLED);
+}
+
+/**
+ * Снятие Резерва при отмене Заказа (`BR-007`): активные Резервы →
+ * `released`, образец снова свободен для следующего Покупателя.
+ * `is_showroom_sample` не трогается — закрепление Резерва его не
+ * меняло, образец физически остаётся в цеху. Не сворачивать с
+ * `fulfillOrderReserves()`: разное конечное состояние (`stock.md`,
+ * «Списание — не то же самое, что снятие по отмене»).
+ */
+function releaseOrderReserves(PDO $pdo, int $orderId): void
+{
+    updateOrderReservesStatus($pdo, $orderId, RESERVE_STATUS_RELEASED);
+}
+
+function updateOrderReservesStatus(PDO $pdo, int $orderId, string $newStatus): void
+{
+    $stmt = $pdo->prepare('
+        UPDATE reserves r
+        INNER JOIN order_items oi ON oi.id = r.order_item_id
+        SET r.status = :new_status, r.released_at = NOW()
+        WHERE oi.order_id = :order_id AND r.status = :active
+    ');
+    $stmt->execute([
+        'new_status' => $newStatus,
+        'order_id'   => $orderId,
+        'active'     => RESERVE_STATUS_ACTIVE,
+    ]);
+}
+
+/**
+ * Отмена стандартной ветки, когда Вариант уже изготовлен (`BR-007`,
+ * `ord.md`): готовый экземпляр не выбрасывается — становится Выставочным
+ * образцом. Отмечаются все активные Варианты позиций Заказа (Заказ в
+ * производстве целиком); Вариант, уже отмеченный образцом, остаётся
+ * отмеченным — 0..1 экземпляр на Вариант (`FR-STOCK-001` правило 3).
+ */
+function markOrderVariantsAsShowroomSample(PDO $pdo, int $orderId): void
+{
+    $stmt = $pdo->prepare('
+        UPDATE product_variants pv
+        INNER JOIN order_items oi ON oi.product_variant_id = pv.id
+        SET pv.is_showroom_sample = 1
+        WHERE oi.order_id = :order_id AND pv.is_active = 1
+    ');
+    $stmt->execute(['order_id' => $orderId]);
+}
