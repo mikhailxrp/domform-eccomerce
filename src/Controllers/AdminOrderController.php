@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Order.php';
+require_once ROOT_PATH . '/src/Models/Reserve.php';
 require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/User.php';
+require_once ROOT_PATH . '/src/Models/ReturnRequest.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/Payment.php';
 require_once ROOT_PATH . '/src/Core/OrderActions.php';
 require_once ROOT_PATH . '/src/Core/ManualOrder.php';
+require_once ROOT_PATH . '/src/Core/Warranty.php';
 
 class AdminOrderController
 {
@@ -80,6 +83,8 @@ class AdminOrderController
             'allowedTransitions' => allowedOrderTransitions($order['status'], $hasShowroomSample, $order['fulfillment_method']),
             'canCancel'          => canCancelOrder($order['status']),
             'canEditItems'       => canEditOrderItems($order['status']),
+            'reserves'           => getOrderReserves((int) $id),
+            'returns'            => getOrderReturns((int) $id),
         ]);
     }
 
@@ -181,6 +186,56 @@ class AdminOrderController
         redirect('/admin/orders/' . $id);
     }
 
+    /**
+     * Устно согласованный срок Резерва (`FR-STOCK-002` правило 2) —
+     * только для справки Менеджеру, система по нему не действует.
+     */
+    public function setReserveAgreedUntil(string $id, string $reserveId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        if (findOrderById((int) $id) === null) {
+            abort404();
+        }
+
+        $validated = validateAgreedUntil((string) input('agreed_until', ''));
+        if ($validated['error'] !== null) {
+            setFlash('error', $validated['error']);
+            redirect('/admin/orders/' . $id);
+        }
+
+        if (!setReserveAgreedUntil((int) $id, (int) $reserveId, $validated['value'])) {
+            setFlash('error', 'Резерв не найден или уже снят.');
+            redirect('/admin/orders/' . $id);
+        }
+
+        setFlash('success', $validated['value'] === null ? 'Срок резерва очищен.' : 'Срок резерва сохранён.');
+        redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Ручное снятие Резерва (`FR-STOCK-002` правило 3, UC-02 2в) — Заказ
+     * при этом не отменяется, это отдельное решение Менеджера по звонку.
+     */
+    public function releaseReserve(string $id, string $reserveId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        if (findOrderById((int) $id) === null) {
+            abort404();
+        }
+
+        if (!releaseReserveById((int) $id, (int) $reserveId)) {
+            setFlash('error', 'Резерв не найден или уже снят.');
+            redirect('/admin/orders/' . $id);
+        }
+
+        setFlash('success', 'Резерв снят — образец снова доступен для продажи.');
+        redirect('/admin/orders/' . $id);
+    }
+
     public function markPrepaid(string $id): void
     {
         requireRole(['manager', 'admin']);
@@ -199,13 +254,30 @@ class AdminOrderController
             redirect('/admin/orders/' . $id);
         }
 
-        if (!markOrderPrepaid((int) $id, $amount)) {
-            setFlash('error', 'Предоплата уже отмечена.');
-            redirect('/admin/orders/' . $id);
-        }
+        $result = markOrderPrepaid((int) $id, $amount);
 
-        setFlash('success', 'Предоплата отмечена.');
+        match ($result) {
+            PREPAID_RESULT_OK           => setFlash('success', 'Предоплата отмечена.'),
+            PREPAID_RESULT_ALREADY      => setFlash('error', 'Предоплата уже отмечена.'),
+            PREPAID_RESULT_SAMPLE_TAKEN => setFlash('error', $this->sampleTakenMessage((int) $id)),
+        };
+
         redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Проигрыш конкуренции за Выставочный образец (`BR-003`, UC-02 2а):
+     * предоплата откачена, Менеджер по звонку предлагает такой же
+     * Вариант под заказ — сообщение называет Заказ-держатель, чтобы было
+     * с чего начать разговор.
+     */
+    private function sampleTakenMessage(int $orderId): string
+    {
+        $competing = findCompetingReserveForOrder($orderId);
+        $holder    = $competing !== null ? ' за Заказом №' . $competing['order_id'] : ' за другим Заказом';
+
+        return 'Предоплата не отмечена: Выставочный образец уже закреплён' . $holder
+            . ' — предложите Покупателю такой же Вариант под заказ.';
     }
 
     public function markPaidFull(string $id): void
@@ -277,6 +349,7 @@ class AdminOrderController
             'branch'           => (string) input('branch', ''),
             'note'             => trim((string) input('note', '')),
             'refund_confirmed' => (string) input('refund_confirmed', '') === '1',
+            'mark_as_sample'   => (string) input('mark_as_sample', '') === '1',
         ];
 
         $errors = validateCancelInput($input, $order['payment_status']);
@@ -293,8 +366,12 @@ class AdminOrderController
             setFlash('error', 'Отметьте возврат предоплаты.');
             redirect('/admin/orders/' . $id);
         }
+        if ($errors['mark_as_sample']) {
+            setFlash('error', 'Оставить Вариант Выставочным образцом можно только при отмене стандартного размера.');
+            redirect('/admin/orders/' . $id);
+        }
 
-        cancelOrder((int) $id, $input['note'], $input['refund_confirmed']);
+        cancelOrder((int) $id, $input['note'], $input['refund_confirmed'], $input['mark_as_sample']);
 
         setFlash('success', 'Заказ отменён.');
         redirect('/admin/orders/' . $id);
@@ -391,9 +468,18 @@ class AdminOrderController
             return;
         }
 
-        markOrderPrepaid($orderId, $input['prepaid_amount']);
+        $prepaidResult = markOrderPrepaid($orderId, $input['prepaid_amount']);
 
         unset($_SESSION['manual_order_token']);
+
+        // Заказ уже создан (`new`/`unpaid`), но образец успел уйти другому
+        // Заказу между `createOrder()` и фиксацией предоплаты — Менеджер
+        // должен увидеть это сразу, а не «Заказ создан».
+        if ($prepaidResult === PREPAID_RESULT_SAMPLE_TAKEN) {
+            setFlash('error', 'Заказ №' . $orderId . ' создан без предоплаты. ' . $this->sampleTakenMessage($orderId));
+            redirect('/admin/orders/' . $orderId);
+        }
+
         setFlash('success', 'Заказ создан.');
         redirect('/admin/orders/' . $orderId);
     }

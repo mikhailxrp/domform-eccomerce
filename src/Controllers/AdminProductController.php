@@ -24,6 +24,7 @@ class AdminProductController
             $status = '';
         }
         $search = trim((string) input('search', ''));
+        $onlySamples = (string) input('only_samples', '') === '1';
 
         $page = (int) input('page', 1);
         if ($page < 1) {
@@ -31,9 +32,10 @@ class AdminProductController
         }
 
         $filters = [
-            'category_id' => $categoryId > 0 ? $categoryId : null,
-            'status'      => $status !== '' ? $status : null,
-            'search'      => $search !== '' ? $search : null,
+            'category_id'  => $categoryId > 0 ? $categoryId : null,
+            'status'       => $status !== '' ? $status : null,
+            'search'       => $search !== '' ? $search : null,
+            'only_samples' => $onlySamples,
         ];
 
         $total      = countAdminProducts($filters);
@@ -41,7 +43,12 @@ class AdminProductController
         $products   = getAdminProducts($filters, $pagination['page'], ADMIN_PRODUCTS_PER_PAGE);
 
         $queryParams = array_filter(
-            ['category' => $categoryId > 0 ? (string) $categoryId : '', 'status' => $status, 'search' => $search],
+            [
+                'category'     => $categoryId > 0 ? (string) $categoryId : '',
+                'status'       => $status,
+                'search'       => $search,
+                'only_samples' => $onlySamples ? '1' : '',
+            ],
             static fn (string $value): bool => $value !== ''
         );
 
@@ -51,16 +58,17 @@ class AdminProductController
         }
 
         render('admin/products/index', [
-            'title'           => 'Товары',
-            'products'        => $products,
-            'categories'      => getCategoriesFlat(),
-            'categoryFilter'  => $categoryId,
-            'statusFilter'    => $status,
-            'searchQuery'     => $search,
-            'pagination'      => $pagination,
-            'paginationLinks' => $paginationLinks,
-            'prevUrl'         => $pagination['has_prev'] ? buildPaginationUrl('/admin/products', $queryParams, $pagination['prev_page']) : null,
-            'nextUrl'         => $pagination['has_next'] ? buildPaginationUrl('/admin/products', $queryParams, $pagination['next_page']) : null,
+            'title'            => 'Товары',
+            'products'         => $products,
+            'categories'       => getCategoriesFlat(),
+            'categoryFilter'   => $categoryId,
+            'statusFilter'     => $status,
+            'searchQuery'      => $search,
+            'onlySamplesFilter' => $onlySamples,
+            'pagination'       => $pagination,
+            'paginationLinks'  => $paginationLinks,
+            'prevUrl'          => $pagination['has_prev'] ? buildPaginationUrl('/admin/products', $queryParams, $pagination['prev_page']) : null,
+            'nextUrl'          => $pagination['has_next'] ? buildPaginationUrl('/admin/products', $queryParams, $pagination['next_page']) : null,
         ]);
     }
 
@@ -77,6 +85,36 @@ class AdminProductController
         setProductActive((int) $id, !(bool) $product['is_active']);
 
         setFlash('success', (bool) $product['is_active'] ? 'Товар скрыт.' : 'Товар снова виден на витрине.');
+        redirect('/admin/products');
+    }
+
+    /**
+     * Переключатель «Выставочный образец» прямо в списке Товаров
+     * (`FR-STOCK-001` правило 1, Таск 4 Фазы 5) — без перехода в форму
+     * Товара. Снять отметку у Варианта с активным Резервом нельзя
+     * (`BR-003`) — `setVariantShowroomSample()` отклоняет и подделанный
+     * POST, не только задизейбленный элемент во View.
+     */
+    public function toggleShowroom(string $productId, string $variantId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        $variant = findVariantForShowroomToggle((int) $variantId);
+        if ($variant === null || (int) $variant['product_id'] !== (int) $productId) {
+            abort404();
+        }
+
+        $on = (string) input('on', '') === '1';
+
+        if (!setVariantShowroomSample((int) $variantId, $on)) {
+            setFlash('error', $on
+                ? 'Не удалось включить отметку — попробуйте ещё раз.'
+                : 'Нельзя снять отметку: на Вариант оформлен активный Резерв.');
+            redirect('/admin/products');
+        }
+
+        setFlash('success', $on ? 'Вариант отмечен Выставочным образцом.' : 'Отметка Выставочного образца снята.');
         redirect('/admin/products');
     }
 

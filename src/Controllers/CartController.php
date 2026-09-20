@@ -35,13 +35,14 @@ class CartController
         $color     = trim((string) input('color', ''));
         $quantity  = (int) input('quantity', 1);
 
-        $added = addCartItem($owner, $variantId, $color !== '' ? $color : null, $quantity);
+        $result = addCartItem($owner, $variantId, $color !== '' ? $color : null, $quantity);
         refreshCartCount($owner);
 
-        setFlash(
-            $added ? 'success' : 'error',
-            $added ? 'Товар добавлен в корзину.' : 'Не удалось добавить товар в корзину.'
-        );
+        match ($result) {
+            ADD_TO_CART_OK        => setFlash('success', 'Товар добавлен в корзину.'),
+            ADD_TO_CART_RESERVED  => setFlash('error', 'Этот Выставочный образец уже забронирован другим покупателем.'),
+            ADD_TO_CART_NOT_FOUND => setFlash('error', 'Не удалось добавить товар в корзину.'),
+        };
 
         $this->redirectBack();
     }

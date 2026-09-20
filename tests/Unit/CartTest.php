@@ -37,6 +37,24 @@ final class CartTest extends TestCase
         $this->assertSame(1, clampCartQuantity(500, true));
     }
 
+    // ─── isReservedSampleUnavailable() ──────────────────────────────────
+
+    public function testPlainVariantIsAlwaysAvailable(): void
+    {
+        $this->assertFalse(isReservedSampleUnavailable(false, false));
+        $this->assertFalse(isReservedSampleUnavailable(false, true));
+    }
+
+    public function testFreeShowroomSampleIsAvailable(): void
+    {
+        $this->assertFalse(isReservedSampleUnavailable(true, false));
+    }
+
+    public function testReservedShowroomSampleIsUnavailable(): void
+    {
+        $this->assertTrue(isReservedSampleUnavailable(true, true));
+    }
+
     // ─── calculateCartTotals() ──────────────────────────────────────────
 
     public function testCalculateCartTotalsSumsWithoutFloat(): void

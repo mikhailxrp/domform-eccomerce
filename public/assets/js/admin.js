@@ -290,3 +290,18 @@
         },
     });
 })();
+
+// Переключатель «Выставочный образец» в списке Товаров (Таск 4 Фазы 5)
+// — прогрессивное улучшение: без JS форму отправляет видимая кнопка
+// «OK» рядом с переключателем; при наличии JS изменение переключателя
+// сразу отправляет ту же форму, кнопка остаётся резервным путём.
+(() => {
+    document.addEventListener('change', (event) => {
+        const toggle = event.target.closest('[data-variant-showroom-toggle]');
+        if (!toggle || toggle.disabled) {
+            return;
+        }
+
+        toggle.closest('form')?.requestSubmit();
+    });
+})();

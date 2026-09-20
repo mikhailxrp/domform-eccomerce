@@ -6,6 +6,8 @@ require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/OrderStatus.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
+require_once ROOT_PATH . '/src/Core/Reserve.php';
+require_once ROOT_PATH . '/src/Models/Reserve.php';
 
 /**
  * `$order['user_id']` либо `$order['guest_name']`/`guest_phone`/
@@ -200,6 +202,13 @@ function orderHasShowroomSample(int $orderId): bool
  * несуществующий Заказ) — `false` без изменений, не исключение: вызов
  * из Панели управления (Фаза 4) должен уметь просто не предложить
  * недопустимый переход, а не падать.
+ *
+ * Транзакция — «владеет или участвует»: открывается только если её ещё
+ * нет; из `cancelOrder()`/`markOrderPrepaid()` функция работает внутри
+ * их транзакции, из контроллера `transition()` — в собственной.
+ * Переход в «Доставлен/Собран» списывает образец
+ * (`fulfillOrderReserves()`, `FR-STOCK-004`) той же транзакцией — статус
+ * и списание применяются только вместе.
  */
 function transitionOrderStatus(int $orderId, string $to): bool
 {
@@ -223,25 +232,52 @@ function transitionOrderStatus(int $orderId, string $to): bool
         ? 'UPDATE orders SET status = :status, delivered_at = NOW() WHERE id = :id'
         : 'UPDATE orders SET status = :status WHERE id = :id';
 
-    $stmt = getPdo()->prepare($sql);
-    $stmt->execute(['status' => $to, 'id' => $orderId]);
+    $pdo             = getPdo();
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
 
-    return true;
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['status' => $to, 'id' => $orderId]);
+
+        if ($to === ORDER_STATUS_DELIVERED) {
+            fulfillOrderReserves($pdo, $orderId);
+        }
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+
+        return true;
+    } catch (Throwable $e) {
+        if ($ownsTransaction) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 /**
  * Отмена по звонку Менеджеру (`FR-ORD-002`, `BR-007`). `$note`/
- * `$prepaymentRefunded` — уже провалидированы `validateCancelInput()`
- * до вызова (обязательность зависит от ветки/`payment_status`, Model
- * этого не проверяет повторно). Переход статуса и запись `cancel_note`/
- * `prepayment_refunded` — одна транзакция: либо применяются оба факта,
- * либо ни одного; сам `UPDATE orders SET status` — по-прежнему только
- * внутри `transitionOrderStatus()` (`php.md`). Снятие Резерва при
- * отмене — Фаза 5 (`phase-2.md`, «Решения фазы»), здесь не
- * реализовано.
+ * `$prepaymentRefunded`/`$markAsSample` — уже провалидированы
+ * `validateCancelInput()` до вызова (обязательность зависит от
+ * ветки/`payment_status`, Model этого не проверяет повторно). Переход
+ * статуса, запись `cancel_note`/`prepayment_refunded` и STOCK-эффекты —
+ * одна транзакция: либо применяется всё, либо ничего; сам `UPDATE
+ * orders SET status` — по-прежнему только внутри
+ * `transitionOrderStatus()` (`php.md`). STOCK-эффекты (`stock.md`):
+ * активный Резерв снимается (`releaseOrderReserves()` — образец снова
+ * свободен), а при `$markAsSample` (стандартная ветка, Вариант уже
+ * изготовлен) Варианты Заказа отмечаются Выставочными образцами.
  */
-function cancelOrder(int $orderId, string $note = '', bool $prepaymentRefunded = false): bool
-{
+function cancelOrder(
+    int $orderId,
+    string $note = '',
+    bool $prepaymentRefunded = false,
+    bool $markAsSample = false
+): bool {
     $pdo = getPdo();
     $pdo->beginTransaction();
 
@@ -261,6 +297,12 @@ function cancelOrder(int $orderId, string $note = '', bool $prepaymentRefunded =
             'refunded' => $prepaymentRefunded ? 1 : 0,
             'id'       => $orderId,
         ]);
+
+        releaseOrderReserves($pdo, $orderId);
+
+        if ($markAsSample) {
+            markOrderVariantsAsShowroomSample($pdo, $orderId);
+        }
 
         $pdo->commit();
         return true;
@@ -285,11 +327,20 @@ function setOrderShippingCost(int $orderId, ?string $cost): void
  * Фиксирует получение предоплаты (`FR-PAY-002`) — единственное место,
  * пишущее `orders.payment_status` в `prepaid` (`pay.md`). Идемпотентна:
  * повторный вызов на Заказе, уже вышедшем из `unpaid`, не меняет
- * данные и возвращает `false`, а не исключение. `transitionOrderStatus()`
- * тоже не бросает на запрещённом переходе (например, Заказ уже
- * отменён) — оплата в этом случае всё равно фиксируется.
+ * данные и возвращает `PREPAID_RESULT_ALREADY`, а не исключение.
+ * `transitionOrderStatus()` тоже не бросает на запрещённом переходе
+ * (например, Заказ уже отменён) — оплата в этом случае всё равно
+ * фиксируется.
+ *
+ * Здесь же — и только здесь — закрепляется Резерв Выставочного образца
+ * (`BR-003`, `FR-STOCK-002…003`): момент фактического получения
+ * предоплаты, а не оформления Заказа. Проигрыш конкуренции (образец
+ * уже закреплён за другим Заказом) откатывает фиксацию предоплаты
+ * целиком — `PREPAID_RESULT_SAMPLE_TAKEN` (`ADR-040`): оплаченный Заказ
+ * на чужой образец в системе оставаться не должен. Снятие/списание
+ * Резерва — Таск 2 Фазы 5, не здесь.
  */
-function markOrderPrepaid(int $orderId, string $amount): bool
+function markOrderPrepaid(int $orderId, string $amount): string
 {
     $pdo = getPdo();
     $pdo->beginTransaction();
@@ -309,13 +360,18 @@ function markOrderPrepaid(int $orderId, string $amount): bool
 
         if ($stmt->rowCount() === 0) {
             $pdo->commit();
-            return false;
+            return PREPAID_RESULT_ALREADY;
+        }
+
+        if (!createReservesForOrder($pdo, $orderId)) {
+            $pdo->rollBack();
+            return PREPAID_RESULT_SAMPLE_TAKEN;
         }
 
         transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED);
 
         $pdo->commit();
-        return true;
+        return PREPAID_RESULT_OK;
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;

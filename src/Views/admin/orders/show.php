@@ -8,6 +8,8 @@ declare(strict_types=1);
 /** @var array<int, string> $allowedTransitions */
 /** @var bool $canCancel */
 /** @var bool $canEditItems */
+/** @var array<int, array<string, mixed>> $reserves */
+/** @var array<int, array<string, mixed>> $returns */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
@@ -197,6 +199,10 @@ $orderId = (string) $order['id'];
     </div>
 </div>
 
+<?php if ($reserves !== []): ?>
+    <?php include ROOT_PATH . '/src/Views/components/admin/reserve-panel.php'; ?>
+<?php endif; ?>
+
 <div class="card custom-card">
     <div class="card-header">
         <div class="card-title">Комментарий покупателя</div>
@@ -229,6 +235,54 @@ $orderId = (string) $order['id'];
     </div>
 </div>
 
+<?php
+$warrantyUntil = warrantyExpiresAt($order['delivered_at']);
+$underWarranty = isUnderWarranty($order['delivered_at'], date('Y-m-d'));
+?>
+<div class="card custom-card">
+    <div class="card-header">
+        <div class="card-title">Возврат и гарантия</div>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            <strong>Гарантия до:</strong>
+            <?php if ($warrantyUntil !== null): ?>
+                <?= e(date('d.m.Y', strtotime($warrantyUntil))) ?>
+                <span class="badge <?= $underWarranty ? 'bg-success' : 'bg-secondary' ?>"><?= $underWarranty ? 'В пределах гарантии' : 'Гарантия истекла' ?></span>
+            <?php else: ?>
+                — (Заказ ещё не доставлен)
+            <?php endif; ?>
+        </p>
+
+        <?php if ($status === ORDER_STATUS_DELIVERED): ?>
+            <form method="post" action="/admin/orders/<?= e($orderId) ?>/returns" class="mb-3">
+                <?= csrfField() ?>
+                <div class="mb-2">
+                    <label for="return-note" class="form-label">Комментарий по итогам звонка (необязательно)</label>
+                    <textarea id="return-note" name="note" class="form-control" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-outline-danger">Зафиксировать возврат</button>
+            </form>
+        <?php endif; ?>
+
+        <?php if ($returns === []): ?>
+            <p class="text-muted mb-0">Обращений по этому Заказу не было.</p>
+        <?php else: ?>
+            <h6>Обращения по этому Заказу</h6>
+            <ul class="list-group list-group-flush">
+                <?php foreach ($returns as $return): ?>
+                    <li class="list-group-item px-0">
+                        <div class="fw-semibold"><?= e(date('d.m.Y H:i', strtotime((string) $return['created_at']))) ?></div>
+                        <?php if ($return['note'] !== null && $return['note'] !== ''): ?>
+                            <div><?= nl2br(e($return['note'])) ?></div>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </div>
+</div>
+
 <?php if ($canCancel): ?>
     <div class="modal fade" id="cancelOrderModal" tabindex="-1" aria-labelledby="cancelOrderModalLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -256,11 +310,16 @@ $orderId = (string) $order['id'];
                             <textarea id="cancel-note" name="note" class="form-control" rows="3"></textarea>
                         </div>
                         <?php if ($order['payment_status'] !== PAYMENT_STATUS_UNPAID): ?>
-                            <div class="form-check">
+                            <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" name="refund_confirmed" id="refund-confirmed" value="1">
                                 <label class="form-check-label" for="refund-confirmed">Предоплата возвращена переводом на карту</label>
                             </div>
                         <?php endif; ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="mark_as_sample" id="mark-as-sample" value="1" aria-describedby="mark-as-sample-help">
+                            <label class="form-check-label" for="mark-as-sample">Вариант уже изготовлен — оставить как Выставочный образец</label>
+                            <div id="mark-as-sample-help" class="form-text">Только для стандартного размера; образцами будут отмечены все Варианты Заказа.</div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Закрыть</button>

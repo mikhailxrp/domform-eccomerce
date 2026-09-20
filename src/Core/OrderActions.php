@@ -16,7 +16,10 @@ const CANCEL_BRANCH_NON_STANDARD = 'non_standard';
  * Отмена (`FR-ORD-002`, `BR-007`): ветка нестандартного размера
  * требует комментарий, а возврат предоплаты подтверждается явной
  * отметкой, если оплата уже была внесена (`$paymentStatus !==
- * unpaid`) — иначе возвращать нечего.
+ * unpaid`) — иначе возвращать нечего. Отметка «Вариант уже изготовлен →
+ * Выставочный образец» (`mark_as_sample`) допустима только в
+ * стандартной ветке — образцом становится Вариант стандартного размера
+ * (`ord.md`, «Отмена — двухветочная»).
  */
 function validateCancelInput(array $input, string $paymentStatus): array
 {
@@ -26,6 +29,7 @@ function validateCancelInput(array $input, string $paymentStatus): array
         'branch'           => !in_array($branch, [CANCEL_BRANCH_STANDARD, CANCEL_BRANCH_NON_STANDARD], true),
         'note'             => $branch === CANCEL_BRANCH_NON_STANDARD && trim((string) ($input['note'] ?? '')) === '',
         'refund_confirmed' => $paymentStatus !== PAYMENT_STATUS_UNPAID && !($input['refund_confirmed'] ?? false),
+        'mark_as_sample'   => $branch !== CANCEL_BRANCH_STANDARD && ($input['mark_as_sample'] ?? false),
     ];
 }
 

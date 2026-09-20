@@ -57,6 +57,37 @@ final class OrderActionsTest extends TestCase
         $this->assertFalse($errors['note']);
     }
 
+    public function testMarkAsSampleAllowedInStandardBranch(): void
+    {
+        $errors = validateCancelInput(
+            ['branch' => CANCEL_BRANCH_STANDARD, 'note' => '', 'refund_confirmed' => true, 'mark_as_sample' => true],
+            PAYMENT_STATUS_UNPAID
+        );
+
+        $this->assertFalse($errors['mark_as_sample']);
+        $this->assertNotContains(true, $errors);
+    }
+
+    public function testMarkAsSampleRejectedInNonStandardBranch(): void
+    {
+        $errors = validateCancelInput(
+            ['branch' => CANCEL_BRANCH_NON_STANDARD, 'note' => 'Нестандарт 3.2м', 'refund_confirmed' => true, 'mark_as_sample' => true],
+            PAYMENT_STATUS_UNPAID
+        );
+
+        $this->assertTrue($errors['mark_as_sample']);
+    }
+
+    public function testMarkAsSampleNotRequiredAndAbsentByDefault(): void
+    {
+        $errors = validateCancelInput(
+            ['branch' => CANCEL_BRANCH_NON_STANDARD, 'note' => 'Нестандарт 3.2м', 'refund_confirmed' => true],
+            PAYMENT_STATUS_UNPAID
+        );
+
+        $this->assertFalse($errors['mark_as_sample']);
+    }
+
     public function testStandardBranchDoesNotRequireNote(): void
     {
         $errors = validateCancelInput(
