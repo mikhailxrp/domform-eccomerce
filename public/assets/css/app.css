@@ -582,3 +582,125 @@
         transform: rotate(360deg);
     }
 }
+
+/* Отзывы о Товаре (`FR-CARD-006`, Таск 4 Фазы 6) — рейтинг реализован
+   без JS: 5 нативных radio, стилизованных под звёзды чистым CSS
+   (radio в DOM по убыванию 5→1 + `flex-direction: row-reverse` + общий
+   сиблинг-селектор `~`) — декоративный виджет `#rating` из `main.js`
+   только переключает классы по клику и ничего никуда не пишет,
+   реальное значение с ним не отправить. Тот же приём даёт бесплатный
+   hover-предпросмотр и работу с клавиатуры (обычная radio-группа). */
+.review-form__stars {
+    --review-star-empty: #dbdbdb;
+    --review-star-filled: #ffc600;
+
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    gap: 2px;
+}
+
+.review-form__star-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+
+.review-form__star-label {
+    cursor: pointer;
+    font-size: 28px;
+    line-height: 1;
+    color: var(--review-star-empty);
+    transition: color 0.15s ease;
+}
+
+.review-form__star-input:checked ~ .review-form__star-label,
+.review-form__star-input:checked ~ .review-form__star-label ~ .review-form__star-label,
+.review-form__star-label:hover,
+.review-form__star-label:hover ~ .review-form__star-label {
+    color: var(--review-star-filled);
+}
+
+.review-form__star-input:focus-visible ~ .review-form__star-label {
+    outline: 2px solid var(--review-star-filled);
+    outline-offset: 2px;
+}
+
+.review-form__stars--invalid .review-form__star-label {
+    color: #dc3545;
+}
+
+/* Средняя оценка и рейтинг отдельного отзыва в списке (`review-list.php`)
+   — тот же приём «пустые звёзды + залитая полоса поверх по ширине %»,
+   что декоративный `.review-star` темы, но без зависимости от FontAwesome
+   (юникодная звезда рендерится любым системным шрифтом). */
+.review-list__stars {
+    position: relative;
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--review-star-empty, #dbdbdb);
+    letter-spacing: 2px;
+}
+
+.review-list__stars::before {
+    content: '★★★★★';
+}
+
+.review-list__stars-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    color: var(--review-star-filled, #ffc600);
+}
+
+.review-list__stars-fill::before {
+    content: '★★★★★';
+}
+
+.reviews-summary {
+    color: #494949;
+    margin-bottom: 20px;
+}
+
+.reviews-empty {
+    color: #777;
+}
+
+/* Отзывы о магазине на Главной (`FR-HOME-007`, Таск 6 Фазы 6) — макета
+   у карточки нет (`C-009`: «карточки готовит исполнитель доработки, не
+   отдельный дизайнер»), звёзды переиспользуют `.review-list__stars`
+   выше. */
+.store-review-card {
+    height: 100%;
+    padding: 24px;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.store-review-card__header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.store-review-card__name {
+    font-weight: 600;
+}
+
+.store-review-card__text {
+    margin-bottom: 12px;
+    color: #494949;
+}
+
+.store-review-card__date {
+    font-size: 13px;
+    color: #777;
+}

@@ -18,6 +18,7 @@ final class CatalogFiltersTest extends TestCase
         $this->assertNull($filters['price_min']);
         $this->assertNull($filters['price_max']);
         $this->assertFalse($filters['in_stock']);
+        $this->assertFalse($filters['on_sale']);
     }
 
     public function testUnknownSortFallsBackToNewest(): void
@@ -99,6 +100,18 @@ final class CatalogFiltersTest extends TestCase
         $this->assertFalse(normalizeCatalogFilters([])['in_stock']);
     }
 
+    public function testOnSaleAcceptsOnlyStringOne(): void
+    {
+        $this->assertTrue(normalizeCatalogFilters(['on_sale' => '1'])['on_sale']);
+        $this->assertFalse(normalizeCatalogFilters(['on_sale' => '0'])['on_sale']);
+        $this->assertFalse(normalizeCatalogFilters([])['on_sale']);
+    }
+
+    public function testOnSaleIgnoresGarbageValue(): void
+    {
+        $this->assertFalse(normalizeCatalogFilters(['on_sale' => 'yes'])['on_sale']);
+    }
+
     public function testBuildCatalogQueryStringOmitsDefaults(): void
     {
         $filters = normalizeCatalogFilters([]);
@@ -114,6 +127,7 @@ final class CatalogFiltersTest extends TestCase
             'color'     => ['Серый'],
             'price_min' => '1000',
             'in_stock'  => '1',
+            'on_sale'   => '1',
         ]);
 
         $query = buildCatalogQueryString($filters);
@@ -124,7 +138,18 @@ final class CatalogFiltersTest extends TestCase
         $this->assertSame(['Серый'], $parsed['color']);
         $this->assertSame('1000', $parsed['price_min']);
         $this->assertSame('1', $parsed['in_stock']);
+        $this->assertSame('1', $parsed['on_sale']);
         $this->assertArrayNotHasKey('price_max', $parsed);
+    }
+
+    public function testBuildCatalogQueryStringOmitsOnSaleWhenNotApplied(): void
+    {
+        $filters = normalizeCatalogFilters(['on_sale' => '0']);
+
+        $query = buildCatalogQueryString($filters);
+        parse_str($query, $parsed);
+
+        $this->assertArrayNotHasKey('on_sale', $parsed);
     }
 
     public function testNormalizeSearchQueryTrimsAndCollapsesWhitespace(): void

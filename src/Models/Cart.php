@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
+require_once ROOT_PATH . '/src/Core/Price.php';
 
 /**
  * `$owner` — ровно один из `['user_id' => int]` (авторизованный) или
@@ -38,6 +39,7 @@ function validateCartOwner(array $owner): array
 function getCartItems(array $owner): array
 {
     $ownerCondition = validateCartOwner($owner);
+    $priceSql       = discountedPriceSql('pv');
 
     $stmt = getPdo()->prepare("
         SELECT
@@ -46,7 +48,9 @@ function getCartItems(array $owner): array
             ci.color,
             ci.quantity,
             ci.price_snapshot,
-            pv.price,
+            {$priceSql} AS price,
+            pv.price AS old_price,
+            pv.discount_percent,
             pv.sku,
             pv.material,
             pv.mechanism_type,
@@ -97,7 +101,7 @@ function addCartItem(array $owner, int $variantId, ?string $color, int $qty): st
 
     $variantStmt = $pdo->prepare("
         SELECT
-            pv.price, pv.is_showroom_sample,
+            pv.price, pv.discount_percent, pv.is_showroom_sample,
             EXISTS (
                 SELECT 1 FROM reserves r
                 WHERE r.product_variant_id = pv.id AND r.status = 'active'
@@ -111,6 +115,11 @@ function addCartItem(array $owner, int $variantId, ?string $color, int $qty): st
     if ($variant === false) {
         return ADD_TO_CART_NOT_FOUND;
     }
+
+    // Снэпшот пишется по эффективной (скидочной) цене (`ADR-041`,
+    // `FR-DISC-002` правило 2) — та же цена, что видит Покупатель в
+    // корзине сразу после добавления.
+    $effectivePrice = discountedPrice((string) $variant['price'], $variant['discount_percent']);
 
     $isShowroomSample = (bool) $variant['is_showroom_sample'];
 
@@ -150,7 +159,7 @@ function addCartItem(array $owner, int $variantId, ?string $color, int $qty): st
         'variant_id'     => $variantId,
         'color'          => $color,
         'quantity'       => clampCartQuantity($qty, $isShowroomSample),
-        'price_snapshot' => $variant['price'],
+        'price_snapshot' => $effectivePrice,
     ]);
 
     return ADD_TO_CART_OK;
@@ -249,10 +258,16 @@ function acceptCartPriceChanges(array $owner): void
     ");
     $deleteStmt->execute(['owner_value' => $ownerCondition['value']]);
 
+    // Снэпшот подтягивается к эффективной (скидочной) цене — той же,
+    // что теперь отдаёт `getCartItems()` (`ADR-041`); синхронизация с
+    // сырой `pv.price` оставляла бы снэпшот «отстающим» навсегда при
+    // активной скидке, и `findPriceChanges()` продолжал бы показывать
+    // разницу сразу после «Принять изменения».
+    $priceSql = discountedPriceSql('pv');
     $syncStmt = $pdo->prepare("
         UPDATE cart_items ci
         INNER JOIN product_variants pv ON pv.id = ci.product_variant_id
-        SET ci.price_snapshot = pv.price
+        SET ci.price_snapshot = {$priceSql}
         WHERE ci.{$ownerCondition['column']} = :owner_value
     ");
     $syncStmt->execute(['owner_value' => $ownerCondition['value']]);

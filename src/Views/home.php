@@ -3,12 +3,19 @@
 declare(strict_types=1);
 
 /** @var string $title */
+/** @var array<int, array<string, mixed>> $banners */
+/** @var array<int, array<string, mixed>> $featuredProducts */
+/** @var array<int, array<string, mixed>> $storeReviews */
+/** @var array<int, array<string, mixed>> $newestProducts */
+/** @var array<int, array<string, mixed>> $discountedProducts */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 ?>
 
 <main>
     <?php include ROOT_PATH . '/src/Views/components/flash.php'; ?>
+
+    <?php if ($banners !== []): ?>
     <!-- Slider Section Start -->
     <div class="section slider-section">
         <div class="slider-shape"></div>
@@ -17,40 +24,20 @@ include ROOT_PATH . '/src/Views/layout/header.php';
             <div class="slider-active">
                 <div class="swiper-container">
                     <div class="swiper-wrapper">
-
-                        <div class="single-slider swiper-slide animation-style-01">
-                            <div class="slider-content">
-                                <h2 class="title">Мебель на заказ <br> для вашего дома</h2>
-                                <p>Уникальный стиль под ваш интерьер</p>
-                                <a href="#" class="btn btn-primary btn-hover-dark">Смотреть каталог</a>
+                        <?php foreach ($banners as $banner): ?>
+                            <?php $bannerLink = $banner['link'] ?? '/catalog'; ?>
+                            <div class="single-slider swiper-slide animation-style-01">
+                                <div class="slider-content">
+                                    <?php if ($banner['title'] !== null): ?>
+                                        <h2 class="title"><?= e($banner['title']) ?></h2>
+                                    <?php endif; ?>
+                                    <a href="<?= e($bannerLink) ?>" class="btn btn-primary btn-hover-dark">Смотреть каталог</a>
+                                </div>
+                                <div class="slider-images">
+                                    <img src="<?= e('/' . ltrim($banner['image_path'], '/')) ?>" alt="<?= e($banner['title'] ?? 'Мебель на заказ') ?>">
+                                </div>
                             </div>
-                            <div class="slider-images">
-                                <img src="/assets/images/slider/slider-item-1.png" alt="Мебель на заказ">
-                            </div>
-                        </div>
-
-                        <div class="single-slider swiper-slide animation-style-01">
-                            <div class="slider-content">
-                                <h2 class="title">Стиль и комфорт <br> в каждой детали</h2>
-                                <p>Материал, цвет и размер — на ваш выбор</p>
-                                <a href="#" class="btn btn-primary btn-hover-dark">Смотреть каталог</a>
-                            </div>
-                            <div class="slider-images">
-                                <img src="/assets/images/slider/slider-item-2.png" alt="Мебель на заказ">
-                            </div>
-                        </div>
-
-                        <div class="single-slider swiper-slide animation-style-01">
-                            <div class="slider-content">
-                                <h2 class="title">Мебель, сделанная <br> для вас</h2>
-                                <p>От эскиза до сборки — под ключ</p>
-                                <a href="#" class="btn btn-primary btn-hover-dark">Смотреть каталог</a>
-                            </div>
-                            <div class="slider-images">
-                                <img src="/assets/images/slider/slider-item-3.png" alt="Мебель на заказ">
-                            </div>
-                        </div>
-
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="swiper-pagination"></div>
@@ -59,6 +46,7 @@ include ROOT_PATH . '/src/Views/layout/header.php';
         </div>
     </div>
     <!-- Slider Section End -->
+    <?php endif; ?>
 
     <!-- Benefit Section Start -->
     <div class="section section-padding">
@@ -89,6 +77,41 @@ include ROOT_PATH . '/src/Views/layout/header.php';
         </div>
     </div>
     <!-- Benefit Section End -->
+
+    <?php
+    $heading = 'Хиты продаж';
+    $products = $featuredProducts;
+    include ROOT_PATH . '/src/Views/components/home-product-section.php';
+    ?>
+
+    <?php if ($storeReviews !== []): ?>
+    <!-- Store Reviews Section Start -->
+    <div class="section section-padding">
+        <div class="container">
+            <div class="section-title">
+                <h2 class="title">Отзывы наших покупателей</h2>
+            </div>
+            <div class="row g-4">
+                <?php foreach ($storeReviews as $review): ?>
+                    <?php include ROOT_PATH . '/src/Views/components/store-review-card.php'; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+    <!-- Store Reviews Section End -->
+    <?php endif; ?>
+
+    <?php
+    $heading = 'Новинки';
+    $products = $newestProducts;
+    include ROOT_PATH . '/src/Views/components/home-product-section.php';
+    ?>
+
+    <?php
+    $heading = 'Товары со скидкой';
+    $products = $discountedProducts;
+    include ROOT_PATH . '/src/Views/components/home-product-section.php';
+    ?>
 </main>
 
 <?php include ROOT_PATH . '/src/Views/layout/footer.php'; ?>

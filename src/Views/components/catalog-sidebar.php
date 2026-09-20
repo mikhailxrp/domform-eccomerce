@@ -51,10 +51,15 @@ $priceMax = $filters['price_max'] ?? $filterOptions['price_max'];
             <h4 class="widget-title">Уточнить</h4>
             <div class="widget-checkbox">
                 <ul class="checkbox-items">
-                    <?php // «В наличии» = Вариант-образец (`FR-CAT-002`, `BR-004`); «Со скидкой» появится здесь же в Фазе 6 (`FR-CAT-010`) ?>
+                    <?php // «В наличии» = Вариант-образец (`FR-CAT-002`, `BR-004`) ?>
                     <li>
                         <input type="checkbox" id="filter-in-stock" name="in_stock" value="1" <?= $filters['in_stock'] ? 'checked' : '' ?>>
                         <label for="filter-in-stock"> <span></span>В наличии</label>
+                    </li>
+                    <?php // «Со скидкой» — хотя бы один активный Вариант с discount_percent (`FR-CAT-010`, Таск 3 Фазы 6) ?>
+                    <li>
+                        <input type="checkbox" id="filter-on-sale" name="on_sale" value="1" <?= $filters['on_sale'] ? 'checked' : '' ?>>
+                        <label for="filter-on-sale"> <span></span>Со скидкой</label>
                     </li>
                 </ul>
             </div>

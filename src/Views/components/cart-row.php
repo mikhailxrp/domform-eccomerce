@@ -9,8 +9,9 @@ $isShowroomSample  = (bool) $item['is_showroom_sample'];
 $metaText          = trim(
     ($item['material'] ?? '') . ($item['material'] !== null && $item['color'] !== null ? ', ' : '') . ($item['color'] ?? '')
 );
-$productUrl = '/product/' . $item['product_slug'];
-$imageUrl   = $item['image_path'] !== null ? '/' . ltrim($item['image_path'], '/') : '/assets/images/product/product-01.jpg';
+$productUrl    = '/product/' . $item['product_slug'];
+$imageUrl      = $item['image_path'] !== null ? '/' . ltrim($item['image_path'], '/') : '/assets/images/product/product-01.jpg';
+$itemHasDiscount = hasDiscount($item['discount_percent'] ?? null);
 ?>
 <tr class="cart-row<?= $isAvailable ? '' : ' cart-row--unavailable' ?>">
     <td class="product-thumb">
@@ -21,7 +22,14 @@ $imageUrl   = $item['image_path'] !== null ? '/' . ltrim($item['image_path'], '/
         <?php if ($metaText !== ''): ?>
             <div class="product-size-color"><p><?= e($metaText) ?></p></div>
         <?php endif; ?>
-        <p class="price"><?= formatPrice($item['price']) ?></p>
+        <?php if ($itemHasDiscount): ?>
+            <div class="product-prices">
+                <span class="old-price"><?= formatPrice($item['old_price']) ?></span>
+                <span class="sale-price"><?= formatPrice($item['price']) ?></span>
+            </div>
+        <?php else: ?>
+            <p class="price"><?= formatPrice($item['price']) ?></p>
+        <?php endif; ?>
         <?php if (!$isAvailable): ?>
             <p class="cart-row__unavailable-note">Недоступен для заказа — товар зарезервирован</p>
         <?php endif; ?>

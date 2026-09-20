@@ -357,6 +357,7 @@
         var $colorInput   = $root.find('.product-variant-selector__color-input');
         var $hint         = $root.find('.product-variant-selector__hint');
         var $price        = jQuery('#product-price');
+        var $oldPrice     = jQuery('#product-old-price');
         var $mainImage    = jQuery('#product-main-image');
 
         var preselected        = parseInt($root.attr('data-preselected'), 10);
@@ -445,6 +446,14 @@
 
             if ($price.length) {
                 $price.text(variant.price_formatted);
+            }
+
+            // Старая цена (`FR-DISC-002`, Таск 2 Фазы 6) — та же
+            // проверка «есть скидка», что `hasDiscount()` на сервере
+            // (`discount_percent` — `NULL` или `0` означают «нет»).
+            if ($oldPrice.length) {
+                var hasDiscount = !!variant.discount_percent && parseFloat(variant.discount_percent) > 0;
+                $oldPrice.attr('hidden', !hasDiscount).text(hasDiscount ? variant.old_price_formatted : '');
             }
 
             if ($colorName.length) {

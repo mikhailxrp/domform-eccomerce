@@ -426,6 +426,19 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+// `banners` не имеет уникального ключа кроме `id` — в отличие от
+// `sales_channels`/`integrations` ниже (`UNIQUE(code)`), `INSERT IGNORE`
+// здесь не защитил бы от дублей при повторном запуске. Сидим только
+// если таблица пуста (`.docs/phases/phase-6.md`, Таск 6).
+if ((int) $pdo->query('SELECT COUNT(*) FROM banners')->fetchColumn() === 0) {
+    $pdo->exec("
+        INSERT INTO banners (image_path, title, link, sort_order, is_active) VALUES
+            ('assets/images/slider/slider-item-1.png', 'Мебель на заказ для вашего дома', '/catalog', 1, 1),
+            ('assets/images/slider/slider-item-2.png', 'Стиль и комфорт в каждой детали', '/catalog', 2, 1),
+            ('assets/images/slider/slider-item-3.png', 'Мебель, сделанная для вас', '/catalog', 3, 1);
+    ");
+}
+
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS sales_channels (
         id          INT AUTO_INCREMENT PRIMARY KEY,

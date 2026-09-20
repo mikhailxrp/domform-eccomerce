@@ -11,6 +11,11 @@ $metaText   = trim(
 );
 $isListView = ($viewMode ?? 'grid') === 'list';
 
+// `min_old_price` уже `null`, если скидки нет (посчитано в Model,
+// `attachCheapestVariant()`, Таск 1 Фазы 6) — View только проверяет
+// `!== null`, никакой бизнес-логики скидки здесь нет.
+$oldPrice = $product['min_old_price'] ?? null;
+
 // Фото тем из сидов (product-details/*) не рассчитаны на пропорции
 // мини-карточки — заглушка из набора темы под сетку каталога
 // (assets/images/product/, 13 файлов), детерминированно по id товара.
@@ -58,6 +63,9 @@ $productMeta = ob_get_clean();
             <h4 class="title"><a href="<?= e($productUrl) ?>"><?= e($product['name']) ?></a></h4>
             <div class="price">
                 <span class="sale-price">от <?= formatPrice($product['min_price']) ?></span>
+                <?php if ($oldPrice !== null): ?>
+                    <span class="old-price"><?= formatPrice($oldPrice) ?></span>
+                <?php endif; ?>
             </div>
             <?php if ($metaText !== ''): ?>
                 <p class="product-card__meta"><?= e($metaText) ?></p>
@@ -74,6 +82,9 @@ $productMeta = ob_get_clean();
                 <h4 class="title"><a href="<?= e($productUrl) ?>"><?= e($product['name']) ?></a></h4>
                 <div class="price">
                     <span class="sale-price">от <?= formatPrice($product['min_price']) ?></span>
+                    <?php if ($oldPrice !== null): ?>
+                        <span class="old-price"><?= formatPrice($oldPrice) ?></span>
+                    <?php endif; ?>
                 </div>
                 <?php if ($metaText !== ''): ?>
                     <p class="product-card__meta"><?= e($metaText) ?></p>
