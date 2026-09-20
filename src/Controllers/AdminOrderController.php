@@ -8,11 +8,13 @@ require_once ROOT_PATH . '/src/Models/Order.php';
 require_once ROOT_PATH . '/src/Models/Reserve.php';
 require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/User.php';
+require_once ROOT_PATH . '/src/Models/ReturnRequest.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/Payment.php';
 require_once ROOT_PATH . '/src/Core/OrderActions.php';
 require_once ROOT_PATH . '/src/Core/ManualOrder.php';
+require_once ROOT_PATH . '/src/Core/Warranty.php';
 
 class AdminOrderController
 {
@@ -82,6 +84,7 @@ class AdminOrderController
             'canCancel'          => canCancelOrder($order['status']),
             'canEditItems'       => canEditOrderItems($order['status']),
             'reserves'           => getOrderReserves((int) $id),
+            'returns'            => getOrderReturns((int) $id),
         ]);
     }
 

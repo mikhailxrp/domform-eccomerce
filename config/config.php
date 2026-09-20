@@ -55,6 +55,9 @@ define('ADMIN_CUSTOMERS_PER_PAGE', 20);
 // Панель управления — Товары (`.docs/phases/phase-4.md`, Таск 7)
 define('ADMIN_PRODUCTS_PER_PAGE', 20);
 
+// Панель управления — Возвраты (`.docs/phases/phase-5.md`, Таск 6)
+define('ADMIN_RETURNS_PER_PAGE', 20);
+
 // Панель управления — фото Вариантов (`.docs/phases/phase-4.md`, Таск 9)
 // Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
 // комментарий, tests/bootstrap.php не подключает config.php).
