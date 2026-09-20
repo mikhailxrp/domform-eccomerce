@@ -90,7 +90,7 @@
 | 1   | Скидочная цена: единый источник истины (Model, без UI) | ✅ Завершён |
 | 2   | Старая/новая цена на витрине                           | ✅ Завершён |
 | 3   | Фильтр каталога «Со скидкой»                           | ✅ Завершён |
-| 4   | Отзывы о Товаре: форма и блок на карточке              | ⏳ Ожидает  |
+| 4   | Отзывы о Товаре: форма и блок на карточке              | ✅ Завершён |
 | 5   | Модерация отзывов в Панели управления                  | ⏳ Ожидает  |
 | 6   | Главная: баннеры, хиты, новинки, отзывы, скидки        | ⏳ Ожидает  |
 
@@ -272,56 +272,77 @@ HTTP, без создания тестовых данных (использов�
 
 ## Таск 4 — Отзывы о Товаре: форма и блок на карточке
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён 20.09.2026 — проверено на реальной БД живым
+HTTP. Подробности — `.docs/dev-log.md` 20.09.2026. Scope скорректирован
+против исходного плана (обсуждено и подтверждено пользователем перед
+реализацией): рейтинг — 5 нативных radio, стилизованных чистым CSS
+(без JS вообще), не разметка `#rating` темы — её обработчик в
+`main.js` только переключает классы, не пишет значение; ошибки формы
+— прямой рендер карточки (`(new ProductController())->show($slug,
+$old, $errors)`), не redirect+сессия; `getProductRatingSummary()` не
+заводилась — `averageRating()` считает среднее над уже полученными
+строками `getApprovedProductReviews()`.
 
 **Цель таска:**
 `FR-CARD-006` — на карточке товара появляется вкладка отзывов: список
 одобренных (имя, рейтинг, дата, текст), средний рейтинг и число
-отзывов, форма (имя, email, рейтинг 1–5, текст) из `SCR-03` «как
-есть». Отправленный отзыв всегда `pending` и не виден никому до
-модерации (`FR-ADM-004` правило 1); Покупатель видит flash «отзыв
-появится после проверки».
+отзывов, форма (имя, email, рейтинг 1–5, текст). Отправленный отзыв
+всегда `pending` и не виден никому до модерации (`FR-ADM-004` правило
+1); Покупатель видит flash «отзыв появится после проверки».
 
-**Что нужно создать/изменить:**
+**Что создано/изменено** (фактический список после сверки с кодом/
+темой):
 
-- `src/Core/Review.php` — создать: `REVIEW_STATUS_PENDING/_APPROVED/
-_REJECTED`, `reviewStatusLabel()`, `validateReviewInput(array):
-array` (имя 2–150, email через `validateEmail()`, рейтинг — целое
-  1–5, текст непустой, лимит длины), `averageRating(array $reviews):
-?string` — чистые функции
-- `tests/Unit/ReviewTest.php` — создать; `tests/bootstrap.php` —
-  подключить
-- `src/Models/Review.php` — создать: `createReview(array $data): ?int`
-  (`status='pending'`, только для активного Товара),
-  `getApprovedProductReviews(int $productId): array`,
-  `getProductRatingSummary(int $productId): array` (`avg`, `count`)
-- `src/Controllers/ReviewController.php` — создать: `store(string
-$slug)` — `requireCsrf()`, `tooManyAttempts('review', 3, 600)` /
-  `hitRateLimit('review')`, валидация → ошибки и значения в сессию,
-  POST → `redirect()` на карточку с якорем `#reviews`
-- `src/Views/components/review-form.php`,
-  `src/Views/components/review-list.php` — создать (`csrfField()`,
-  подстановка имени/email авторизованного Покупателя)
-- `src/Views/product/show.php`, `src/Controllers/ProductController.php`
-  — изменить: вкладка «Отзывы» вместо комментария-заглушки, передача
-  отзывов и сводки рейтинга
-- `config/routes.php` — изменить: `POST /product/{slug}/reviews`
+- `src/Core/Review.php` — создано: `REVIEW_STATUS_PENDING/_APPROVED/
+  _REJECTED`, `reviewStatusLabel()`, `normalizeReviewInput()` +
+  `validateReviewInput()` (имя 2–150, email через `validateEmail()`,
+  рейтинг ∈ {1..5}, текст непустой ≤2000 символов), `averageRating(array
+  $reviews): ?string` — чистые функции, по образцу `Core/Checkout.php`
+- `tests/Unit/ReviewTest.php` — создано (21 тест); `tests/bootstrap.php`
+  — подключён `Core/Review.php`
+- `src/Models/Review.php` — создано: `createReview(array $data): int`
+  (`status='pending'`), `getApprovedProductReviews(int $productId):
+  array` (по `INDEX(product_id, status)`, без пагинации — реальный
+  масштаб проекта)
+- `src/Controllers/ReviewController.php` — создано: `store(string
+  $slug)` — `requireCsrf()`, `findProductBySlug()` (404), `tooManyAttempts
+  ('review', 3, 600)`/`hitRateLimit('review')` без `clearRateLimit()`
+  на успехе, при ошибке валидации — прямой вызов `ProductController::
+  show()` с `$old`/`$errors`, без редиректа
+- `src/Controllers/ProductController.php` — изменён: `show(string
+  $slug, array $reviewOld = [], array $reviewErrors = [])`, подстановка
+  имени/email авторизованного Покупателя (`currentUser()` +
+  `findUserById()`), требует и `Models/Review.php`, и **сам**
+  `Core/Review.php` напрямую (не только транзитивно через Model — см.
+  «Баг» в `dev-log.md`)
+- `src/Views/components/review-form.php`, `review-list.php` — созданы
+- `src/Views/product/show.php` — изменён: блок вкладок перестроен —
+  «Отзывы» есть всегда (даже без одобренных отзывов), навигация
+  показывается при >1 вкладки, при ошибке формы вкладка «Отзывы»
+  открывается сразу
+- `public/assets/css/app.css` — изменён: CSS-звёзды для формы (radio
+  по убыванию + `row-reverse` + `~`) и для чтения в списке (юникодная
+  `★`, не FontAwesome)
+- `config/routes.php` — изменён: `POST /product/{slug}/reviews`
 
 **Definition of Done:**
 
-- [ ] Отправленный отзыв: строка `reviews` со `status='pending'`,
+- [x] Отправленный отзыв: строка `reviews` со `status='pending'`,
       `product_id` заполнен; на карточке **не виден** (критерий приёмки
       `FR-ADM-004`) — проверено на реальной БД
-- [ ] Рейтинг вне 1–5 / пустой текст / невалидный email → ошибки у
-      полей, введённые значения сохранены; 419 без CSRF; 4-я отправка за
-      10 минут → flash-ограничение, запись не создана
-- [ ] Вручную `approved` в БД → отзыв, средний рейтинг и счётчик видны;
-      `rejected`/`pending` — нет
-- [ ] Отзыв на несуществующий/неактивный Товар (подмена `slug`) → 404 /
-      отказ, запись не создана
-- [ ] Email автора нигде не выводится в HTML; весь вывод через `e()`
-- [ ] `composer test` зелёный, включая `ReviewTest`
-- [ ] Проверить `.docs/dod-global.md`
+- [x] Пустая форма → 4 поля с ошибками, введённые значения (кроме
+      рейтинга) сохранены, вкладка «Отзывы» открыта сразу; 419 без
+      CSRF; 4-я отправка за 10 минут → flash-ограничение, запись не
+      создана — проверено живым HTTP
+- [x] Вручную `approved` в БД (2 отзыва, рейтинги 4 и 2) → оба видны,
+      звёзды залиты на 80%/40%, средняя оценка «3.0 из 5 (2)» посчитана
+      верно; `pending` — не видна
+- [x] Отзыв на несуществующий Товар (подмена `slug` в POST) → 404,
+      запись не создана
+- [x] Email автора нигде не выводится в HTML (`grep` по адресам —
+      пусто); весь вывод через `e()`
+- [x] `composer test` зелёный (295/295, было 274/274, +21 `ReviewTest`)
+- [x] Проверить `.docs/dod-global.md`
 
 ---
 

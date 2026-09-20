@@ -2813,3 +2813,76 @@ ActiveFilters`).
 карточке.
 
 ---
+
+**Дата:** 20.09.2026
+**Что сделано:** Таск 4 Фазы 6 — «Отзывы о Товаре: форма и блок на
+карточке» (`FR-CARD-006`). Перед кодом скорректировал план против
+`phase-6.md`: рейтинг — 5 нативных radio (`name="rating"`), стилизованных
+чистым CSS под звёзды (radio по убыванию 5→1 + `flex-direction:
+row-reverse` + сиблинг-селектор `~`), а не разметка `#rating` темы —
+её обработчик в `main.js` (реально загружается, не `.min.js`) только
+переключает классы по клику/hover и не пишет значение никуда, форма
+не отправила бы рейтинг вообще. Ошибки формы — прямой рендер карточки
+(`ReviewController::store()` при ошибке валидации вызывает `(new
+ProductController())->show($slug, $old, $errors)` без редиректа), тот
+же приём, что `CheckoutController::store()`/`AdminOrderController::
+store()`: `setFlash()` хранит только строку, не массив ошибок по
+полям. Средний рейтинг — чистая `averageRating()` над строками
+`getApprovedProductReviews()`, отдельный `SELECT AVG(...)` не заводил.
+
+Новое: `src/Core/Review.php` (статусы, `normalizeReviewInput()`/
+`validateReviewInput()` по образцу `Core/Checkout.php`, `averageRating()`),
+`src/Models/Review.php` (`createReview()`, `getApprovedProductReviews()`
+по `INDEX(product_id, status)`), `src/Controllers/ReviewController.php`
+(`store()` — CSRF, 404 на неактивный/несуществующий Товар, rate-limit
+`tooManyAttempts('review', 3, 600)` без `clearRateLimit()` на успехе —
+это защита от спама количеством, не от подбора пароля, лимит не
+снимается успешной отправкой, тот же принцип, что у `checkout`),
+`src/Views/components/review-form.php`, `review-list.php`. Изменено:
+`ProductController::show(string $slug, array $reviewOld = [], array
+$reviewErrors = [])`, `product/show.php` (блок вкладок перестроен —
+«Отзывы» есть всегда, даже без одобренных отзывов; навигация
+показывается, когда вкладок больше одной, было — только при
+характеристиках И описании одновременно; при ошибке формы вкладка
+«Отзывы» открывается сразу), `app.css` (CSS-звёзды и для формы, и для
+чтения в списке — юникодная `★`, не FontAwesome, чтобы не зависеть от
+контекста `.quick-view-description`, которого в проекте нет), `config/
+routes.php` (`POST /product/{slug}/reviews`), `tests/bootstrap.php`.
+
+Баг, найденный и исправленный на HTTP-проверке (не поймал `composer
+test`, статическое чтение кода тоже пропустило): `ProductController.php`
+вызывает `averageRating()` напрямую, но требовал только `Models/
+Review.php`/`Models/User.php`, не сам `Core/Review.php` — при обычном
+`GET /product/{slug}` (не через `ReviewController`, который его
+требует) функция была не загружена → `Error: Call to undefined
+function App\Controllers\averageRating()` (PHP резолвит неймспейс-
+функцию в текущий неймспейс `App\Controllers`, а не автоматически в
+`Models/Review.php`, которая её не требует). Добавлен прямой
+`require_once Core/Review.php` в `ProductController.php` — тот же
+случай, что уже происходил с `hasDiscount()`/`Core/Price.php` в Таске
+1, но там `Models/Product.php` уже требовал `Core/Price.php`
+самостоятельно, здесь — нет.
+
+Проверено на реальной БД живым HTTP (`php -S` + `curl`, cookie-сессия):
+форма/вкладка/5 звёзд на карточке (`divan-milan`); пустая форма → 4
+поля с ошибками, вкладка «Отзывы» открыта сразу, значения (кроме
+рейтинга) сохранены; успешная отправка с реальным кириллическим именем
+(«Иван Петров», через точный percent-encoded body — `curl
+--data-urlencode` с литералом в аргументе Bash-инструмента
+исказил байты, это артефакт тестового окружения, не баг приложения) →
+редирект, flash «Отзыв появится...», строка `pending` в БД, `name`
+сохранено ровно как отправлено (21 байт UTF-8), на карточке не видна;
+419 без CSRF; 404 на несуществующий slug в POST; ручное `approved` для
+двух отзывов (рейтинги 4 и 2) → оба видны, звёзды залиты на 80%/40%,
+средняя оценка «3.0 из 5 (2)» посчитана верно, email нигде не встречается
+в HTML (`grep` по обоим адресам — пусто); rate-limit — 3 успешные
+отправки подряд, 4-я заблокирована flash-сообщением, счётчик в БД не
+вырос. Все тестовые строки `reviews` удалены, файлы rate-limit в
+`storage/cache/` очищены, сервер остановлен.
+
+`composer test`: 295/295 (было 274/274, +21 — `ReviewTest.php`).
+
+**Что следующее:** Таск 5 Фазы 6 — модерация отзывов в Панели
+управления.
+
+---

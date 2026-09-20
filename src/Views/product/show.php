@@ -8,11 +8,16 @@ declare(strict_types=1);
 /** @var array<int,array> $variants */
 /** @var array<int,array> $specs */
 /** @var array<int,array> $related */
+/** @var array<int,array> $reviews */
+/** @var ?string $averageRating */
+/** @var array $reviewOld */
+/** @var array $reviewErrors */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 
 $firstVariant = $variants[0];
 $firstImage   = $firstVariant['images'][0] ?? null;
+$productSlug  = $product['slug'];
 
 // Фото без цвета (общие ракурсы товара, необязательное поле формы
 // загрузки — `admin/products/form.php`, Таск 9 Фазы 4) раньше молча
@@ -100,73 +105,86 @@ foreach ($firstVariant['images'] as $image) {
     <?php
     $hasSpecs       = $specs !== [];
     $hasDescription = ($product['description'] ?? '') !== '';
-    $hasTabs        = $hasSpecs || $hasDescription;
+    // Вкладка «Отзывы» есть всегда (Таск 4 Фазы 6) — форма работает и
+    // без единого одобренного отзыва, поэтому вкладок теперь минимум
+    // одна (сам блок вкладок больше не может быть пустым — `$hasTabs`
+    // не нужен). Порядок и подпись — характеристики → описание →
+    // отзывы; активная по умолчанию — первая доступная, а при ошибке
+    // отправки формы (`$reviewErrors`) — сразу «Отзывы», чтобы
+    // Покупатель увидел, что не так, без лишнего клика.
+    $tabs = [];
+    if ($hasSpecs) {
+        $tabs['product-tab-specs'] = 'Характеристики';
+    }
+    if ($hasDescription) {
+        $tabs['product-tab-description'] = 'Описание';
+    }
+    $tabs['product-tab-reviews'] = 'Отзывы (' . count($reviews) . ')';
+
+    $reviewHasErrors = in_array(true, $reviewErrors, true);
+    $activeTabId      = $reviewHasErrors ? 'product-tab-reviews' : array_key_first($tabs);
     ?>
 
-    <?php if ($hasTabs || $related !== []): ?>
-        <?php
-        // Вкладки и похожие товары — одна секция с гарантированным нижним
-        // отступом перед футером: если бы это были отдельные секции
-        // (каждая только с padding-top), а «Похожих товаров» не нашлось
-        // (единственный активный товар в своей категории), низ вкладок
-        // лип бы прямо к футеру.
-        ?>
-        <div class="section section-padding">
-            <div class="container">
-                <?php if ($hasTabs): ?>
-                    <!-- Вкладки по макету SCR-03 (product-details-affiliate.html) —
-                         без «Reviews»: отзывы не показываются раньше Фазы 6. -->
-                    <div class="product-details-tabs">
-                        <?php if ($hasSpecs && $hasDescription): ?>
-                            <ul class="nav justify-content-center">
-                                <li><button type="button" class="active" data-bs-toggle="tab" data-bs-target="#product-tab-specs">Характеристики</button></li>
-                                <li><button type="button" data-bs-toggle="tab" data-bs-target="#product-tab-description">Описание</button></li>
-                            </ul>
-                        <?php endif; ?>
-
-                        <div class="tab-content">
-                            <?php if ($hasSpecs): ?>
-                                <div class="tab-pane fade show active" id="product-tab-specs">
-                                    <div class="information-content">
-                                        <table class="table product-specs-table">
-                                            <tbody>
-                                                <?php foreach ($specs as $spec): ?>
-                                                    <tr>
-                                                        <th scope="row"><?= e($spec['name']) ?></th>
-                                                        <td><?= e($spec['value']) ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-
-                            <?php if ($hasDescription): ?>
-                                <div class="tab-pane fade<?= $hasSpecs ? '' : ' show active' ?>" id="product-tab-description">
-                                    <div class="description-content">
-                                        <p><?= e($product['description']) ?></p>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+    <div class="section section-padding">
+        <div class="container">
+            <!-- Вкладки по макету SCR-03 (product-details-affiliate.html) -->
+            <div class="product-details-tabs">
+                <?php if (count($tabs) > 1): ?>
+                    <ul class="nav justify-content-center">
+                        <?php foreach ($tabs as $tabId => $tabLabel): ?>
+                            <li><button type="button" class="<?= $tabId === $activeTabId ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#<?= e($tabId) ?>"><?= e($tabLabel) ?></button></li>
+                        <?php endforeach; ?>
+                    </ul>
                 <?php endif; ?>
 
-                <?php if ($related !== []): ?>
-                    <h4 class="title<?= $hasTabs ? ' product-section-gap' : '' ?>">Похожие товары</h4>
-                    <div class="shop-product-wrapper">
-                        <div class="row">
-                            <?php $viewMode = 'grid'; ?>
-                            <?php foreach ($related as $product): ?>
-                                <?php include ROOT_PATH . '/src/Views/components/product-card.php'; ?>
-                            <?php endforeach; ?>
+                <div class="tab-content">
+                    <?php if ($hasSpecs): ?>
+                        <div class="tab-pane fade<?= 'product-tab-specs' === $activeTabId ? ' show active' : '' ?>" id="product-tab-specs">
+                            <div class="information-content">
+                                <table class="table product-specs-table">
+                                    <tbody>
+                                        <?php foreach ($specs as $spec): ?>
+                                            <tr>
+                                                <th scope="row"><?= e($spec['name']) ?></th>
+                                                <td><?= e($spec['value']) ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($hasDescription): ?>
+                        <div class="tab-pane fade<?= 'product-tab-description' === $activeTabId ? ' show active' : '' ?>" id="product-tab-description">
+                            <div class="description-content">
+                                <p><?= e($product['description']) ?></p>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="tab-pane fade<?= 'product-tab-reviews' === $activeTabId ? ' show active' : '' ?>" id="product-tab-reviews">
+                        <div class="reviews-content">
+                            <?php include ROOT_PATH . '/src/Views/components/review-list.php'; ?>
+                            <?php include ROOT_PATH . '/src/Views/components/review-form.php'; ?>
                         </div>
                     </div>
-                <?php endif; ?>
+                </div>
             </div>
+
+            <?php if ($related !== []): ?>
+                <h4 class="title product-section-gap">Похожие товары</h4>
+                <div class="shop-product-wrapper">
+                    <div class="row">
+                        <?php $viewMode = 'grid'; ?>
+                        <?php foreach ($related as $product): ?>
+                            <?php include ROOT_PATH . '/src/Views/components/product-card.php'; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
-    <?php endif; ?>
+    </div>
 </main>
 
 <?php include ROOT_PATH . '/src/Views/layout/footer.php'; ?>

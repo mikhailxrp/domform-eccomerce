@@ -6,12 +6,25 @@ namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/Category.php';
+require_once ROOT_PATH . '/src/Models/Review.php';
+require_once ROOT_PATH . '/src/Models/User.php';
+require_once ROOT_PATH . '/src/Core/Review.php';
 
 class ProductController
 {
     private const RELATED_LIMIT = 4;
 
-    public function show(string $slug): void
+    /**
+     * `$reviewOld`/`$reviewErrors` — только при повторном рендере после
+     * неудачной отправки формы отзыва: `ReviewController::store()` при
+     * ошибке валидации вызывает этот же метод напрямую, без редиректа
+     * (`setFlash()` хранит только строку, не массив ошибок по полям —
+     * тот же приём, что `CheckoutController::store()`/
+     * `AdminOrderController::store()`). При обычном `GET` оба параметра
+     * пусты — тогда имя/email подставляются из аккаунта авторизованного
+     * Покупателя, как в чекауте.
+     */
+    public function show(string $slug, array $reviewOld = [], array $reviewErrors = []): void
     {
         $product = findProductBySlug($slug);
         if ($product === null) {
@@ -71,13 +84,35 @@ class ProductController
         ];
         $breadcrumbs = array_merge(getCategoryPath($category), [['name' => $product['name']]]);
 
+        $reviews = getApprovedProductReviews($productId);
+
+        // Подстановка имени/email авторизованного Покупателя — только
+        // на обычном заходе (форма ещё не заполнялась); после неудачной
+        // отправки в `$reviewOld` уже то, что ввёл сам Покупатель, его
+        // не перетираем. Email в сессии не хранится (`functions.php`,
+        // `currentUser()` — только id/name/role), поэтому за ним отдельный
+        // поход в `findUserById()`, тем же приёмом, что `CheckoutController`.
+        if ($reviewOld === []) {
+            $user = currentUser();
+            if ($user !== null) {
+                $account = findUserById($user['id']);
+                if ($account !== null) {
+                    $reviewOld = ['name' => $account['name'], 'email' => $account['email']];
+                }
+            }
+        }
+
         render('product/show', [
-            'title'       => $product['name'],
-            'product'     => $product,
-            'breadcrumbs' => $breadcrumbs,
-            'variants'    => $variantsData,
-            'specs'       => $specs,
-            'related'     => $related,
+            'title'         => $product['name'],
+            'product'       => $product,
+            'breadcrumbs'   => $breadcrumbs,
+            'variants'      => $variantsData,
+            'specs'         => $specs,
+            'related'       => $related,
+            'reviews'       => $reviews,
+            'averageRating' => averageRating($reviews),
+            'reviewOld'     => $reviewOld,
+            'reviewErrors'  => $reviewErrors,
         ]);
     }
 }

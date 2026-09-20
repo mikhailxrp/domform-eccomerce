@@ -54,6 +54,7 @@ return [
         '/cart/clear'              => ['CartController', 'clear'],
         '/checkout/accept-changes' => ['CheckoutController', 'acceptChanges'],
         '/checkout'                => ['CheckoutController', 'store'],
+        '/product/{slug}/reviews'  => ['ReviewController', 'store'],
         '/admin/orders'                  => ['AdminOrderController', 'store'],
         '/admin/orders/{id}/transition'  => ['AdminOrderController', 'transition'],
         '/admin/orders/{id}/prepaid'     => ['AdminOrderController', 'markPrepaid'],
