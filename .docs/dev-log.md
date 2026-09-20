@@ -2270,3 +2270,52 @@ Model-функций в PHPUnit нет намеренно (обращаются 
 («Решения фазы», `phase-4.md`).
 
 ---
+
+**Дата:** 20.09.2026
+**Что сделано:** Фаза 5, Таск 1 — Model Резерва и закрепление на
+предоплате (`TASK.md`, `phase-5.md`). `BR-003`, `FR-STOCK-002…003`.
+- `src/Core/Reserve.php` (новый): статусы резерва + `reserveStatusLabel()`,
+  `isUniqueViolation()` (SQLSTATE 23000 через `errorInfo[0]`/`getCode()`),
+  константы результата `PREPAID_RESULT_OK/ALREADY/SAMPLE_TAKEN`.
+- `src/Models/Reserve.php` (новый): `createReservesForOrder(PDO, int)` —
+  `INSERT` в `reserves` по каждой Позиции-образцу внутри транзакции
+  вызывающего, без предварительного `SELECT ... status='active'`
+  (гонку решает `UNIQUE(active_variant_id)`, `ADR-007`); дубль ключа →
+  `logWarning()` с `order_id`/`variant_id` и `false`.
+  `findCompetingReserveForOrder(int)` — активный резерв другого Заказа
+  на образец из состава этого (для текста flash) — вместо
+  запланированной `findActiveReserveByVariant()`: контроллеру известен
+  Заказ, а не Вариант, иначе пришлось бы перебирать позиции в
+  контроллере.
+- `markOrderPrepaid()` возвращает `string` (`PREPAID_RESULT_*`) вместо
+  `bool`; резерв закрепляется между `UPDATE payment_status` и
+  `transitionOrderStatus()`; проигрыш конкуренции → `rollBack()`
+  целиком (`ADR-040`).
+- `AdminOrderController`: `markPrepaid()` — `match` по результату, три
+  flash; `store()` ручного Заказа больше не игнорирует результат — при
+  занятом образце Заказ остаётся `new`/`unpaid`, flash `error` «Заказ
+  №N создан без предоплаты…» (ключа `warning` у `flash.php` нет,
+  заводить его — вне scope).
+- `tests/Unit/ReserveTest.php` (6 тестов), `tests/bootstrap.php` —
+  подключён `Core/Reserve.php` (не был в Scope `TASK.md`, без него
+  тесты не видят функции). `composer test` 232/232.
+
+Проверено на реальной БД двумя путями: (1) сценарий через Model-функции
+— Заказы A/B на один образец + C без образца: B → `OK` + `active`
+резерв, A → `SAMPLE_TAKEN` с откатом (`new`/`unpaid`/`prepaid_amount
+NULL`, резервов 0), `findCompetingReserveForOrder(A)` → Заказ B, повтор
+по B → `ALREADY` без второго резерва, ручной `released` у B → A
+проходит; C → резервов нет; (2) живой HTTP (`php -S` + `curl`, логин
+`admin`): три POST `/admin/orders/{id}/prepaid` → 302 и ровно те три
+flash-текста, POST без `_csrf` → 419, серверный лог без ошибок,
+`app.log` — один `WARNING` с `order_id`/`variant_id`. Тестовые Заказы
+удалены, флаг образца у Варианта возвращён.
+
+Не проверено: путь ручного Заказа (`store()`) на занятый образец живым
+HTTP — форма с несколькими позициями, проверен только чтением кода;
+Model-путь у него тот же, что у `markPrepaid()`.
+
+**Что следующее:** Таск 2 Фазы 5 — списание при «Доставлен/Собран» и
+снятие при отмене.
+
+---

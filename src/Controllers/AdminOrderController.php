@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Order.php';
+require_once ROOT_PATH . '/src/Models/Reserve.php';
 require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
@@ -199,13 +200,30 @@ class AdminOrderController
             redirect('/admin/orders/' . $id);
         }
 
-        if (!markOrderPrepaid((int) $id, $amount)) {
-            setFlash('error', 'Предоплата уже отмечена.');
-            redirect('/admin/orders/' . $id);
-        }
+        $result = markOrderPrepaid((int) $id, $amount);
 
-        setFlash('success', 'Предоплата отмечена.');
+        match ($result) {
+            PREPAID_RESULT_OK           => setFlash('success', 'Предоплата отмечена.'),
+            PREPAID_RESULT_ALREADY      => setFlash('error', 'Предоплата уже отмечена.'),
+            PREPAID_RESULT_SAMPLE_TAKEN => setFlash('error', $this->sampleTakenMessage((int) $id)),
+        };
+
         redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Проигрыш конкуренции за Выставочный образец (`BR-003`, UC-02 2а):
+     * предоплата откачена, Менеджер по звонку предлагает такой же
+     * Вариант под заказ — сообщение называет Заказ-держатель, чтобы было
+     * с чего начать разговор.
+     */
+    private function sampleTakenMessage(int $orderId): string
+    {
+        $competing = findCompetingReserveForOrder($orderId);
+        $holder    = $competing !== null ? ' за Заказом №' . $competing['order_id'] : ' за другим Заказом';
+
+        return 'Предоплата не отмечена: Выставочный образец уже закреплён' . $holder
+            . ' — предложите Покупателю такой же Вариант под заказ.';
     }
 
     public function markPaidFull(string $id): void
@@ -391,9 +409,18 @@ class AdminOrderController
             return;
         }
 
-        markOrderPrepaid($orderId, $input['prepaid_amount']);
+        $prepaidResult = markOrderPrepaid($orderId, $input['prepaid_amount']);
 
         unset($_SESSION['manual_order_token']);
+
+        // Заказ уже создан (`new`/`unpaid`), но образец успел уйти другому
+        // Заказу между `createOrder()` и фиксацией предоплаты — Менеджер
+        // должен увидеть это сразу, а не «Заказ создан».
+        if ($prepaidResult === PREPAID_RESULT_SAMPLE_TAKEN) {
+            setFlash('error', 'Заказ №' . $orderId . ' создан без предоплаты. ' . $this->sampleTakenMessage($orderId));
+            redirect('/admin/orders/' . $orderId);
+        }
+
         setFlash('success', 'Заказ создан.');
         redirect('/admin/orders/' . $orderId);
     }

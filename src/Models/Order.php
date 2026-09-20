@@ -6,6 +6,8 @@ require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/OrderStatus.php';
 require_once ROOT_PATH . '/src/Core/Validation.php';
+require_once ROOT_PATH . '/src/Core/Reserve.php';
+require_once ROOT_PATH . '/src/Models/Reserve.php';
 
 /**
  * `$order['user_id']` либо `$order['guest_name']`/`guest_phone`/
@@ -285,11 +287,20 @@ function setOrderShippingCost(int $orderId, ?string $cost): void
  * Фиксирует получение предоплаты (`FR-PAY-002`) — единственное место,
  * пишущее `orders.payment_status` в `prepaid` (`pay.md`). Идемпотентна:
  * повторный вызов на Заказе, уже вышедшем из `unpaid`, не меняет
- * данные и возвращает `false`, а не исключение. `transitionOrderStatus()`
- * тоже не бросает на запрещённом переходе (например, Заказ уже
- * отменён) — оплата в этом случае всё равно фиксируется.
+ * данные и возвращает `PREPAID_RESULT_ALREADY`, а не исключение.
+ * `transitionOrderStatus()` тоже не бросает на запрещённом переходе
+ * (например, Заказ уже отменён) — оплата в этом случае всё равно
+ * фиксируется.
+ *
+ * Здесь же — и только здесь — закрепляется Резерв Выставочного образца
+ * (`BR-003`, `FR-STOCK-002…003`): момент фактического получения
+ * предоплаты, а не оформления Заказа. Проигрыш конкуренции (образец
+ * уже закреплён за другим Заказом) откатывает фиксацию предоплаты
+ * целиком — `PREPAID_RESULT_SAMPLE_TAKEN` (`ADR-040`): оплаченный Заказ
+ * на чужой образец в системе оставаться не должен. Снятие/списание
+ * Резерва — Таск 2 Фазы 5, не здесь.
  */
-function markOrderPrepaid(int $orderId, string $amount): bool
+function markOrderPrepaid(int $orderId, string $amount): string
 {
     $pdo = getPdo();
     $pdo->beginTransaction();
@@ -309,13 +320,18 @@ function markOrderPrepaid(int $orderId, string $amount): bool
 
         if ($stmt->rowCount() === 0) {
             $pdo->commit();
-            return false;
+            return PREPAID_RESULT_ALREADY;
+        }
+
+        if (!createReservesForOrder($pdo, $orderId)) {
+            $pdo->rollBack();
+            return PREPAID_RESULT_SAMPLE_TAKEN;
         }
 
         transitionOrderStatus($orderId, ORDER_STATUS_CONFIRMED);
 
         $pdo->commit();
-        return true;
+        return PREPAID_RESULT_OK;
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;
