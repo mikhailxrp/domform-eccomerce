@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var int $categoryFilter */
 /** @var string $statusFilter */
 /** @var string $searchQuery */
+/** @var bool $onlySamplesFilter */
 /** @var array $pagination */
 /** @var array<int, string> $paginationLinks */
 /** @var string|null $prevUrl */
@@ -50,6 +51,10 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                 <label for="product-search" class="form-label">Название или артикул</label>
                 <input type="text" id="product-search" name="search" class="form-control" value="<?= e($searchQuery) ?>">
             </div>
+            <div class="col-sm-6 col-md-2 form-check mb-0">
+                <input type="checkbox" id="product-only-samples" name="only_samples" value="1" class="form-check-input"<?= $onlySamplesFilter ? ' checked' : '' ?>>
+                <label for="product-only-samples" class="form-check-label">Только образцы</label>
+            </div>
             <div class="col-sm-2 col-md-2">
                 <button type="submit" class="btn btn-primary w-100">Найти</button>
             </div>
@@ -65,7 +70,7 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                             <th></th>
                             <th>Название</th>
                             <th>Категория</th>
-                            <th>Вариантов</th>
+                            <th>Варианты — Выставочный образец</th>
                             <th>Цена</th>
                             <th>Статус</th>
                             <th></th>
@@ -79,7 +84,6 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                                 ? '/' . ltrim($product['image_path'], '/')
                                 : '/assets/images/product/product-' . $placeholderNumber . '.jpg';
 
-                            $variantCount = (int) $product['variant_count'];
                             $priceLabel   = '—';
                             if ($product['min_price'] !== null) {
                                 $priceLabel = bccomp((string) $product['min_price'], (string) $product['max_price'], 2) === 0
@@ -91,7 +95,38 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                                 <td><img src="<?= e($imageUrl) ?>" alt="<?= e($product['name']) ?>" width="48" height="48" class="rounded" style="object-fit: cover;"></td>
                                 <td><?= e($product['name']) ?></td>
                                 <td><?= $product['category_name'] !== null ? e($product['category_name']) : '—' ?></td>
-                                <td><?= e((string) $variantCount) ?></td>
+                                <td>
+                                    <?php if ($product['variants'] === []): ?>
+                                        <span class="text-muted">—</span>
+                                    <?php else: ?>
+                                        <ul class="list-unstyled mb-0 text-start">
+                                            <?php foreach ($product['variants'] as $variant): ?>
+                                                <?php
+                                                $variantOn       = (bool) $variant['is_showroom_sample'];
+                                                $variantReserved = (bool) $variant['has_active_reserve'];
+                                                ?>
+                                                <li class="d-flex align-items-center gap-2 mb-1">
+                                                    <span class="text-nowrap"><?= e($variant['sku']) ?></span>
+                                                    <form method="post" action="/admin/products/<?= e((string) $product['id']) ?>/variants/<?= e((string) $variant['id']) ?>/showroom" class="d-flex align-items-center gap-1 mb-0">
+                                                        <?= csrfField() ?>
+                                                        <input type="hidden" name="on" value="<?= $variantOn ? '0' : '1' ?>">
+                                                        <div class="form-check form-switch mb-0" title="<?= $variantReserved ? e('Нельзя снять — на Вариант оформлен активный Резерв') : '' ?>">
+                                                            <input
+                                                                type="checkbox"
+                                                                role="switch"
+                                                                class="form-check-input"
+                                                                data-variant-showroom-toggle
+                                                                <?= $variantOn ? ' checked' : '' ?>
+                                                                <?= $variantOn && $variantReserved ? ' disabled' : '' ?>
+                                                            >
+                                                        </div>
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary" <?= $variantOn && $variantReserved ? ' disabled' : '' ?>>OK</button>
+                                                    </form>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= e($priceLabel) ?></td>
                                 <td>
                                     <span class="badge <?= $product['is_active'] ? 'bg-success' : 'bg-secondary' ?>"><?= $product['is_active'] ? 'Активен' : 'Скрыт' ?></span>

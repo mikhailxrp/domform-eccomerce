@@ -70,6 +70,7 @@ return [
         '/admin/products/{id}/toggle'   => ['AdminProductController', 'toggle'],
         '/admin/products'               => ['AdminProductController', 'store'],
         '/admin/products/{id}'          => ['AdminProductController', 'update'],
+        '/admin/products/{productId}/variants/{variantId}/showroom'                  => ['AdminProductController', 'toggleShowroom'],
         '/admin/products/{productId}/variants/{variantId}/images'                    => ['AdminProductController', 'uploadImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}'          => ['AdminProductController', 'updateImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}/remove'   => ['AdminProductController', 'deleteImage'],

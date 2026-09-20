@@ -497,6 +497,15 @@ function buildAdminProductFilterConditions(array $filters): array
         $params['search_sku'] = $likeTerm;
     }
 
+    // «Только образцы» (Таск 4 Фазы 5, `FR-STOCK-001`) — Товары, у
+    // которых хотя бы один Вариант отмечен Выставочным образцом.
+    if (!empty($filters['only_samples'])) {
+        $conditions[] = 'EXISTS (
+            SELECT 1 FROM product_variants pvo
+            WHERE pvo.product_id = p.id AND pvo.is_showroom_sample = 1
+        )';
+    }
+
     return [$conditions, $params];
 }
 
@@ -562,7 +571,9 @@ function getAdminProducts(array $filters, int $page, int $perPage): array
         return [];
     }
 
-    return attachAdminProductPhoto($pdo, $products);
+    $products = attachAdminProductPhoto($pdo, $products);
+
+    return attachAdminProductVariants($pdo, $products);
 }
 
 function countAdminProducts(array $filters): int
@@ -614,6 +625,93 @@ function attachAdminProductPhoto(PDO $pdo, array $products): array
         $product['image_path'] = $imageByProduct[(int) $product['id']] ?? null;
         return $product;
     }, $products);
+}
+
+/**
+ * Варианты Товаров текущей страницы списка — один батч-запрос по всем
+ * `product_id` (не N+1), для построчных переключателей «Выставочный
+ * образец» прямо в списке (Таск 4 Фазы 5, `FR-STOCK-001` правило 1).
+ * `has_active_reserve` — есть ли на Вариант активный Резерв: снять
+ * отметку образца при нём нельзя (`BR-003`), переключатель во View
+ * рисуется задизейбленным.
+ */
+function attachAdminProductVariants(PDO $pdo, array $products): array
+{
+    $productIds   = array_column($products, 'id');
+    $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+
+    $stmt = $pdo->prepare("
+        SELECT
+            pv.id, pv.product_id, pv.sku, pv.material, pv.is_showroom_sample,
+            EXISTS (
+                SELECT 1 FROM reserves r
+                WHERE r.product_variant_id = pv.id AND r.status = 'active'
+            ) AS has_active_reserve
+        FROM product_variants pv
+        WHERE pv.product_id IN ({$placeholders})
+        ORDER BY pv.id
+    ");
+    $stmt->execute($productIds);
+
+    $variantsByProduct = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $variantsByProduct[(int) $row['product_id']][] = $row;
+    }
+
+    return array_map(static function (array $product) use ($variantsByProduct): array {
+        $product['variants'] = $variantsByProduct[(int) $product['id']] ?? [];
+        return $product;
+    }, $products);
+}
+
+/**
+ * Для 404 в `AdminProductController::toggleShowroom()` — тот же паттерн,
+ * что `findProductForToggle()`.
+ */
+function findVariantForShowroomToggle(int $variantId): ?array
+{
+    $stmt = getPdo()->prepare('SELECT id, product_id, is_showroom_sample FROM product_variants WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $variantId]);
+    $variant = $stmt->fetch();
+
+    return $variant !== false ? $variant : null;
+}
+
+/**
+ * Переключатель «Выставочный образец» прямо в списке Товаров
+ * (`FR-STOCK-001` правило 1). Включение разрешено всегда; выключение
+ * отклоняется, если на Вариант есть активный Резерв (`BR-003`,
+ * `stock.md`) — иначе оплаченный Резерв «потеряет» свой образец.
+ * Существование Варианта проверяется отдельным `SELECT`, не
+ * `rowCount()` после `UPDATE`: повторное включение уже включённого
+ * Варианта — успех, а не ложное «не найден» (та же ловушка, что была
+ * исправлена в `setReserveAgreedUntil()`, Таск 3 Фазы 5). Возвращает
+ * `false` — Вариант не найден либо (при выключении) резерв активен.
+ */
+function setVariantShowroomSample(int $variantId, bool $on): bool
+{
+    $pdo = getPdo();
+
+    $exists = $pdo->prepare('SELECT 1 FROM product_variants WHERE id = :id LIMIT 1');
+    $exists->execute(['id' => $variantId]);
+    if ($exists->fetchColumn() === false) {
+        return false;
+    }
+
+    if (!$on) {
+        $reserved = $pdo->prepare("
+            SELECT 1 FROM reserves WHERE product_variant_id = :id AND status = 'active' LIMIT 1
+        ");
+        $reserved->execute(['id' => $variantId]);
+        if ($reserved->fetchColumn() !== false) {
+            return false;
+        }
+    }
+
+    $stmt = $pdo->prepare('UPDATE product_variants SET is_showroom_sample = :on WHERE id = :id');
+    $stmt->execute(['on' => $on ? 1 : 0, 'id' => $variantId]);
+
+    return true;
 }
 
 /**
