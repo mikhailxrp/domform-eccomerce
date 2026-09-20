@@ -76,27 +76,47 @@ function getCartItems(array $owner): array
     return $stmt->fetchAll();
 }
 
+const ADD_TO_CART_OK        = 'ok';
+const ADD_TO_CART_NOT_FOUND = 'not_found';
+const ADD_TO_CART_RESERVED  = 'reserved';
+
 /**
  * Тот же Вариант+цвет в корзине владельца — увеличивает количество
  * (с clamp), иначе создаёт новую строку со снэпшотом текущей цены.
- * Неактивный/несуществующий Вариант → `false`, строка не создаётся.
+ * Неактивный/несуществующий Вариант → `ADD_TO_CART_NOT_FOUND`, строка
+ * не создаётся. Выставочный образец с активным Резервом (`BR-003`,
+ * `BR-004`, Таск 5 Фазы 5) → `ADD_TO_CART_RESERVED`, тоже без записи —
+ * позицию, которую нельзя оформить (`createOrder()` откажет всё равно),
+ * не добавляем молча, чтобы Покупатель сразу увидел понятное сообщение,
+ * а не узнал об этом только на чекауте.
  */
-function addCartItem(array $owner, int $variantId, ?string $color, int $qty): bool
+function addCartItem(array $owner, int $variantId, ?string $color, int $qty): string
 {
     $ownerCondition = validateCartOwner($owner);
     $pdo            = getPdo();
 
-    $variantStmt = $pdo->prepare(
-        'SELECT price, is_showroom_sample FROM product_variants WHERE id = :id AND is_active = 1'
-    );
+    $variantStmt = $pdo->prepare("
+        SELECT
+            pv.price, pv.is_showroom_sample,
+            EXISTS (
+                SELECT 1 FROM reserves r
+                WHERE r.product_variant_id = pv.id AND r.status = 'active'
+            ) AS has_active_reserve
+        FROM product_variants pv
+        WHERE pv.id = :id AND pv.is_active = 1
+    ");
     $variantStmt->execute(['id' => $variantId]);
     $variant = $variantStmt->fetch();
 
     if ($variant === false) {
-        return false;
+        return ADD_TO_CART_NOT_FOUND;
     }
 
     $isShowroomSample = (bool) $variant['is_showroom_sample'];
+
+    if (isReservedSampleUnavailable($isShowroomSample, (bool) $variant['has_active_reserve'])) {
+        return ADD_TO_CART_RESERVED;
+    }
 
     $existingStmt = $pdo->prepare("
         SELECT id, quantity FROM cart_items
@@ -118,7 +138,7 @@ function addCartItem(array $owner, int $variantId, ?string $color, int $qty): bo
         $updateStmt = $pdo->prepare('UPDATE cart_items SET quantity = :quantity WHERE id = :id');
         $updateStmt->execute(['quantity' => $newQty, 'id' => $existing['id']]);
 
-        return true;
+        return ADD_TO_CART_OK;
     }
 
     $insertStmt = $pdo->prepare("
@@ -133,7 +153,7 @@ function addCartItem(array $owner, int $variantId, ?string $color, int $qty): bo
         'price_snapshot' => $variant['price'],
     ]);
 
-    return true;
+    return ADD_TO_CART_OK;
 }
 
 /**

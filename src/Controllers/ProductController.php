@@ -41,7 +41,13 @@ class ProductController
                 'mechanism_type'     => $variant['mechanism_type'],
                 'price_formatted'    => formatPrice($variant['price']),
                 'production_time'    => $variant['production_time'],
-                'is_showroom_sample' => (bool) $variant['is_showroom_sample'],
+                // Резервированный образец показывается как обычный
+                // Вариант под заказ (`BR-003`, `BR-004`, Таск 5 Фазы 5)
+                // — единственная точка, где `is_showroom_sample`
+                // становится «эффективным» статусом, а не сырым
+                // значением из БД; `variant-selector.php` и `app.js`
+                // читают уже это готовое значение под тем же именем.
+                'is_showroom_sample' => (bool) $variant['is_showroom_sample'] && !(bool) $variant['has_active_reserve'],
                 'images'             => array_map(static fn (array $image): array => [
                     'color'     => $image['color'],
                     'is_swatch' => (bool) $image['is_swatch'],

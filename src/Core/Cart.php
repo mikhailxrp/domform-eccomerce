@@ -25,6 +25,19 @@ function clampCartQuantity(int $qty, bool $isShowroomSample): int
 }
 
 /**
+ * Можно ли добавить Вариант в корзину (`BR-003`, `BR-004`, Таск 5
+ * Фазы 5) — только Выставочный образец с активным Резервом недоступен:
+ * физический экземпляр уже закреплён за другим Покупателем, добавлять
+ * его в новую корзину нет смысла — `createOrder()` всё равно откажет
+ * при оформлении (`Models/Order.php`). Обычный Вариант под заказ и
+ * свободный образец — доступны всегда.
+ */
+function isReservedSampleUnavailable(bool $isShowroomSample, bool $hasActiveReserve): bool
+{
+    return $isShowroomSample && $hasActiveReserve;
+}
+
+/**
  * `$items` — строки `getCartItems()` (`Models/Cart.php`): `price`
  * (текущая цена Варианта из `product_variants`), `quantity`,
  * `is_reserved` (образец занят конкуренцией — проверяется в Таске 3,

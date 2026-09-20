@@ -167,9 +167,17 @@ function buildCatalogFilterConditions(array $filters): array
     }
 
     if (!empty($filters['in_stock'])) {
+        // Резервированный образец больше не «в наличии» (`BR-003`,
+        // `BR-004`, Таск 5 Фазы 5) — физический экземпляр закреплён за
+        // другим Покупателем, показывать его как доступный значило бы
+        // гарантированно сорвать Заказ (`stock.md`).
         $conditions[] = "EXISTS (
             SELECT 1 FROM product_variants pv4
             WHERE pv4.product_id = p.id AND pv4.is_active = 1 AND pv4.is_showroom_sample = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM reserves r4
+                  WHERE r4.product_variant_id = pv4.id AND r4.status = 'active'
+              )
         )";
     }
 
@@ -1050,12 +1058,18 @@ function findProductBySlug(string $slug): ?array
 
 function getProductVariants(int $productId): array
 {
-    $stmt = getPdo()->prepare('
-        SELECT id, sku, material, mechanism_type, price, production_time, is_showroom_sample
-        FROM product_variants
-        WHERE product_id = :product_id AND is_active = 1
-        ORDER BY price ASC, id ASC
-    ');
+    $stmt = getPdo()->prepare("
+        SELECT
+            pv.id, pv.sku, pv.material, pv.mechanism_type, pv.price,
+            pv.production_time, pv.is_showroom_sample,
+            EXISTS (
+                SELECT 1 FROM reserves r
+                WHERE r.product_variant_id = pv.id AND r.status = 'active'
+            ) AS has_active_reserve
+        FROM product_variants pv
+        WHERE pv.product_id = :product_id AND pv.is_active = 1
+        ORDER BY pv.price ASC, pv.id ASC
+    ");
     $stmt->execute(['product_id' => $productId]);
 
     return $stmt->fetchAll();
