@@ -2728,3 +2728,51 @@ IFNULL(discount_percent,0)/100), 2)))` (MySQL 8 поддерживает инд�
 поверх данных, подготовленных этим таском).
 
 ---
+
+**Дата:** 20.09.2026
+**Что сделано:** Таск 2 Фазы 6 — «Старая/новая цена на витрине»
+(`FR-DISC-002`). Перед кодом сверил план `phase-6.md` с реальной
+разметкой темы (`00-input/design/*.html`, `style.css`) и сократил
+scope: убрал бейдж «-N%» (в теме его нигде нет — только зачёркнутая
+старая цена), правки `checkout-summary.php` (тема показывает в сводке
+только сумму строки, без цены за штуку — там нечего рисовать, сумма
+уже верна с Таска 1), `variant-selector.php` (цену не выводит) и
+`app.css` (нужные селекторы `.single-product .product-content .price
+.old-price`, `.single-product-02 ...`, `.product-details-description
+.price .old-price`, `.cart-table ... .product-prices .old-price`/
+`.sale-price` уже есть в `style.css`). Обсуждено и подтверждено
+пользователем перед записью `TASK.md`.
+
+Изменено: `src/Controllers/ProductController.php`
+(`old_price_formatted`, `discount_percent` в `$variantsData`),
+`src/Views/product/show.php` (`#product-old-price` рядом с
+`#product-price`, `hidden` через `hasDiscount()`), `public/assets/js/
+app.js` (`renderVariant()` — показывает/прячет и обновляет
+`#product-old-price` при переключении Варианта), `src/Views/
+components/product-card.php` (`.old-price` в `.price`, grid и list,
+gated по `$product['min_old_price'] !== null` — уже посчитано в Model
+Таска 1), `src/Views/components/cart-row.php` (`.product-prices` со
+старой+новой ценой вместо одиночного `<p class="price">`, когда
+`hasDiscount($item['discount_percent'])`).
+
+Проверено на реальной БД + живым HTTP (`php -S 127.0.0.1:8099` +
+`curl`, cookie-based сессия): временная скидка 15% на `SOFA-MILAN-
+FABRIC` (35000→29750) — карточка товара сразу при заходе (SSR) верно
+показывает 29 750 ₽/35 000 ₽ без `hidden`; `data-variants` содержит
+`old_price_formatted`/`discount_percent` по каждому Варианту, у
+Варианта без скидки `discount_percent: null`; каталог — оба вида
+(grid и list) показывают зачёркнутую старую цену; корзина —
+`.product-prices` со старой/новой у скидочной позиции, обычный `<p
+class="price">` у бездискидочной; `/checkout` — сумма 29 750 ₽,
+разметка сводки не менялась (по плану). Между делом обнаружена
+существующая **настоящая** скидка 20% на `WARDROBE-KLASSIK-LDSP`
+(32000→25600, не моя тестовая) — код корректно отобразил и её тоже в
+каталоге, не трогал эту запись при уборке. Тестовые данные (скидка на
+Варианте #1, строки корзины) удалены после проверки.
+
+`composer test`: 271/271, без изменений — новой чистой логики без
+обращения к БД в этом таске не было (вся уже в `PriceTest` из Таска 1).
+
+**Что следующее:** Таск 3 Фазы 6 — фильтр каталога «Со скидкой».
+
+---

@@ -40,6 +40,13 @@ class ProductController
                 'material'           => $variant['material'],
                 'mechanism_type'     => $variant['mechanism_type'],
                 'price_formatted'    => formatPrice($variant['price']),
+                // Старая цена и процент скидки (`FR-DISC-002`, Таск 2
+                // Фазы 6) — `old_price` уже сырая цена Варианта
+                // (`getProductVariants()`, Таск 1), `discount_percent`
+                // читает и `show.php` (SSR), и `app.js` (JSON), решают
+                // показывать ли `old_price_formatted` через `hasDiscount()`.
+                'old_price_formatted' => formatPrice($variant['old_price']),
+                'discount_percent'   => $variant['discount_percent'],
                 'production_time'    => $variant['production_time'],
                 // Резервированный образец показывается как обычный
                 // Вариант под заказ (`BR-003`, `BR-004`, Таск 5 Фазы 5)

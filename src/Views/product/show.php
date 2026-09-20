@@ -80,6 +80,7 @@ foreach ($firstVariant['images'] as $image) {
                         <h1 class="product-name"><?= e($product['name']) ?></h1>
                         <div class="price">
                             <span class="sale-price" id="product-price"><?= e($firstVariant['price_formatted']) ?></span>
+                            <span class="old-price" id="product-old-price"<?= hasDiscount($firstVariant['discount_percent']) ? '' : ' hidden' ?>><?= e($firstVariant['old_price_formatted']) ?></span>
                         </div>
 
                         <?php include ROOT_PATH . '/src/Views/components/variant-selector.php'; ?>
