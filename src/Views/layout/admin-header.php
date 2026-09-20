@@ -9,6 +9,9 @@ $currentUser = currentUser();
 $userName    = (string) ($currentUser['name'] ?? '');
 $currentPath = requestPath();
 
+require_once ROOT_PATH . '/src/Models/Review.php';
+$pendingReviewsCount = countPendingReviews();
+
 $adminNavItems = [
     ['url' => '/admin',               'label' => 'Дашборд',     'icon' => 'bx bx-home-alt'],
     ['url' => '/admin/orders',        'label' => 'Заказы',      'icon' => 'bx bx-cart'],
@@ -16,6 +19,7 @@ $adminNavItems = [
     ['url' => '/admin/products',      'label' => 'Товары',      'icon' => 'bx bx-package'],
     ['url' => '/admin/categories',    'label' => 'Категории',   'icon' => 'bx bx-category'],
     ['url' => '/admin/customers',     'label' => 'Клиенты',     'icon' => 'bx bx-group'],
+    ['url' => '/admin/reviews',       'label' => 'Отзывы',      'icon' => 'bx bx-star', 'badge' => $pendingReviewsCount > 0 ? $pendingReviewsCount : null],
     ['url' => '/admin/reports',       'label' => 'Отчёты',      'icon' => 'bx bx-bar-chart-alt-2'],
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
@@ -105,6 +109,9 @@ foreach ($adminNavItems as $navItem) {
                                 <a href="<?= e($navItem['url']) ?>" class="side-menu__item<?= $navItem['url'] === $activeNavUrl ? ' active' : '' ?>">
                                     <i class="<?= e($navItem['icon']) ?> side-menu__icon"></i>
                                     <span class="side-menu__label"><?= e($navItem['label']) ?></span>
+                                    <?php if (!empty($navItem['badge'])): ?>
+                                        <span class="badge bg-danger rounded-pill ms-1"><?= e((string) $navItem['badge']) ?></span>
+                                    <?php endif; ?>
                                 </a>
                             </li>
                         <?php endforeach; ?>

@@ -2,146 +2,156 @@
 
 ## Фаза
 Phase 6 — Скидки, отзывы и главная страница
-(`.docs/phases/phase-6.md`), Таск 4 из 6.
+(`.docs/phases/phase-6.md`), Таск 5 из 6.
 
 **Статус:** ✅ Завершён 20.09.2026. Проверено на реальной БД живым HTTP
-(`php -S` + `curl`, cookie-сессия) на реальном Товаре `divan-milan`.
-`composer test` — 295/295 (было 274/274, +21). Один баг найден и
-исправлен на HTTP-проверке — `ProductController.php` не требовал
-`Core/Review.php` напрямую (только транзитивно через `Models/`),
-`averageRating()` резолвилась в неймспейс `App\Controllers` и падала
-как неопределённая функция на обычном `GET /product/{slug}`. Подробности
-— `.docs/dev-log.md` 20.09.2026.
+(`php -S` + `curl`, cookie-сессия) на реальной строке `reviews` (id=7)
+и через временный customer-аккаунт для проверки роли. `composer test`
+— 296/296 (было 295/295, +1). Все тестовые строки/аккаунты удалены
+после проверки, `id=7` возвращён в исходный `pending`.
 
 ## Задача
-`FR-CARD-006` — на карточке товара появляется вкладка отзывов: список
-одобренных (имя, рейтинг, дата, текст), средний рейтинг и число
-отзывов, форма (имя, email, рейтинг 1–5, текст). Отправленный отзыв
-всегда `pending` и не виден никому до модерации (`FR-ADM-004` правило
-1); Покупатель видит flash «отзыв появится после проверки».
+`FR-ADM-004` — `/admin/reviews`: очередь модерации с фильтром по
+статусу (по умолчанию `pending`), тип «о Товаре» (ссылка на Товар) /
+«о магазине», действия «Одобрить» / «Отклонить», бейдж с числом
+`pending` в сайдбаре. Плюс форма ручного добавления отзыва о магазине
+(`FR-HOME-007` правило 5: Владелец переносит отзывы из
+Instagram/WhatsApp) — `product_id = NULL`, сразу `approved`. Автор
+отклонённого отзыва не уведомляется (`FR-ADM-004` правило 3).
 
-Два места, где план скорректирован против черновика `phase-6.md` по
-факту сверки с кодом/темой (см. переписку перед записью файла):
+Три уточнения против черновика `phase-6.md` по факту сверки с кодом
+(первые два обсуждены и подтверждены пользователем перед реализацией,
+третье — решение, принятое в процессе кодирования по образцу уже
+одобренного паттерна Таска 4, не требовало отдельного подтверждения):
 
-1. **Рейтинг — 5 нативных radio (`name="rating"`), стилизованных под
-   звёзды чистым CSS**, а не декоративный `<ul id="rating">` темы:
-   обработчик в `main.js` только переключает CSS-классы по клику,
-   ничего никуда не пишет — буквальная разметка темы не даст отправить
-   значение вообще, тем более без JS.
-2. **Ошибки формы — прямой рендер карточки, не redirect+flash**, по
-   образцу `CheckoutController::store()`/`AdminOrderController::store()`
-   (`setFlash()` хранит только строку, не массив ошибок по полям).
-   `ReviewController::store()` при ошибке вызывает
-   `(new ProductController())->show($slug, $old, $errors)` напрямую.
-   Средний рейтинг — чистая `averageRating()` над уже полученными
-   строками `getApprovedProductReviews()`, без отдельного SQL-агрегата.
+1. **`config/config.php` добавлен в Scope** — черновик фазы не включал
+   его, но `AdminReviewController::index()` не может вызвать
+   `buildPagination()` без своей константы (по образцу
+   `ADMIN_ORDERS_PER_PAGE`, `ADMIN_RETURNS_PER_PAGE` и т.д., уже
+   заведённых построчно в этом файле).
+2. **`setReviewStatus()` не может полагаться только на
+   `rowCount()`** — соединение PDO не выставляет
+   `MYSQL_ATTR_FOUND_ROWS` (`Core/Database.php`), поэтому `UPDATE ...
+   WHERE id = :id` на уже `approved` строке тоже вернёт
+   `rowCount() === 0`, как и на несуществующем `id`. DoD различает эти
+   два случая (повторное «Одобрить» — успех, несуществующий id —
+   «не найден»), значит при `rowCount() === 0` нужна отдельная
+   проверка существования строки, а не единственный сигнал
+   `rowCount()`.
+3. **`storeShopReview()` при ошибке валидации — прямой рендер
+   `index()` с `$old`/`$errors`, не `setFlash()` + `redirect`** (как
+   исходно записано в Scope ниже): `setFlash()` хранит только строку,
+   массив ошибок по полям не переживёт редирект — тот же приём, что
+   `ReviewController::store()` (Таск 4) и `AdminCategoryController`
+   уже используют в проекте; без этого `dod-global.md` («Некорректные
+   данные — поля подсвечиваются с ошибкой») не выполняется для формы
+   отзыва о магазине.
 
 ## Scope — что трогаем
 
-- [x] `src/Core/Review.php` — создать: `REVIEW_STATUS_PENDING/
-      _APPROVED/_REJECTED`, `reviewStatusLabel()`,
-      `normalizeReviewInput(array $input): array` (trim имя/email/
-      текст, каст рейтинга к `?int`), `validateReviewInput(array
-      $input): array` (имя 2–150, email — `validateEmail()`, рейтинг ∈
-      {1..5}, текст непустой ≤2000 символов — по образцу
-      `validateCheckoutInput()`, массив `['field' => bool hasError]`),
-      `averageRating(array $reviews): ?string` (среднее округлено до 1
-      знака, `null` на пустом массиве) — чистые функции без БД
-- [x] `tests/Unit/ReviewTest.php` — создать: `normalizeReviewInput()`,
-      `validateReviewInput()` (валидные данные, короткое/длинное имя,
-      невалидный email, рейтинг вне 1–5, пустой/слишком длинный текст),
-      `averageRating()` (пусто → `null`, округление); `tests/
-      bootstrap.php` — изменить: подключить `Core/Review.php`
-- [x] `src/Models/Review.php` — создать: `createReview(array $data):
-      int` (`status='pending'`), `getApprovedProductReviews(int
-      $productId): array` (по `INDEX(product_id, status)`, `ORDER BY
-      created_at DESC`)
-- [x] `src/Controllers/ReviewController.php` — создать: `store(string
-      $slug)` — `requireCsrf()`, `findProductBySlug()` (нет/неактивен
-      → 404), `tooManyAttempts('review', 3, 600)`/`hitRateLimit
-      ('review')` (лимит → `setFlash('error', ...)` + `redirect`),
-      `normalizeReviewInput()` → `validateReviewInput()` → при ошибке
-      `(new ProductController())->show($slug, $old, $errors)` (без
-      redirect), при успехе — `createReview()` + `setFlash('success',
-      'Отзыв появится после проверки.')` + `redirect('/product/{slug}
-      #reviews')`
-- [x] `src/Controllers/ProductController.php` — изменить: `show(string
-      $slug, array $reviewOld = [], array $reviewErrors = [])` —
-      подключает `getApprovedProductReviews()`, `averageRating()`,
-      подстановку имени/email авторизованного Покупателя
-      (`currentUser()` + `findUserById()`, по образцу
-      `CheckoutController`); требует `Models/Review.php`,
-      `Models/User.php`. **Дополнительно (баг, найден на HTTP-проверке):**
-      также требует сам `Core/Review.php` напрямую — без него
-      `averageRating()` не была загружена на обычном `GET`, только на
-      `POST` через `ReviewController`
-- [x] `src/Views/product/show.php` — изменить: блок вкладок
-      перестраивается — вкладка «Отзывы» присутствует всегда (счётчик,
-      форма — даже без отзывов); навигация (`<ul class="nav">`)
-      показывается, когда вкладок больше одной (было: только когда
-      есть и характеристики, и описание одновременно), активна по
-      умолчанию первая доступная в порядке характеристики → описание →
-      отзывы
-- [x] `src/Views/components/review-form.php` — создать: имя/email/
-      radio-рейтинг (5 шт., `name="rating"`)/текст, `csrfField()`,
-      подсветка ошибок по полю, сохранённые значения при ошибке
-- [x] `src/Views/components/review-list.php` — создать: список
-      одобренных отзывов + средний рейтинг/счётчик; пусто — «Отзывов
-      пока нет», без ошибки
-- [x] `public/assets/css/app.css` — изменить: CSS-звёзды для
-      radio-рейтинга (BEM, mobile-first, полностью на CSS, без JS)
-- [x] `config/routes.php` — изменить: `POST /product/{slug}/reviews` →
-      `['ReviewController', 'store']`
+- [x] `config/config.php` — изменить: константа `ADMIN_REVIEWS_PER_PAGE`
+      (по аналогии с `ADMIN_RETURNS_PER_PAGE`)
+- [x] `src/Models/Review.php` — изменить:
+      `getAdminReviews(array $filters, int $page, int $perPage): array`
+      (`LEFT JOIN products` для ссылки на Товар и его `slug`/`name`, по
+      образцу `getAdminReturns()`), `countAdminReviews(array $filters):
+      int`, `setReviewStatus(int $id, string $status): bool` (см.
+      уточнение 2 выше — при `rowCount() === 0` дополнительно проверяет
+      существование строки, чтобы вернуть `true` на идемпотентном
+      повторе и `false` только когда `id` реально не существует),
+      `countPendingReviews(): int`, `createStoreReview(array $data):
+      int` (`product_id = NULL`, `status = 'approved'` сразу в
+      `INSERT`, без отдельного `setReviewStatus()`; сигнатура — `int`,
+      не `?int` из черновика: у отзыва о магазине нет уникальных
+      ограничений, которые могли бы дать `INSERT` провалиться)
+- [x] `src/Controllers/AdminReviewController.php` — создать:
+      `index(array $storeReviewOld = [], array $storeReviewErrors = [])`
+      — `requireRole(['manager','admin'])`, статус из
+      `input('status', 'pending')` через whitelist
+      `REVIEW_STATUS_PENDING/_APPROVED/_REJECTED` (иначе — `pending`, по
+      образцу `AdminOrderController::index()`), `countAdminReviews()` +
+      `buildPagination()` + `getAdminReviews()`, `render('admin/reviews/
+      index', ...)`; `approve(string $id)` / `reject(string $id)` —
+      `requireRole(...)`, `requireCsrf()`, `setReviewStatus()` →
+      `false` → `setFlash('error', 'Отзыв не найден.')`, `true` →
+      `setFlash('success', ...)`, оба варианта `redirect('/admin/
+      reviews')`; `storeShopReview()` — `requireRole(...)`,
+      `requireCsrf()`, `normalizeReviewInput()` → `validateReviewInput()`
+      (тот же валидатор формы витрины, `product_id` не участвует в
+      проверке) → при ошибке `$this->index($input, $errors)` без
+      редиректа (см. уточнение 3), при успехе `createStoreReview()` +
+      `setFlash('success', ...)` + `redirect('/admin/reviews')`
+- [x] `src/Views/admin/reviews/index.php` — создать: фильтр статуса
+      (select, как `admin/orders/index.php`), список (автор, рейтинг,
+      тип со ссылкой на Товар при `product_id` / «о магазине», дата,
+      текст, кнопки «Одобрить»/«Отклонить» — показаны всегда, действие
+      идемпотентно на бэкенде), пустое состояние, серверная пагинация
+      (`paginationLinks`, `prevUrl`/`nextUrl`, по образцу
+      `admin/returns/index.php`), форма добавления отзыва о магазине
+      (имя, email, рейтинг, текст, `csrfField()`, подсветка ошибок по
+      полю через `$storeReviewOld`/`$storeReviewErrors`)
+- [x] `src/Views/layout/admin-header.php` — изменить: пункт «Отзывы»
+      (`/admin/reviews`) в `$adminNavItems` с бейджем — количество
+      считается прямым вызовом `countPendingReviews()` внутри этого
+      файла (по образцу `currentUser()`/`requestPath()`, вызываемых там
+      же напрямую, без передачи через `render()`), требует
+      `Models/Review.php`
+- [x] `config/routes.php` — изменить: `GET /admin/reviews` →
+      `['AdminReviewController', 'index']`,
+      `POST /admin/reviews` → `['AdminReviewController',
+      'storeShopReview']`,
+      `POST /admin/reviews/{id}/approve` → `['AdminReviewController',
+      'approve']`,
+      `POST /admin/reviews/{id}/reject` → `['AdminReviewController',
+      'reject']`
+- [x] `tests/Unit/ReviewTest.php` — изменить: кейс на
+      `validateReviewInput()` для формы отзыва о магазине (те же
+      данные, но без `product_id` в входном массиве — подтверждает, что
+      валидатор не завязан на его наличие)
 
 ## Out of scope — не трогаем
 
-- Модерация отзывов в Панели управления, отзыв о магазине (Таск 5)
-- Блоки Главной, включая «Отзывы о магазине» (Таск 6)
-- `getProductRatingSummary()` как отдельный SQL-агрегат — заменена
-  чистой `averageRating()` над строками, уже полученными
-  `getApprovedProductReviews()`
-- Пагинация списка отзывов Товара — реальный масштаб проекта (единицы
-  отзывов на товар, тот же аргумент, что уже применялся в
-  `database.md`/`dev-log.md` для каталога на ≤200 товаров); решение
-  зафиксировано явно, не молчаливый пропуск пункта `dod-global.md`
-- Декоративный JS-виджет звёзд из `main.js` (`#rating li` hover/click)
-  — не синхронизируется с формой ни в каком виде, используется
-  CSS-only рейтинг вместо него; сам `main.js` не трогаем
-- Изменение схемы БД / `database/install.php` — таблица `reviews`
-  заведена с Фазы 0 (`ADR-015`)
-- `src/Views/components/product-card.php`, `cart-row.php`,
-  `checkout-summary.php` — цена/скидки, не отзывы, уже сделаны в
-  Тасках 1–3
+- Уведомление автора отзыва (email/SMS) при отклонении/одобрении —
+  `FR-ADM-004` правило 3 прямо запрещает это для отклонения; для
+  одобрения ТЗ уведомление не требует
+- Блоки Главной, включая «Отзывы о магазине» и их вывод на `/` (Таск 6)
+- `src/Views/product/show.php`, `review-form.php`, `review-list.php` —
+  витринная часть отзывов уже сделана в Таске 4, не трогали
+- Изменение схемы БД / `database/install.php` — `reviews` заведена с
+  Фазы 0 (`ADR-015`)
+- Массовые действия (одобрить/отклонить несколько отзывов сразу) — не
+  в ТЗ, каждая строка — отдельное действие
+- Редактирование текста отзыва Менеджером — ТЗ не описывает такую
+  функцию, только одобрение/отклонение
 - Любой рефакторинг за пределами перечисленных файлов
 
 ## Definition of Done
 
-- [x] Отправленный отзыв: строка `reviews` со `status='pending'`,
-      `product_id` заполнен; на карточке **не виден** — проверено
-      живым HTTP на реальной БД (`divan-milan`, реальное кириллическое
-      имя «Иван Петров»)
-- [x] Пустая форма → все 4 поля подсвечены с ошибкой, вкладка «Отзывы»
-      открыта сразу, введённые значения (кроме рейтинга — radio)
-      сохранены при повторном показе формы — проверено
-- [x] Без JS: 5 radio с `name="rating"` реально кликабельны и
-      отправляют значение — подтверждено кодом (никакой JS для
-      рейтинга не подключается) и живой отправкой формы через `curl`
-      (без браузера/JS вообще)
-- [x] 419 без CSRF; 4-я отправка за 10 минут → flash-ограничение
-      «Слишком много отзывов подряд», запись не создана — проверено
-      живым HTTP (3 успешные + 1 заблокированная)
-- [x] Вручную `approved` в БД (2 отзыва, рейтинги 4 и 2) → оба видны,
-      средний рейтинг «3.0 из 5 (2)» посчитан верно; `pending` — не
-      видна
-- [x] Отзыв на несуществующий Товар (подмена `slug` в POST) → 404,
-      запись не создана — проверено
-- [x] Email автора нигде не выводится в HTML — `grep` по обоим тестовым
-      адресам в отданном HTML дал пустой результат; весь вывод через
-      `e()`
-- [x] Авторизованный Покупатель — имя/email в форме подставляются
-      (`currentUser()` + `findUserById()`); код-ревью, отдельно живым
-      HTTP под авторизацией не прогонялось в этом таске
-- [x] `composer test` зелёный (295/295), включая `ReviewTest`
+- [x] Одобрение → отзыв появляется на карточке Товара; отклонение → не
+      появляется, никаких писем/СМС автору — проверено живым HTTP на
+      реальной БД: `id=7` → `approved` → появился на
+      `/product/shkaf-klassik` (средняя оценка «3.0 из 5»); → `rejected`
+      → пропал
+- [x] Повторное «Одобрить» на уже `approved` — успех (идемпотентно, не
+      «не найден»); запрос с несуществующим `id=999999` → flash «Отзыв
+      не найден.», строка в `reviews` не создана и не изменена —
+      проверено
+- [x] Отзыв о магазине из формы: в БД `product_id IS NULL`,
+      `status = 'approved'` сразу после отправки — проверено (запись с
+      кириллическим именем через percent-encoded файл, обойдя тот же
+      Bash `--data-urlencode`-артефакт, что и в Таске 4); пустая форма
+      → все 4 поля подсвечены `is-invalid`, значения сохранены при
+      повторном показе
+- [x] Фильтр `pending`/`approved`/`rejected`/без параметра (все) —
+      проверено; мусорное значение `?status=garbage` → 200, откат к
+      `pending`, не 500; бейдж в сайдбаре виден на любой странице
+      Панели (`/admin/orders` тоже) и совпадает с фактическим числом
+      `pending`
+- [x] `customer` (временный тестовый аккаунт) по `/admin/reviews` (GET
+      и POST) → редирект на `/`; незалогиненный → `/login`; POST без
+      CSRF-токена → 419 — проверено, действие не выполняется ни в
+      одном из случаев
+- [x] `composer test` зелёный (296/296, было 295/295, +1)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила

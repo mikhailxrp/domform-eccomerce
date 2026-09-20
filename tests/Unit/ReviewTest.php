@@ -122,6 +122,19 @@ final class ReviewTest extends TestCase
         }
     }
 
+    /**
+     * Отзыв о магазине (`/admin/reviews`, форма ручного добавления,
+     * `FR-HOME-007` правило 5) не передаёт `product_id` во входной
+     * массив вообще — валидатор не должен на него полагаться.
+     */
+    public function testValidInputWithoutProductIdHasNoErrors(): void
+    {
+        $errors = validateReviewInput($this->validInput());
+
+        $this->assertFalse(in_array(true, $errors, true));
+        $this->assertArrayNotHasKey('product_id', $errors);
+    }
+
     public function testEmptyTextIsInvalid(): void
     {
         $errors = validateReviewInput($this->validInput(['text' => '']));
