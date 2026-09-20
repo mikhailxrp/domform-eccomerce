@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use PDOException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -53,6 +54,62 @@ final class ReserveTest extends TestCase
     public function testUnknownStatusFallsBackToRawValue(): void
     {
         $this->assertSame('bogus', reserveStatusLabel('bogus'));
+    }
+
+    // ─── reserveStatusBadgeClass() ───────────────────────────────────────
+
+    public function testKnownStatusesHaveBadgeClasses(): void
+    {
+        $this->assertSame('bg-info', reserveStatusBadgeClass(RESERVE_STATUS_ACTIVE));
+        $this->assertSame('bg-secondary', reserveStatusBadgeClass(RESERVE_STATUS_RELEASED));
+        $this->assertSame('bg-success', reserveStatusBadgeClass(RESERVE_STATUS_FULFILLED));
+    }
+
+    public function testUnknownStatusHasNeutralBadgeClass(): void
+    {
+        $this->assertSame('bg-light text-dark', reserveStatusBadgeClass('bogus'));
+    }
+
+    // ─── validateAgreedUntil() ───────────────────────────────────────────
+
+    public function testEmptyAgreedUntilClearsWithoutError(): void
+    {
+        $this->assertSame(['value' => null, 'error' => null], validateAgreedUntil(''));
+        $this->assertSame(['value' => null, 'error' => null], validateAgreedUntil('   '));
+    }
+
+    public function testValidIsoDateIsAccepted(): void
+    {
+        $result = validateAgreedUntil('2026-10-15');
+
+        $this->assertSame('2026-10-15', $result['value']);
+        $this->assertNull($result['error']);
+    }
+
+    public function testPastDateIsAccepted(): void
+    {
+        // Срок устный и вносится для справки — прошедшая дата допустима.
+        $this->assertNull(validateAgreedUntil('2020-01-01')['error']);
+    }
+
+    #[DataProvider('invalidDates')]
+    public function testInvalidDateIsRejected(string $raw): void
+    {
+        $result = validateAgreedUntil($raw);
+
+        $this->assertNull($result['value']);
+        $this->assertNotNull($result['error']);
+    }
+
+    public static function invalidDates(): array
+    {
+        return [
+            'ru format'        => ['15.10.2026'],
+            'impossible day'   => ['2026-02-30'],
+            'garbage'          => ['abc'],
+            'month 13'         => ['2026-13-01'],
+            'with time'        => ['2026-10-15 12:00'],
+        ];
     }
 
     /**

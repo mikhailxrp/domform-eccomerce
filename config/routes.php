@@ -59,6 +59,8 @@ return [
         '/admin/orders/{id}/paid-full'   => ['AdminOrderController', 'markPaidFull'],
         '/admin/orders/{id}/shipping'    => ['AdminOrderController', 'setShipping'],
         '/admin/orders/{id}/cancel'      => ['AdminOrderController', 'cancel'],
+        '/admin/orders/{id}/reserves/{reserveId}/agreed-until' => ['AdminOrderController', 'setReserveAgreedUntil'],
+        '/admin/orders/{id}/reserves/{reserveId}/release'      => ['AdminOrderController', 'releaseReserve'],
         '/admin/orders/{id}/items'                 => ['AdminOrderController', 'addItem'],
         '/admin/orders/{id}/items/{itemId}'        => ['AdminOrderController', 'updateItem'],
         '/admin/orders/{id}/items/{itemId}/remove' => ['AdminOrderController', 'removeItem'],

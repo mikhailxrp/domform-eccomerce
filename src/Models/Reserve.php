@@ -157,3 +157,87 @@ function markOrderVariantsAsShowroomSample(PDO $pdo, int $orderId): void
     ');
     $stmt->execute(['order_id' => $orderId]);
 }
+
+/**
+ * Все Резервы Заказа для блока карточки в Панели управления — активные и
+ * история (`released`/`fulfilled`), с названием Товара и артикулом из
+ * снэпшота `order_items` (Вариант мог измениться или быть удалён —
+ * история Заказа не должна меняться задним числом, `database.md`).
+ */
+function getOrderReserves(int $orderId): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT r.id, r.order_item_id, r.product_variant_id, r.status,
+               r.agreed_until, r.created_at, r.released_at,
+               oi.product_name, oi.variant_sku, oi.variant_material, oi.variant_color
+        FROM reserves r
+        INNER JOIN order_items oi ON oi.id = r.order_item_id
+        WHERE oi.order_id = :order_id
+        ORDER BY r.created_at, r.id
+    ');
+    $stmt->execute(['order_id' => $orderId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Устно согласованный срок (`FR-STOCK-002` правило 2) — только у
+ * активного Резерва **этого** Заказа: `JOIN order_items` в `WHERE`
+ * отсекает чужой или несуществующий `reserveId` из URL. `null` —
+ * очистка. `false` — резерв не найден/не активен, данные не изменены.
+ * Система по этой дате ничего не делает — поле только для Менеджера.
+ */
+function setReserveAgreedUntil(int $orderId, int $reserveId, ?string $date): bool
+{
+    $pdo = getPdo();
+
+    // Отдельная проверка существования, а не `rowCount()` после UPDATE:
+    // без `MYSQL_ATTR_FOUND_ROWS` повторное сохранение той же даты дало бы
+    // 0 изменённых строк и ложное «резерв не найден».
+    $exists = $pdo->prepare('
+        SELECT 1
+        FROM reserves r
+        INNER JOIN order_items oi ON oi.id = r.order_item_id
+        WHERE r.id = :reserve_id AND oi.order_id = :order_id AND r.status = :active
+        LIMIT 1
+    ');
+    $exists->execute([
+        'reserve_id' => $reserveId,
+        'order_id'   => $orderId,
+        'active'     => RESERVE_STATUS_ACTIVE,
+    ]);
+    if ($exists->fetchColumn() === false) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare('UPDATE reserves SET agreed_until = :agreed_until WHERE id = :reserve_id');
+    $stmt->execute(['agreed_until' => $date, 'reserve_id' => $reserveId]);
+
+    return true;
+}
+
+/**
+ * Ручное снятие Резерва Менеджером (`FR-STOCK-002` правило 3, UC-02 2в:
+ * Покупатель не забрал образец к согласованному сроку) — единственный
+ * механизм снятия по истечении срока, автоматики нет. Статус Заказа не
+ * меняется: отмену Менеджер оформляет отдельно после звонка.
+ * `is_showroom_sample` не трогается (флаг при резерве всё время 1) —
+ * образец снова свободен сразу после `released`.
+ */
+function releaseReserveById(int $orderId, int $reserveId): bool
+{
+    $stmt = getPdo()->prepare('
+        UPDATE reserves r
+        INNER JOIN order_items oi ON oi.id = r.order_item_id
+        SET r.status = :released, r.released_at = NOW()
+        WHERE r.id = :reserve_id AND oi.order_id = :order_id AND r.status = :active
+    ');
+    $stmt->execute([
+        'released'   => RESERVE_STATUS_RELEASED,
+        'reserve_id' => $reserveId,
+        'order_id'   => $orderId,
+        'active'     => RESERVE_STATUS_ACTIVE,
+    ]);
+
+    return $stmt->rowCount() > 0;
+}

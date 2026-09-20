@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var array<int, string> $allowedTransitions */
 /** @var bool $canCancel */
 /** @var bool $canEditItems */
+/** @var array<int, array<string, mixed>> $reserves */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
@@ -196,6 +197,10 @@ $orderId = (string) $order['id'];
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($reserves !== []): ?>
+    <?php include ROOT_PATH . '/src/Views/components/admin/reserve-panel.php'; ?>
+<?php endif; ?>
 
 <div class="card custom-card">
     <div class="card-header">

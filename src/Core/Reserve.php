@@ -54,3 +54,39 @@ function isUniqueViolation(Throwable $e): bool
 
     return $sqlState === '23000';
 }
+
+const RESERVE_STATUS_BADGE_CLASSES = [
+    RESERVE_STATUS_ACTIVE    => 'bg-info',
+    RESERVE_STATUS_RELEASED  => 'bg-secondary',
+    RESERVE_STATUS_FULFILLED => 'bg-success',
+];
+
+function reserveStatusBadgeClass(string $status): string
+{
+    return RESERVE_STATUS_BADGE_CLASSES[$status] ?? 'bg-light text-dark';
+}
+
+/**
+ * Устно согласованный срок Резерва (`FR-STOCK-002` правило 2) — поле
+ * `<input type="date">`, формат `Y-m-d`. Пустая строка — очистка срока
+ * (`value = null`, без ошибки). Любая корректная календарная дата
+ * принимается, в том числе прошедшая: срок вносится для справки
+ * Менеджеру, система его не интерпретирует и по нему не действует.
+ * Возвращает `['value' => ?string, 'error' => ?string]`.
+ */
+function validateAgreedUntil(string $raw): array
+{
+    $raw = trim($raw);
+
+    if ($raw === '') {
+        return ['value' => null, 'error' => null];
+    }
+
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $m) !== 1
+        || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])
+    ) {
+        return ['value' => null, 'error' => 'Введите корректную дату срока резерва.'];
+    }
+
+    return ['value' => $raw, 'error' => null];
+}

@@ -81,6 +81,7 @@ class AdminOrderController
             'allowedTransitions' => allowedOrderTransitions($order['status'], $hasShowroomSample, $order['fulfillment_method']),
             'canCancel'          => canCancelOrder($order['status']),
             'canEditItems'       => canEditOrderItems($order['status']),
+            'reserves'           => getOrderReserves((int) $id),
         ]);
     }
 
@@ -179,6 +180,56 @@ class AdminOrderController
         }
 
         setFlash('success', 'Статус Заказа обновлён.');
+        redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Устно согласованный срок Резерва (`FR-STOCK-002` правило 2) —
+     * только для справки Менеджеру, система по нему не действует.
+     */
+    public function setReserveAgreedUntil(string $id, string $reserveId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        if (findOrderById((int) $id) === null) {
+            abort404();
+        }
+
+        $validated = validateAgreedUntil((string) input('agreed_until', ''));
+        if ($validated['error'] !== null) {
+            setFlash('error', $validated['error']);
+            redirect('/admin/orders/' . $id);
+        }
+
+        if (!setReserveAgreedUntil((int) $id, (int) $reserveId, $validated['value'])) {
+            setFlash('error', 'Резерв не найден или уже снят.');
+            redirect('/admin/orders/' . $id);
+        }
+
+        setFlash('success', $validated['value'] === null ? 'Срок резерва очищен.' : 'Срок резерва сохранён.');
+        redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * Ручное снятие Резерва (`FR-STOCK-002` правило 3, UC-02 2в) — Заказ
+     * при этом не отменяется, это отдельное решение Менеджера по звонку.
+     */
+    public function releaseReserve(string $id, string $reserveId): void
+    {
+        requireRole(['manager', 'admin']);
+        requireCsrf();
+
+        if (findOrderById((int) $id) === null) {
+            abort404();
+        }
+
+        if (!releaseReserveById((int) $id, (int) $reserveId)) {
+            setFlash('error', 'Резерв не найден или уже снят.');
+            redirect('/admin/orders/' . $id);
+        }
+
+        setFlash('success', 'Резерв снят — образец снова доступен для продажи.');
         redirect('/admin/orders/' . $id);
     }
 
