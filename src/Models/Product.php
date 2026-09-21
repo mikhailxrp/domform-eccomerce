@@ -1085,6 +1085,22 @@ function findProductBySlug(string $slug): ?array
     return $product !== false ? $product : null;
 }
 
+/**
+ * Существование + активность Товара по `id` — для действий, где Товар
+ * приходит числом из формы, а не через маршрут со slug
+ * (`FavoriteController::toggle()`, Таск 6 Фазы 7). Минимальная строка,
+ * не карточка — `findProductForToggle()`/`findProductForAdmin()` для
+ * этого не подходят, они для админки.
+ */
+function findActiveProductById(int $id): ?array
+{
+    $stmt = getPdo()->prepare('SELECT id FROM products WHERE id = :id AND is_active = 1 LIMIT 1');
+    $stmt->execute(['id' => $id]);
+    $product = $stmt->fetch();
+
+    return $product !== false ? $product : null;
+}
+
 function getProductVariants(int $productId): array
 {
     $priceSql = discountedPriceSql('pv');

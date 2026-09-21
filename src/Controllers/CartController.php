@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Cart.php';
+require_once ROOT_PATH . '/src/Models/Favorite.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 
 class CartController
@@ -83,6 +84,42 @@ class CartController
         refreshCartCount($owner);
 
         setFlash('success', 'Корзина очищена.');
+        redirect('/cart');
+    }
+
+    /**
+     * Перенос строки корзины в Избранное (`FR-CART-004`) — только для
+     * авторизованного (Избранное привязано к `user_id`, у Гостя его
+     * нет). Ищем строку среди `getCartItems()` владельца — тот же
+     * набор данных, что уже читает `index()`, лишней Model-функции не
+     * заводим; чужой/несуществующий `item_id` — молча ничего не меняем
+     * (`dod-global.md`: подмена id не должна ничего раскрывать).
+     */
+    public function moveToFavorites(): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $owner  = cartOwner();
+        $itemId = (int) input('item_id');
+
+        $item = null;
+        foreach (getCartItems($owner) as $cartItem) {
+            if ((int) $cartItem['id'] === $itemId) {
+                $item = $cartItem;
+                break;
+            }
+        }
+
+        if ($item !== null) {
+            $userId = (int) currentUser()['id'];
+            addFavorite($userId, (int) $item['product_id']);
+            removeCartItem($owner, $itemId);
+            refreshCartCount($owner);
+
+            setFlash('success', 'Товар перенесён в избранное.');
+        }
+
         redirect('/cart');
     }
 

@@ -81,3 +81,25 @@ function updateUserPasswordHash(int $userId, string $passwordHash): void
     $stmt = getPdo()->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
     $stmt->execute(['password_hash' => $passwordHash, 'id' => $userId]);
 }
+
+/**
+ * Личный кабинет (`FR-ACC-004`, Таск 3) — телефон здесь не меняется
+ * (правило 3: только через Менеджера).
+ */
+function updateUserProfile(int $userId, string $name, string $email): void
+{
+    $stmt = getPdo()->prepare('UPDATE users SET name = :name, email = :email WHERE id = :id');
+    $stmt->execute(['name' => $name, 'email' => $email, 'id' => $userId]);
+}
+
+/**
+ * Занятость email другим аккаунтом при смене email в кабинете —
+ * `!= :id`, иначе Покупатель не смог бы «сменить» email сам на себя.
+ */
+function isEmailTakenByOther(string $email, int $userId): bool
+{
+    $stmt = getPdo()->prepare('SELECT 1 FROM users WHERE email = :email AND id != :id LIMIT 1');
+    $stmt->execute(['email' => $email, 'id' => $userId]);
+
+    return $stmt->fetchColumn() !== false;
+}

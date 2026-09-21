@@ -15,6 +15,7 @@ require_once ROOT_PATH . '/src/Core/Payment.php';
 require_once ROOT_PATH . '/src/Core/OrderActions.php';
 require_once ROOT_PATH . '/src/Core/ManualOrder.php';
 require_once ROOT_PATH . '/src/Core/Warranty.php';
+require_once ROOT_PATH . '/src/Services/Sms.php';
 
 class AdminOrderController
 {
@@ -85,6 +86,7 @@ class AdminOrderController
             'canEditItems'       => canEditOrderItems($order['status']),
             'reserves'           => getOrderReserves((int) $id),
             'returns'            => getOrderReturns((int) $id),
+            'smsNotifications'   => getOrderSmsNotifications((int) $id),
         ]);
     }
 
@@ -182,6 +184,12 @@ class AdminOrderController
             redirect('/admin/orders/' . $id);
         }
 
+        $order = findOrderById((int) $id);
+        $event = $order !== null ? smsEventForStatus($to, $order['fulfillment_method']) : null;
+        if ($event !== null) {
+            sendOrderSms($order, $event);
+        }
+
         setFlash('success', 'Статус Заказа обновлён.');
         redirect('/admin/orders/' . $id);
     }
@@ -262,7 +270,27 @@ class AdminOrderController
             PREPAID_RESULT_SAMPLE_TAKEN => setFlash('error', $this->sampleTakenMessage((int) $id)),
         };
 
+        $this->notifyPrepaidConfirmed($result, (int) $id);
+
         redirect('/admin/orders/' . $id);
+    }
+
+    /**
+     * `markOrderPrepaid()` переводит Заказ в `confirmed` внутри своей
+     * транзакции, но `transitionOrderStatus()` там не бросает на
+     * запрещённом переходе (`Models/Order.php`) — поэтому реальный
+     * статус нужно перечитать, а не полагаться на `PREPAID_RESULT_OK`.
+     */
+    private function notifyPrepaidConfirmed(string $prepaidResult, int $orderId): void
+    {
+        if ($prepaidResult !== PREPAID_RESULT_OK) {
+            return;
+        }
+
+        $order = findOrderById($orderId);
+        if ($order !== null && $order['status'] === ORDER_STATUS_CONFIRMED) {
+            sendOrderSms($order, SMS_EVENT_CONFIRMED);
+        }
     }
 
     /**
@@ -373,6 +401,8 @@ class AdminOrderController
 
         cancelOrder((int) $id, $input['note'], $input['refund_confirmed'], $input['mark_as_sample']);
 
+        sendOrderSms($order, SMS_EVENT_CANCELLED);
+
         setFlash('success', 'Заказ отменён.');
         redirect('/admin/orders/' . $id);
     }
@@ -468,7 +498,10 @@ class AdminOrderController
             return;
         }
 
+        sendOrderSms(array_merge($order, ['id' => $orderId]), SMS_EVENT_ACCEPTED);
+
         $prepaidResult = markOrderPrepaid($orderId, $input['prepaid_amount']);
+        $this->notifyPrepaidConfirmed($prepaidResult, $orderId);
 
         unset($_SESSION['manual_order_token']);
 

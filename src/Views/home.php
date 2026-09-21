@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var array<int, array{label: string, products: array<int, array<string, mixed>>}> $bestsellerTabs */
 /** @var array<int, array{slug: string, name: string, image: string, count: int}> $categoryBanners */
 /** @var array<int, array<string, mixed>> $storeReviews */
+/** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 ?>

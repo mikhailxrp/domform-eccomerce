@@ -49,6 +49,13 @@ $itemHasDiscount = hasDiscount($item['discount_percent'] ?? null);
         <span class="price"><?= formatPrice($item['line_total']) ?></span>
     </td>
     <td class="product-action">
+        <?php if (isAuthenticated()): ?>
+            <form method="post" action="/cart/move-to-favorites">
+                <?= csrfField() ?>
+                <input type="hidden" name="item_id" value="<?= e((string) $item['id']) ?>">
+                <button type="submit" class="favorite" aria-label="В избранное"><i class="pe-7s-like"></i></button>
+            </form>
+        <?php endif; ?>
         <form method="post" action="/cart/remove">
             <?= csrfField() ?>
             <input type="hidden" name="item_id" value="<?= e((string) $item['id']) ?>">

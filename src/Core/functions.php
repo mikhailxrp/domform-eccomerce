@@ -241,13 +241,13 @@ function requireRole(array $roles): void
 
 /**
  * Куда попадает пользователь после входа / при обращении к /login-
- * /register уже авторизованным: Покупатель — на `/` (личный кабинет,
- * Фаза 7), Менеджер/Администратор — в Панель управления (`phase-0.md`,
- * «Решения фазы»).
+ * /register уже авторизованным: Покупатель — в личный кабинет
+ * (`/account`, Фаза 7, Таск 1), Менеджер/Администратор — в Панель
+ * управления (`phase-0.md`, «Решения фазы»).
  */
 function homeUrlForRole(?string $role): string
 {
-    return roleAllowed(['manager', 'admin'], $role) ? '/admin' : '/';
+    return roleAllowed(['manager', 'admin'], $role) ? '/admin' : '/account';
 }
 
 // ─── Remember me ────────────────────────────────────────────────────────

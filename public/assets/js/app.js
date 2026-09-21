@@ -679,6 +679,32 @@
     }
 
     /**
+     * Страница `/checkout` (Таск 5) — селект сохранённых адресов
+     * кабинета заполняет структурные поля адреса из `data-*` атрибутов
+     * выбранной опции, без перезагрузки. Пустой пункт «Свой адрес»
+     * (`value=""`) поля не трогает — покупатель мог уже начать вводить
+     * свой вариант.
+     */
+    function applyCheckoutSavedAddress() {
+        var $option = jQuery('#checkout-saved-address option:selected');
+        if (!$option.length || $option.val() === '') {
+            return;
+        }
+        jQuery('[name="address_city"]').val($option.data('city'));
+        jQuery('[name="address_street"]').val($option.data('street'));
+        jQuery('[name="address_house"]').val($option.data('house'));
+        jQuery('[name="address_apartment"]').val($option.data('apartment'));
+        jQuery('[name="address_comment"]').val($option.data('comment'));
+    }
+
+    function initCheckoutSavedAddressAutofill() {
+        if (!jQuery('#checkout-saved-address').length) {
+            return;
+        }
+        jQuery(document).on('change', '#checkout-saved-address', applyCheckoutSavedAddress);
+    }
+
+    /**
      * Главная — блоки «Товары» и «Лидеры продаж», у каждого свои
      * вкладки-карусели: у всех вкладок внутри блока общая пара стрелок
      * сверху (`.swiper-arrows`, как в теме), поэтому `main.js`-подход —
@@ -788,6 +814,7 @@
         initSearchSortSubmit();
         initCartQuantityControls();
         initCheckoutFulfillmentToggle();
+        initCheckoutSavedAddressAutofill();
         initHomeProductsTabs();
         initPageLoader();
         jQuery(window).on('load resize', applyContentOffset);

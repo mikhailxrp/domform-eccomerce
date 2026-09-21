@@ -8,6 +8,7 @@ require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/Banner.php';
 require_once ROOT_PATH . '/src/Models/Review.php';
 require_once ROOT_PATH . '/src/Models/Category.php';
+require_once ROOT_PATH . '/src/Models/Favorite.php';
 
 class HomeController
 {
@@ -49,6 +50,8 @@ class HomeController
             return $banner['count'] > 0;
         }));
 
+        $user = currentUser();
+
         render('home', [
             'title'           => 'Главная',
             'banners'         => getActiveBanners(),
@@ -56,6 +59,7 @@ class HomeController
             'bestsellerTabs'  => $bestsellerTabs,
             'categoryBanners' => $categoryBanners,
             'storeReviews'    => getApprovedStoreReviews(HOME_BLOCK_LIMIT),
+            'favoriteIds'     => $user !== null ? getFavoriteProductIds($user['id']) : [],
         ]);
     }
 }

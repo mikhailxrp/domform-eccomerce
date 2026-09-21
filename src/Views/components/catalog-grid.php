@@ -10,6 +10,7 @@ declare(strict_types=1);
 /** @var string|null $nextUrl */
 /** @var string $path */
 /** @var string $resetUrl */
+/** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
 
 $sort        = $filters['sort'];
 $sortOptions = [

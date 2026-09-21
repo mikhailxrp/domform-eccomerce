@@ -64,6 +64,16 @@ define('ADMIN_REVIEWS_PER_PAGE', 20);
 // Главная — размер блоков Товаров/отзывов (`.docs/phases/phase-6.md`, Таск 6)
 define('HOME_BLOCK_LIMIT', 8);
 
+// Личный кабинет — история заказов (`.docs/phases/phase-7.md`, Таск 2).
+// Меньше, чем ADMIN_ORDERS_PER_PAGE — у одного Покупателя заказов
+// на порядки меньше, чем во всей Панели управления.
+define('ACCOUNT_ORDERS_PER_PAGE', 10);
+
+// Личный кабинет — книга адресов (`.docs/phases/phase-7.md`, Таск 4).
+// Санитарный предел, ТЗ не задаёт число — у реального Покупателя вряд
+// ли больше пары-тройки адресов (дом/дача/работа).
+define('ACCOUNT_ADDRESSES_MAX', 10);
+
 // Панель управления — фото Вариантов (`.docs/phases/phase-4.md`, Таск 9)
 // Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
 // комментарий, tests/bootstrap.php не подключает config.php).

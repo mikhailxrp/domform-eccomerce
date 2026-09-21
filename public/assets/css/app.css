@@ -64,11 +64,14 @@
     margin: 0;
 }
 
-/* Иконка аватара в шапке у авторизованного — тот же акцентный цвет,
-   что тема уже использует для активного пункта меню/hover на иконках
+/* Иконка аватара в шапке у авторизованного, иконка «в избранном» на
+   мини-карточке/карточке Товара — тот же акцентный цвет, что тема уже
+   использует для активного пункта меню/hover на иконках
    (.nav-menu li.active a, .action:hover — #f2a100), иконка в наборе
    темы (pe-7s, только контурные) без заливки. */
-.header-meta .action--active {
+.header-meta .action--active,
+.product-meta .action--active,
+.product-favorite-form .action--active {
     color: #f2a100;
 }
 
@@ -419,6 +422,33 @@
 
 .cart-table .table tbody tr td.product-action button.remove:hover {
     color: #c28100;
+}
+
+/* «В избранное» в строке корзины (Таск 7 Фазы 7) — тот же сброс, что
+   у `.remove` выше, и по той же причине (`<button>` в форме, не `<a>`
+   темы). Обе формы в этой ячейке — блочные по умолчанию, без
+   `inline-block` вставали одна над другой, а не рядом. */
+.cart-table .table tbody tr td.product-action button.favorite {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: #f2a100;
+    cursor: pointer;
+}
+
+.cart-table .table tbody tr td.product-action button.favorite:hover {
+    color: #c28100;
+}
+
+.cart-table .table tbody tr td.product-action form {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.cart-table .table tbody tr td.product-action form + form {
+    margin-left: 12px;
 }
 
 /* Корзина на узких/средних экранах (<992px, Bootstrap `lg`) — 5 колонок
@@ -777,4 +807,59 @@
 .footer-contact-payment .contact-content a {
     color: inherit;
     text-decoration: none;
+}
+
+/* Сводка счётчиков на обзоре личного кабинета (`/account`) — три
+   карточки вместо плоского списка ссылок; ряд Bootstrap-grid
+   (`col-sm-4`, разметка во View), flex — только внутри одной карточки
+   для выравнивания иконки и текста, тот же приём, что `.store-review-
+   card` (`general.md`: grid — только для расположения блоков, не
+   ad-hoc замена внутри одного блока). Цвет — токен темы `--bs-primary`
+   (совпадает с акцентом активного пункта сайдбара кабинета,
+   `style.css`), не свой magic-hex. */
+.account-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 100%;
+    padding: 18px 20px;
+    background-color: #f7f7f7;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s linear;
+}
+
+.account-summary-card:hover {
+    background-color: var(--bs-primary);
+}
+
+.account-summary-card:hover .account-summary-card__icon,
+.account-summary-card:hover .account-summary-card__count,
+.account-summary-card:hover .account-summary-card__label {
+    color: #fff;
+}
+
+.account-summary-card__icon {
+    font-size: 22px;
+    color: var(--bs-primary);
+    transition: color 0.3s linear;
+}
+
+.account-summary-card__text {
+    display: flex;
+    flex-direction: column;
+}
+
+.account-summary-card__count {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #000;
+    transition: color 0.3s linear;
+}
+
+.account-summary-card__label {
+    font-size: 14px;
+    color: #6d707f;
+    transition: color 0.3s linear;
 }

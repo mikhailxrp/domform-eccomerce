@@ -8,6 +8,7 @@ require_once ROOT_PATH . '/src/Models/Product.php';
 require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Models/Review.php';
 require_once ROOT_PATH . '/src/Models/User.php';
+require_once ROOT_PATH . '/src/Models/Favorite.php';
 require_once ROOT_PATH . '/src/Core/Review.php';
 
 class ProductController
@@ -102,6 +103,8 @@ class ProductController
             }
         }
 
+        $currentUserId = currentUser()['id'] ?? null;
+
         render('product/show', [
             'title'         => $product['name'],
             'product'       => $product,
@@ -113,6 +116,7 @@ class ProductController
             'averageRating' => averageRating($reviews),
             'reviewOld'     => $reviewOld,
             'reviewErrors'  => $reviewErrors,
+            'favoriteIds'   => $currentUserId !== null ? getFavoriteProductIds($currentUserId) : [],
         ]);
     }
 }

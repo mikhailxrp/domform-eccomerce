@@ -12,12 +12,14 @@ declare(strict_types=1);
 /** @var ?string $averageRating */
 /** @var array $reviewOld */
 /** @var array $reviewErrors */
+/** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 
 $firstVariant = $variants[0];
 $firstImage   = $firstVariant['images'][0] ?? null;
 $productSlug  = $product['slug'];
+$isFavorite   = in_array((int) $product['id'], $favoriteIds, true);
 
 // Фото без цвета (общие ракурсы товара, необязательное поле формы
 // загрузки — `admin/products/form.php`, Таск 9 Фазы 4) раньше молча
@@ -89,6 +91,18 @@ foreach ($firstVariant['images'] as $image) {
                         </div>
 
                         <?php include ROOT_PATH . '/src/Views/components/variant-selector.php'; ?>
+
+                        <?php if (isAuthenticated()): ?>
+                            <form method="post" action="/favorites/toggle" class="product-favorite-form">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="product_id" value="<?= e((string) $product['id']) ?>">
+                                <button class="btn btn-outline-dark<?= $isFavorite ? ' action--active' : '' ?>" type="submit">
+                                    <i class="pe-7s-like"></i> <?= $isFavorite ? 'В избранном' : 'В избранное' ?>
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <a class="btn btn-outline-dark" href="/login"><i class="pe-7s-like"></i> В избранное</a>
+                        <?php endif; ?>
 
                         <div class="product-info">
                             <div class="single-info">

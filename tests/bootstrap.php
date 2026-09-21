@@ -24,3 +24,6 @@ require_once ROOT_PATH . '/src/Core/ProductForm.php';
 require_once ROOT_PATH . '/src/Core/Upload.php';
 require_once ROOT_PATH . '/src/Core/Report.php';
 require_once ROOT_PATH . '/src/Core/Review.php';
+require_once ROOT_PATH . '/src/Core/Account.php';
+require_once ROOT_PATH . '/src/Core/Address.php';
+require_once ROOT_PATH . '/src/Core/Notification.php';

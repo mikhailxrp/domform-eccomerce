@@ -1,152 +1,95 @@
 # Current Task
 
 ## Фаза
-Phase 6 — Скидки, отзывы и главная страница
-(`.docs/phases/phase-6.md`), Таск 6 из 6 (последний в фазе).
+Phase 7 — Кабинет покупателя и уведомления
+(`.docs/phases/phase-7.md`), Таск 9 из 9 — последний таск, фаза
+закрыта.
 
-**Статус:** ✅ Завершён 20.09.2026. Фаза 6 закрыта целиком. Проверено
-на реальной БД живым HTTP (`php -S` + `curl`): `install.php` дважды
-подряд без дублей `banners`, временная отметка `is_featured` + временный
-отзыв о магазине (оба удалены после проверки) корректно включили блоки
-«Хиты» и «Отзывы» в правильном порядке, «Новинки» — ровно 8 карточек,
-«Товары со скидкой» — реальная скидка 32 000 → 25 600 ₽. `composer
-test` — 296/296 (без изменений, регрессия). Реализация полностью
-соответствует плану ниже, дополнительных отклонений в процессе
-кодирования не потребовалось.
+**Статус:** ✅ Завершён 21.09.2026 — проверено живым HTTP на реальной
+БД (`php -S` + `curl`, временный Менеджер и тестовые Заказы, удалены
+после проверки). Ручной Заказ с предоплатой сразу → 2 строки
+(«принят», «подтверждён»); полный проход
+`in_production → ready_for_shipment → shipping → delivered` →
+ровно 5 строк, блок «Уведомления» отразил их в верном порядке;
+запрещённый переход и повторное «Отметить предоплату» — без лишних
+строк; отдельный гостевой Заказ → «принят» с `guest_phone`, отмена из
+`new` → «отменён». Искусственная ошибка внутри `sendOrderSms()`
+(нарушение FK) не вышла наружу — `ERROR` в `app.log`, без 500.
+`composer test` — 337/337 (регрессия). Реализовано без отклонений от
+плана ниже.
 
 ## Задача
-`FR-HOME-001, 004…008` — слайдер главной читает баннеры из `banners`;
-блоки Товаров «Хиты продаж» (`is_featured`), «Новинки» (8 последних по
-`created_at`), «Товары со скидкой» (хотя бы один активный Вариант со
-скидкой); блок «Отзывы о магазине» сразу после «Хитов» (`C-009`,
-`FR-HOME-007` правило 1) — одобренные отзывы с `product_id IS NULL`.
-Каждый блок Товаров/отзывов скрыт целиком, если пуст (`FR-HOME-004/007/
-008`).
-
-Порядок блоков на странице — ТЗ жёстко фиксирует только соседство
-«Хиты → Отзывы» (`FR-HOME-007` правило 1); остальное — Слайдер →
-Benefit («О компании») → Хиты продаж → Отзывы о магазине → Новинки →
-Товары со скидкой (Benefit остаётся на своём текущем месте сразу после
-слайдера, дальше — по порядку самого ТЗ в 8.0 `HOME`).
-
-Три уточнения против черновика `phase-6.md` по факту сверки с кодом/
-схемой БД (обсуждены и подтверждены пользователем перед реализацией):
-
-1. **Сид `banners` в `install.php` не может быть `INSERT IGNORE`, «как
-   `sales_channels`»** — у `sales_channels`/`integrations` есть
-   `UNIQUE(code)`, на который опирается `IGNORE`; у `banners` нет
-   уникального ключа кроме автоинкрементного `id` (`database.md`).
-   Повторный `INSERT IGNORE` вставил бы дубли — нарушение DoD
-   «`install.php` дважды подряд без дублей». Сидим через явную
-   проверку `SELECT COUNT(*) FROM banners` — только если пусто.
-2. **`HOME_BLOCK_LIMIT = 8` заводится в `config/config.php`** (черновик
-   фазы не указывал место) — по аналогии с `CATALOG_PER_PAGE`/
-   `SEARCH_SUGGEST_LIMIT`, тем же «сколько штук показывать».
-3. **Блок «О компании» (`FR-HOME-006`) не пересобирается** — секция
-   Benefit в `home.php` (три пункта: «Изготовление под заказ / Оплата /
-   Доставка», сделана в Фазе 0/1) уже и есть требуемый «текстово-
-   визуальный блок»: отдельного макета «About Us» на главной в теме
-   `00-input/design/index.html` нет вообще (только виджет в футере с
-   тем же названием, к главной не относится). В этом таске секция не
-   меняется по содержанию, только по месту в `home.php`.
+`FR-NOTIF-001` целиком: уведомление фиксируется при создании Заказа
+(чекаут и ручное создание Менеджером), на `confirmed` (в т.ч. через
+фиксацию предоплаты), `in_production`, `ready_for_shipment`,
+`shipping`, `cancelled` — всегда после commit, сбой заглушки не
+блокирует переход (правило 7). На странице Заказа в Панели управления
+— блок «Уведомления»: событие, телефон, текст, время (`AC-05`).
 
 ## Scope — что трогаем
 
-- [x] `config/config.php` — изменить: константа `HOME_BLOCK_LIMIT = 8`
-      (см. уточнение 2)
-- [x] `src/Models/Product.php` — изменить: `getFeaturedProducts(int
-      $limit): array` (`p.is_featured = 1`, `INNER JOIN
-      product_variants pv ON pv.product_id = p.id AND pv.is_active = 1`,
-      `GROUP BY`, `ORDER BY p.created_at DESC`, по образцу
-      `getRelatedProducts()`), `getNewestProducts(int $limit): array`
-      (тот же JOIN/GROUP BY, без фильтра `is_featured`),
-      `getDiscountedProducts(int $limit): array` (`EXISTS (SELECT 1
-      FROM product_variants pvX WHERE pvX.product_id = p.id AND
-      pvX.is_active = 1 AND pvX.discount_percent > 0)` — то же условие,
-      что `on_sale` в `buildCatalogFilterConditions()`, Таск 3); везде
-      `p.is_active = 1`, непустой результат прогоняется через
-      `attachCheapestVariant($pdo, $products)` (уже готова, без N+1)
-- [x] `src/Models/Banner.php` — создать: `getActiveBanners(): array`
-      (`SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order,
-      id`)
-- [x] `database/install.php` — изменить: сид 3 баннеров (переносятся
-      текущие слайды `home.php`: заголовок + `/assets/images/slider/
-      slider-item-N.png`, без подзаголовка — в схеме `banners` нет
-      отдельного поля под него, `title` = заголовку слайда), обёрнут в
-      `if ((int) $pdo->query('SELECT COUNT(*) FROM banners')
-      ->fetchColumn() === 0)` (см. уточнение 1, не `INSERT IGNORE`)
-- [x] `src/Models/Review.php` — изменить: `getApprovedStoreReviews(int
-      $limit): array` (`WHERE product_id IS NULL AND status =
-      'approved' ORDER BY created_at DESC LIMIT`, по образцу
-      `getApprovedProductReviews()`)
-- [x] `src/Controllers/HomeController.php` — изменить: `index()`
-      собирает `$banners`, `$featuredProducts`, `$storeReviews`,
-      `$newestProducts`, `$discountedProducts` (все — `HOME_BLOCK_LIMIT`)
-      и передаёt в `render('home', ...)`
-- [x] `src/Views/home.php` — переписать: слайдер строится из `$banners`
-      (`foreach`, без хардкода 3 слайдов), порядок секций — см.
-      «Задача» выше; каждый блок Товаров/отзывов подключается только
-      при непустом массиве (пустой — секция не рендерится совсем, не
-      пустая сетка)
-- [x] `src/Views/components/home-product-section.php` — создать:
-      принимает `$heading`/`$products`, оборачивает в `.shop-product-
-      wrapper > .row` + `foreach` с `include product-card.php`
-      (`$viewMode = 'grid'`) — тот же приём, что `catalog-grid.php`/
-      `product/show.php` («Похожие товары»); ничего не рендерит при
-      пустом `$products`
-- [x] `src/Views/components/store-review-card.php` — создать: имя,
-      рейтинг (звёзды — тот же приём заливки, что `review-list.php`),
-      текст, дата — новая карточка (`C-009`: макета нет, карточки
-      готовит исполнитель)
-- [x] `public/assets/css/app.css` — изменить: стили `.store-review-
-      card` (BEM, mobile-first)
+- [x] `src/Controllers/CheckoutController.php` — изменить: `store()`,
+      после успешного `createOrder()` — `sendOrderSms(array_merge($order,
+      ['id' => $orderId]), SMS_EVENT_ACCEPTED)` (`$order` уже содержит
+      `user_id`/`guest_phone`/`fulfillment_method`)
+- [x] `src/Controllers/AdminOrderController.php` — изменить:
+      - `store()` (ручное создание) — СМС «принят» после `createOrder()`;
+        если `markOrderPrepaid()` вернул `PREPAID_RESULT_OK` и
+        перечитанный `findOrderById($orderId)['status'] === 'confirmed'`
+        — доп. СМС «подтверждён» (перепроверка статуса нужна, потому что
+        `transitionOrderStatus()` внутри `markOrderPrepaid()` не бросает
+        на запрещённом переходе)
+      - `transition()` — после успешного `transitionOrderStatus()` —
+        `sendOrderSms()` с `smsEventForStatus($to, $order['fulfillment_method'])`,
+        если событие не `null`
+      - `markPrepaid()` — та же проверка `PREPAID_RESULT_OK` +
+        перечитанный статус `confirmed`, что и в `store()` (вынесено в
+        общий приватный `notifyPrepaidConfirmed()`)
+      - `cancel()` — после `cancelOrder()` — СМС «отменён»
+      - `show()` — передаёт `$smsNotifications =
+        getOrderSmsNotifications((int) $id)` в View
+- [x] `src/Views/admin/orders/show.php` — изменить: блок «Уведомления»
+      (по образцу карточки «Возврат и гарантия») — событие/телефон/
+      текст/время, пустое состояние «уведомлений ещё не было»
+- [x] `.docs/modules/ord.md` — изменить: пометка у `NOTIF` —
+      «реализовано в Фазе 7 как журнал-заглушка,
+      `Services/Sms.php::sendOrderSms()`, точки вызова: чекаут, ручное
+      создание, `transition()`, `markPrepaid()`, `cancel()`»
 
 ## Out of scope — не трогаем
 
-- Редактирование баннеров/текста «О компании» в Панели управления
-  (`FR-ADM-003` → Фаза 8) — баннеры только читаются, UI управления не
-  строится
-- Содержимое секции Benefit («О компании») — не меняется, только
-  положение в `home.php` (см. уточнение 3)
-- Средний рейтинг/сводка по отзывам о магазине — ТЗ (`FR-HOME-007`)
-  требует только карточки отзывов, не агрегат
-- Иконка «в избранное» на мини-карточке (`FR-CAT-009` → Фаза 7)
-- Меню категорий и поиск в шапке (`FR-HOME-002/003`) — уже сделаны в
-  Фазе 1, в этом таске только регрессионная проверка, без правок кода
-- `src/Views/components/product-card.php` — переиспользуется как есть,
-  не меняется
-- Изменение схемы БД — `banners`/`is_featured`/`discount_percent`
-  заведены в Фазе 0 (`ADR-015/023/024`)
-- Любой рефакторинг за пределами перечисленных файлов
+- `Core/Notification.php`, `Services/Sms.php`, `Models/SmsNotification.php`,
+  таблица `sms_notifications` — готовы в Таске 8, не меняются
+- Реальный СМС-провайдер — не проектируется (решение фазы)
+- `markOrderPaidFull()`, `setShipping()`, работа с Резервами/Возвратами —
+  вне 5 СМС-событий
+- Закрытие фазы (`_status.md`, `tz-coverage.md`, `dev-log.md` — «Решения
+  фазы») — отдельный шаг после этого таска
 
 ## Definition of Done
 
-- [x] Отметка «хит» у Товара / скидка у Варианта / одобренный отзыв о
-      магазине → появляется в своём блоке; снятие последнего →
-      блок исчезает целиком, не показывает пустую сетку — проверено на
-      реальной БД (временные `is_featured`/отзыв о магазине, удалены
-      после проверки)
-- [x] «Новинки» — ровно 8 по `created_at DESC`; неактивный Товар и
-      Товар без активных Вариантов не попадают ни в один из трёх блоков
-- [x] Блок отзывов о магазине стоит сразу после «Хитов продаж»; отзыв о
-      Товаре (`product_id` заполнен) в нём не показывается; `pending`
-      — не видна
-- [x] Слайдер показывает строки `banners` в порядке `sort_order`;
-      `php database/install.php` дважды подряд — ровно 3 строки
-      `banners`, без дублей
-- [x] Мини-карточки блоков показывают старую/новую цену (Таск 2,
-      проверено на реальной скидке 32 000 → 25 600 ₽) и ведут на
-      карточку товара; один батч-запрос `attachCheapestVariant()` на
-      блок, без N+1
-- [x] Меню категорий и поиск в шапке работают на главной — регрессия
-      (`/catalog`, `/search` → 200); секция Benefit («О компании») на
-      месте и не сломана
-- [x] В HTML нет внешних адресов; весь вывод через `e()`/
-      `formatPrice()`
-- [x] `composer test` зелёный (296/296, без изменений — регрессия;
-      новых чистых функций без побочных эффектов в этом таске нет,
-      Model-функции ходят в БД, юнит-тестом не покрываются по
-      `dod-global.md`)
+- [x] Проход Заказа `new → confirmed → in_production →
+      ready_for_shipment → shipping → delivered` даёт ровно 5 строк
+      `sms_notifications` (на `delivered` — нет); каждая видна в блоке
+      на странице Заказа в порядке времени (`FR-NOTIF-001`, `AC-05`)
+- [x] Отмена из `new`/`confirmed`/`in_production` → строка «Заказ
+      отменён»
+- [x] Гостевой Заказ → телефон из `guest_phone`; Заказ Покупателя —
+      из `users.phone`
+- [x] Повторное «Отметить предоплату» (`PREPAID_RESULT_ALREADY`) и
+      проигрыш конкуренции за образец (`PREPAID_RESULT_SAMPLE_TAKEN`)
+      → второго/лишнего СМС нет; запрещённый переход (`transition()`
+      вернул `false`) → СМС нет (`PREPAID_RESULT_ALREADY` проверен
+      живьём; `PREPAID_RESULT_SAMPLE_TAKEN` защищён тем же кодом
+      `notifyPrepaidConfirmed()`, что и `ALREADY` — оба исключены одной
+      проверкой `=== PREPAID_RESULT_OK`, отдельный сценарий гонки за
+      образец не переигрывался — уже покрыт тестами Фазы 5)
+- [x] Ручной Заказ Менеджера с предоплатой сразу → две строки: «принят»
+      и «подтверждён»
+- [x] Искусственная ошибка в заглушке (временно) → переход статуса
+      всё равно прошёл, в `app.log` ошибка, 500 нет
+- [x] `composer test` зелёный (регрессия — таск не добавляет чистую
+      логику без БД)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
@@ -154,5 +97,3 @@ Benefit («О компании») → Хиты продаж → Отзывы о 
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
-- На каждый шаг — чем проверяется (пункт DoD / ручная проверка на
-  реальной БД/HTTP), не только что сделать

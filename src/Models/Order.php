@@ -156,6 +156,53 @@ function findOrderById(int $id): ?array
 }
 
 /**
+ * История заказов личного кабинета (`FR-ACC-001`, `.docs/phases/
+ * phase-7.md`, Таск 2) — только Заказы текущего Покупателя, по
+ * `INDEX(user_id)`. Гостевые Заказы сюда не попадают, пока не
+ * привязаны `linkGuestOrdersToUser()`.
+ */
+function getUserOrders(int $userId, int $page, int $perPage): array
+{
+    $offset = ($page - 1) * $perPage;
+
+    $stmt = getPdo()->prepare('
+        SELECT * FROM orders
+        WHERE user_id = :user_id
+        ORDER BY created_at DESC, id DESC
+        LIMIT :limit OFFSET :offset
+    ');
+    $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
+function countUserOrders(int $userId): int
+{
+    $stmt = getPdo()->prepare('SELECT COUNT(*) FROM orders WHERE user_id = :user_id');
+    $stmt->execute(['user_id' => $userId]);
+
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Заказ в личном кабинете — только свой (`dod-global.md`: чужой `id`
+ * в URL не должен открывать чужой Заказ); `user_id` в условии `WHERE`,
+ * не проверка постфактум — подмена id никогда не возвращает чужую
+ * строку.
+ */
+function findOrderForUser(int $id, int $userId): ?array
+{
+    $stmt = getPdo()->prepare('SELECT * FROM orders WHERE id = :id AND user_id = :user_id LIMIT 1');
+    $stmt->execute(['id' => $id, 'user_id' => $userId]);
+    $order = $stmt->fetch();
+
+    return $order !== false ? $order : null;
+}
+
+/**
  * Все 7 статусов всегда присутствуют в результате (0, если Заказов
  * нет) — дашборд Панели управления показывает счётчик по каждому,
  * а не только по тем, что реально встретились в `orders`.
