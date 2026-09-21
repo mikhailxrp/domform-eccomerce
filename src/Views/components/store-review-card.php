@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 $rating = (int) $review['rating'];
 ?>
-<div class="col-lg-3 col-md-6">
+<div class="col-lg-4 col-md-6">
     <div class="store-review-card">
         <div class="store-review-card__header">
             <span class="store-review-card__name"><?= e($review['name']) ?></span>
