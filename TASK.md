@@ -1,95 +1,148 @@
 # Current Task
 
 ## Фаза
-Phase 7 — Кабинет покупателя и уведомления
-(`.docs/phases/phase-7.md`), Таск 9 из 9 — последний таск, фаза
-закрыта.
+Phase 8 — Админ-панель (контент и доступ) и статические страницы
+(`.docs/phases/phase-8.md`), Таск 1 из 8.
 
-**Статус:** ✅ Завершён 21.09.2026 — проверено живым HTTP на реальной
-БД (`php -S` + `curl`, временный Менеджер и тестовые Заказы, удалены
-после проверки). Ручной Заказ с предоплатой сразу → 2 строки
-(«принят», «подтверждён»); полный проход
-`in_production → ready_for_shipment → shipping → delivered` →
-ровно 5 строк, блок «Уведомления» отразил их в верном порядке;
-запрещённый переход и повторное «Отметить предоплату» — без лишних
-строк; отдельный гостевой Заказ → «принят» с `guest_phone`, отмена из
-`new` → «отменён». Искусственная ошибка внутри `sendOrderSms()`
-(нарушение FK) не вышла наружу — `ERROR` в `app.log`, без 500.
-`composer test` — 337/337 (регрессия). Реализовано без отклонений от
-плана ниже.
+**Статус:** ✅ Завершён 21.09.2026 — проверено на реальной БД живым
+HTTP (`php -S` + `curl`): `install.php` дважды → 7 строк, ручная
+правка `title` сохранена; 7 slug → 200 с текстом из БД,
+`/pages/nope`, `/pages/About`, `/pages/..%2Fetc` → 404; `<script>` и
+теги в теле экранированы (временная подмена строки, откачена);
+`image_path` рендерится `img-fluid` (временное значение, откачено).
+`composer test` — 350/350 (+13). Реализовано по плану ниже; одно
+уточнение: в `header.php` заменены обе копии ссылок (десктоп и
+мобильное меню). Вёрстка 320px — структурно та же, что у корзины/
+кабинета, новых CSS нет.
 
 ## Задача
-`FR-NOTIF-001` целиком: уведомление фиксируется при создании Заказа
-(чекаут и ручное создание Менеджером), на `confirmed` (в т.ч. через
-фиксацию предоплаты), `in_production`, `ready_for_shipment`,
-`shipping`, `cancelled` — всегда после commit, сбой заглушки не
-блокирует переход (правило 7). На странице Заказа в Панели управления
-— блок «Уведомления»: событие, телефон, текст, время (`AC-05`).
+`FR-CNT-004`, `FR-CNT-005`, `FR-CNT-006`: страницы «Доставка и оплата»,
+«Возврат и гарантия», «Публичная оферта», «Политика конфиденциальности»
+открываются по `/pages/{slug}` с заголовком и текстом из
+`content_pages` (7 строк сидятся в `install.php`); текст хранится
+плоским с мини-разметкой и рендерится чистой `renderContentBody()`
+(решение фазы: не HTML — `phase-8.md`, «Решения фазы»). `about`,
+`contacts`, `showroom` пока отдаются тем же общим шаблоном — свои View
+у них появятся в Тасках 3–4. Все `href="#"` на страницы CNT в шапке и
+футере становятся живыми ссылками.
+
+## Что проверено в коде перед планом
+- `abort404()` есть (`ProductController::show()`) — для неизвестного
+  slug.
+- `components/breadcrumbs.php` с `$breadcrumbs = [['name' => '...']]`
+  рендерит одну крошку без ссылки (так делает `cart/index.php`) —
+  переиспользуется без правок.
+- Сид `INSERT IGNORE` по `UNIQUE(slug)` — тот же приём, что
+  `sales_channels` в `install.php`; повторный запуск не перетрёт
+  отредактированный текст.
+- `tests/bootstrap.php` подключает Core-файлы явным `require_once` —
+  нужна одна строка.
 
 ## Scope — что трогаем
 
-- [x] `src/Controllers/CheckoutController.php` — изменить: `store()`,
-      после успешного `createOrder()` — `sendOrderSms(array_merge($order,
-      ['id' => $orderId]), SMS_EVENT_ACCEPTED)` (`$order` уже содержит
-      `user_id`/`guest_phone`/`fulfillment_method`)
-- [x] `src/Controllers/AdminOrderController.php` — изменить:
-      - `store()` (ручное создание) — СМС «принят» после `createOrder()`;
-        если `markOrderPrepaid()` вернул `PREPAID_RESULT_OK` и
-        перечитанный `findOrderById($orderId)['status'] === 'confirmed'`
-        — доп. СМС «подтверждён» (перепроверка статуса нужна, потому что
-        `transitionOrderStatus()` внутри `markOrderPrepaid()` не бросает
-        на запрещённом переходе)
-      - `transition()` — после успешного `transitionOrderStatus()` —
-        `sendOrderSms()` с `smsEventForStatus($to, $order['fulfillment_method'])`,
-        если событие не `null`
-      - `markPrepaid()` — та же проверка `PREPAID_RESULT_OK` +
-        перечитанный статус `confirmed`, что и в `store()` (вынесено в
-        общий приватный `notifyPrepaidConfirmed()`)
-      - `cancel()` — после `cancelOrder()` — СМС «отменён»
-      - `show()` — передаёт `$smsNotifications =
-        getOrderSmsNotifications((int) $id)` в View
-- [x] `src/Views/admin/orders/show.php` — изменить: блок «Уведомления»
-      (по образцу карточки «Возврат и гарантия») — событие/телефон/
-      текст/время, пустое состояние «уведомлений ещё не было»
-- [x] `.docs/modules/ord.md` — изменить: пометка у `NOTIF` —
-      «реализовано в Фазе 7 как журнал-заглушка,
-      `Services/Sms.php::sendOrderSms()`, точки вызова: чекаут, ручное
-      создание, `transition()`, `markPrepaid()`, `cancel()`»
+- [x] `src/Core/Content.php` — создать: `CONTENT_PAGE_SLUGS` (список из
+      7 slug: `contacts`, `about`, `showroom`, `delivery-payment`,
+      `return-warranty`, `offer`, `privacy-policy` — только whitelist,
+      заголовки живут в БД, чтобы не было двух источников),
+      `isContentPageSlug(string): bool`, `renderContentBody(string):
+      string` — чистые функции без БД. Правила разметки: `\r\n` → `\n`;
+      текст режется на блоки по пустым строкам; блок из строк `- ` →
+      `<ul><li>…</li></ul>`; строка `## ` → `<h2>`; остальное → `<p>`,
+      переносы строк внутри блока → `<br>`; каждый текстовый фрагмент
+      через `e()`; пустой/пробельный ввод → `''`
+- [x] `tests/Unit/ContentTest.php` — создать: абзацы, `<br>` внутри
+      абзаца, `h2`, список, смешанный документ, `<script>` экранируется,
+      пустая строка, `\r\n`, slug-whitelist (в т.ч. `../etc`, `About`,
+      пустая строка)
+- [x] `tests/bootstrap.php` — изменить: `require_once` `Core/Content.php`
+- [x] `src/Models/ContentPage.php` — создать:
+      `findContentPageBySlug(string): ?array`, `getAllContentPages():
+      array` (второй нужен Таску 6, заводится сразу как часть Model)
+- [x] `src/Controllers/PageController.php` — создать: `show(string
+      $slug)` — slug вне whitelist или строки нет → `abort404()`;
+      `render('pages/show', ['title' => $page['title'], 'page' =>
+      $page, 'bodyHtml' => renderContentBody($page['body'])])`
+- [x] `src/Views/pages/show.php` — создать: `page-banner-section` с
+      `<h1>` и крошкой (`components/breadcrumbs.php`),
+      `<main>`/`<article>`, фото (`image_path`, `alt` = заголовок) если
+      есть, тело — единственный `<?= $bodyHtml ?>` без `e()` (уже
+      экранировано внутри `renderContentBody()` — комментарий об этом
+      прямо во View)
+- [x] `database/install.php` — изменить: `INSERT IGNORE` 7 строк
+      `content_pages` со стартовыми текстами в мини-разметке по ТЗ:
+      `delivery-payment` — самовывоз по записи, собственная доставка,
+      оплата картой на сайте / наличными / переводом, предоплата
+      30–50 %, остаток при получении (`FR-CNT-004`); `return-warranty`
+      — возврат только по звонку, целиком, без автоматического
+      возврата денег, гарантия производителя 18 месяцев (`FR-CNT-005`);
+      `offer` и `privacy-policy` — типовые шаблоны (152-ФЗ) с
+      реквизитами-плейсхолдерами (`FR-CNT-006`); `about`, `contacts`,
+      `showroom` — короткие стартовые тексты
+- [x] `config/routes.php` — изменить: `GET /pages/{slug}` →
+      `['PageController', 'show']`
+- [x] `src/Views/layout/header.php` — изменить: «О компании» →
+      `/pages/about`, «Доставка и оплата» → `/pages/delivery-payment`,
+      «Контакты» → `/pages/contacts` (первая и третья — временно,
+      Таски 3–4 переключат на `/about`, `/contacts`)
+- [x] `src/Views/layout/footer.php` — изменить: колонка «Покупателям» —
+      «Доставка и оплата» (вместо двух пунктов «Оплата»/«Доставка» на
+      одну и ту же страницу), «Возврат и гарантия», «Публичная оферта»,
+      «Политика конфиденциальности» (вместо «Условия использования»);
+      колонка «Информация» — «О компании» → `/pages/about`, «Контакты»
+      → `/pages/contacts` (временные URL, см. выше)
+- [x] `.docs/planning-log.md` — изменить: `ADR-044` — мини-разметка
+      вместо HTML в `content_pages.body` (почему: самописный
+      whitelist-санитайзер — риск XSS; Менеджер по `php.md` такой же
+      внешний ввод; правило 3 `FR-ADM-003` ограничивает редактирование
+      текстом и фото)
+- [x] `.docs/database.md` — изменить: у `content_pages.body` уточнение
+      формата (плоский текст с мини-разметкой, рендер только через
+      `renderContentBody()`, ссылка на `ADR-044`)
+- [x] `.docs/dev-log.md` — запись по итогам таска
 
 ## Out of scope — не трогаем
-
-- `Core/Notification.php`, `Services/Sms.php`, `Models/SmsNotification.php`,
-  таблица `sms_notifications` — готовы в Таске 8, не меняются
-- Реальный СМС-провайдер — не проектируется (решение фазы)
-- `markOrderPaidFull()`, `setShipping()`, работа с Резервами/Возвратами —
-  вне 5 СМС-событий
-- Закрытие фазы (`_status.md`, `tz-coverage.md`, `dev-log.md` — «Решения
-  фазы») — отдельный шаг после этого таска
+- Свои View и маршруты `/about`, `/contacts`, `/showroom`, блок команды,
+  карта шоурума, форма обратного звонка — Таски 3–4
+- Таблица `settings`, замена констант `SHOP_*`, раздел «Настройки» —
+  Таск 2
+- Редактирование текстов/фото в Панели управления,
+  `storeContentImage()`, `UPLOAD_CONTENT_DIR` — Таск 6; баннеры —
+  Таск 7; сотрудники — Таск 8
+- Правки `components/breadcrumbs.php` — используется как есть
+- Общая `meta description` в `header.php` (сейчас одна на весь сайт) —
+  per-page SEO-мета в этом таске не заводится; упомянуть в dev-log как
+  возможное улучшение
+- Ссылки-согласия на оферту/политику в формах чекаута и регистрации —
+  не в ТЗ Фазы 8, только упомянуть в dev-log
+- Любой рефакторинг `header.php`/`footer.php` сверх замены `href`;
+  `_status.md` — статус Фазы 8 → 🔄 при старте этого таска
 
 ## Definition of Done
-
-- [x] Проход Заказа `new → confirmed → in_production →
-      ready_for_shipment → shipping → delivered` даёт ровно 5 строк
-      `sms_notifications` (на `delivered` — нет); каждая видна в блоке
-      на странице Заказа в порядке времени (`FR-NOTIF-001`, `AC-05`)
-- [x] Отмена из `new`/`confirmed`/`in_production` → строка «Заказ
-      отменён»
-- [x] Гостевой Заказ → телефон из `guest_phone`; Заказ Покупателя —
-      из `users.phone`
-- [x] Повторное «Отметить предоплату» (`PREPAID_RESULT_ALREADY`) и
-      проигрыш конкуренции за образец (`PREPAID_RESULT_SAMPLE_TAKEN`)
-      → второго/лишнего СМС нет; запрещённый переход (`transition()`
-      вернул `false`) → СМС нет (`PREPAID_RESULT_ALREADY` проверен
-      живьём; `PREPAID_RESULT_SAMPLE_TAKEN` защищён тем же кодом
-      `notifyPrepaidConfirmed()`, что и `ALREADY` — оба исключены одной
-      проверкой `=== PREPAID_RESULT_OK`, отдельный сценарий гонки за
-      образец не переигрывался — уже покрыт тестами Фазы 5)
-- [x] Ручной Заказ Менеджера с предоплатой сразу → две строки: «принят»
-      и «подтверждён»
-- [x] Искусственная ошибка в заглушке (временно) → переход статуса
-      всё равно прошёл, в `app.log` ошибка, 500 нет
-- [x] `composer test` зелёный (регрессия — таск не добавляет чистую
-      логику без БД)
+- [x] `GET /pages/delivery-payment`, `/pages/return-warranty`,
+      `/pages/offer`, `/pages/privacy-policy` — 200, `<h1>` и текст из
+      БД; `/pages/about`, `/pages/contacts`, `/pages/showroom` — 200
+      общим шаблоном
+- [x] `/pages/nope`, `/pages/About`, `/pages/..%2Fetc` — 404 через
+      `abort404()`, не 500; в `storage/logs/app.log` нет ошибок и
+      warnings
+- [x] Строка `content_pages` с телом `<script>alert(1)</script>`
+      показывает текст буквально; `## Заголовок`, список `- ...`, абзацы
+      через пустую строку, перенос внутри абзаца рендерятся в
+      `h2`/`ul`/`p`/`br` (проверить на реальной БД временной правкой
+      строки, откатить после проверки)
+- [x] `php database/install.php` дважды подряд → ровно 7 строк
+      `content_pages`; отредактированный вручную `title` после второго
+      запуска не перезаписан
+- [x] В `header.php`/`footer.php` не осталось `href="#"` на страницы CNT
+      (`grep -n 'href="#"' src/Views/layout/` — остаются только
+      дропдауны с `role="button"` и `.back-to-top`); все новые ссылки
+      открываются, `href` ведут на существующие маршруты
+- [x] Страница корректна на 320px (тот же `page-banner-section`/
+      `section-padding`, что у корзины); фото страницы не выходит за
+      контейнер; в HTML нет внешних адресов
+- [x] Нет SQL в `PageController`/View; вывод через `e()`, кроме
+      единственного `$bodyHtml`
+- [x] `composer test` зелёный: было 337/337, плюс тесты `ContentTest`
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
@@ -97,3 +150,6 @@ Phase 7 — Кабинет покупателя и уведомления
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
+- Каждый шаг проверяется тем, что указано в DoD: чистая логика —
+  `composer test`, маршруты/404/сид — живым HTTP и SQL на реальной БД,
+  вёрстка — вручную в браузере на 320px
