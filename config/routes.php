@@ -20,6 +20,8 @@ return [
         '/checkout/success'        => ['CheckoutController', 'success'],
         '/payment/stub'            => ['PaymentController', 'stub'],
         '/account'                 => ['AccountController', 'index'],
+        '/account/orders'          => ['AccountController', 'orders'],
+        '/account/orders/{id}'     => ['AccountController', 'orderShow'],
         '/login'                   => ['AuthController', 'showLogin'],
         '/register'                => ['AuthController', 'showRegister'],
         '/admin'                   => ['AdminController', 'index'],
