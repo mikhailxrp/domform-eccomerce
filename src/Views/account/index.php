@@ -40,11 +40,35 @@ $breadcrumbs = [['name' => 'Личный кабинет']];
                                 <p>Здравствуйте, <strong><?= e($userName) ?></strong>!</p>
                             </div>
                             <p class="mt-25">Здесь собраны ваши Заказы, сохранённые адреса, Избранное и личные данные.</p>
-                            <ul class="list-unstyled mt-25">
-                                <li><a href="/account/orders">Заказы</a> — <?= e((string) $ordersCount) ?></li>
-                                <li><a href="/account/addresses">Адреса</a> — <?= e((string) $addressesCount) ?></li>
-                                <li><a href="/account/favorites">Избранное</a> — <?= e((string) $favoritesCount) ?></li>
-                            </ul>
+                            <div class="row g-3 mt-25">
+                                <div class="col-sm-4">
+                                    <a href="/account/orders" class="account-summary-card">
+                                        <i class="fa fa-shopping-cart account-summary-card__icon"></i>
+                                        <span class="account-summary-card__text">
+                                            <span class="account-summary-card__count"><?= e((string) $ordersCount) ?></span>
+                                            <span class="account-summary-card__label">Заказы</span>
+                                        </span>
+                                    </a>
+                                </div>
+                                <div class="col-sm-4">
+                                    <a href="/account/addresses" class="account-summary-card">
+                                        <i class="fa fa-map-marker account-summary-card__icon"></i>
+                                        <span class="account-summary-card__text">
+                                            <span class="account-summary-card__count"><?= e((string) $addressesCount) ?></span>
+                                            <span class="account-summary-card__label">Адреса</span>
+                                        </span>
+                                    </a>
+                                </div>
+                                <div class="col-sm-4">
+                                    <a href="/account/favorites" class="account-summary-card">
+                                        <i class="fa fa-heart-o account-summary-card__icon"></i>
+                                        <span class="account-summary-card__text">
+                                            <span class="account-summary-card__count"><?= e((string) $favoritesCount) ?></span>
+                                            <span class="account-summary-card__label">Избранное</span>
+                                        </span>
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -778,3 +778,58 @@
     color: inherit;
     text-decoration: none;
 }
+
+/* Сводка счётчиков на обзоре личного кабинета (`/account`) — три
+   карточки вместо плоского списка ссылок; ряд Bootstrap-grid
+   (`col-sm-4`, разметка во View), flex — только внутри одной карточки
+   для выравнивания иконки и текста, тот же приём, что `.store-review-
+   card` (`general.md`: grid — только для расположения блоков, не
+   ad-hoc замена внутри одного блока). Цвет — токен темы `--bs-primary`
+   (совпадает с акцентом активного пункта сайдбара кабинета,
+   `style.css`), не свой magic-hex. */
+.account-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 100%;
+    padding: 18px 20px;
+    background-color: #f7f7f7;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s linear;
+}
+
+.account-summary-card:hover {
+    background-color: var(--bs-primary);
+}
+
+.account-summary-card:hover .account-summary-card__icon,
+.account-summary-card:hover .account-summary-card__count,
+.account-summary-card:hover .account-summary-card__label {
+    color: #fff;
+}
+
+.account-summary-card__icon {
+    font-size: 22px;
+    color: var(--bs-primary);
+    transition: color 0.3s linear;
+}
+
+.account-summary-card__text {
+    display: flex;
+    flex-direction: column;
+}
+
+.account-summary-card__count {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #000;
+    transition: color 0.3s linear;
+}
+
+.account-summary-card__label {
+    font-size: 14px;
+    color: #6d707f;
+    transition: color 0.3s linear;
+}
