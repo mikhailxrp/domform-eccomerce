@@ -679,6 +679,71 @@
     }
 
     /**
+     * Главная — блоки «Товары» и «Лидеры продаж», у каждого свои
+     * вкладки-карусели: у всех вкладок внутри блока общая пара стрелок
+     * сверху (`.swiper-arrows`, как в теме), поэтому `main.js`-подход —
+     * один global `new Swiper('.product-active .swiper-container', ...)`
+     * — не годится: он инициализирует только первую найденную вкладку,
+     * у остальных карусель не поедет. На каждый блок — ровно один живой
+     * Swiper (на видимой вкладке), пересоздаётся при переключении таба;
+     * `selector` даёт каждому блоку свой собственный экземпляр в
+     * замыкании — вкладка одного блока не должна убивать Swiper другого.
+     */
+    function initHomeTabsCarousel(selector) {
+        var $wrapper = jQuery(selector);
+        if (!$wrapper.length) {
+            return;
+        }
+
+        var swiper = null;
+
+        function initPane($pane) {
+            if (swiper) {
+                // cleanStyles=false — со `cleanStyles=true` этот бандл
+                // Swiper падает на пустом классе при `loop: true`
+                // (removeClasses()). Не страшно: пере-инициализация ниже
+                // пересчитает всё заново, а старая вкладка всё равно
+                // скрыта Bootstrap-табами.
+                swiper.destroy(true, false);
+                swiper = null;
+            }
+
+            var container = $pane.find('.swiper-container').get(0);
+            if (!container) {
+                return;
+            }
+
+            swiper = new Swiper(container, {
+                slidesPerView: 3,
+                spaceBetween: 30,
+                loop: true,
+                navigation: {
+                    nextEl: selector + ' .swiper-button-next',
+                    prevEl: selector + ' .swiper-button-prev'
+                },
+                breakpoints: {
+                    0: { slidesPerView: 1 },
+                    576: { slidesPerView: 2 },
+                    768: { slidesPerView: 2 },
+                    992: { slidesPerView: 3 }
+                }
+            });
+        }
+
+        initPane($wrapper.find('.tab-pane.active').first());
+
+        jQuery(document).on('shown.bs.tab', selector + ' [data-bs-toggle="tab"]', function () {
+            var target = jQuery(this).attr('data-bs-target');
+            initPane($wrapper.find(target));
+        });
+    }
+
+    function initHomeProductsTabs() {
+        initHomeTabsCarousel('.home-products-tabs');
+        initHomeTabsCarousel('.home-bestsellers-tabs');
+    }
+
+    /**
      * Индикатор перехода между страницами — сайт без SPA-роутинга,
      * каждый переход это полная перезагрузка, а БД сейчас ощутимо
      * небыстрая (dev-стенд, удалённая БД). Показывается по нативному
@@ -723,6 +788,7 @@
         initSearchSortSubmit();
         initCartQuantityControls();
         initCheckoutFulfillmentToggle();
+        initHomeProductsTabs();
         initPageLoader();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);

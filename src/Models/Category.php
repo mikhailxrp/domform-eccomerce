@@ -31,6 +31,28 @@ function getCategoriesFlat(): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Число видимых на витрине Товаров категории — блок «баннеры категорий»
+ * Главной (`home.php`): тот же критерий «виден в каталоге», что и сам
+ * листинг (`is_active` + хотя бы один активный Вариант), а не
+ * `getCategoriesFlat()['product_count']` — та считает вообще все
+ * Товары категории для админки, включая скрытые.
+ */
+function getCategoryProductCount(string $slug): int
+{
+    $stmt = getPdo()->prepare('
+        SELECT COUNT(DISTINCT p.id)
+        FROM products p
+        INNER JOIN product_categories pc ON pc.product_id = p.id
+        INNER JOIN categories c ON c.id = pc.category_id AND c.slug = :slug
+        WHERE p.is_active = 1
+          AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.is_active = 1)
+    ');
+    $stmt->execute(['slug' => $slug]);
+
+    return (int) $stmt->fetchColumn();
+}
+
 function findCategoryById(int $id): ?array
 {
     $stmt = getPdo()->prepare(

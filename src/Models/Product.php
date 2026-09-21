@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Core/Database.php';
 require_once ROOT_PATH . '/src/Core/Price.php';
+require_once ROOT_PATH . '/src/Core/OrderStatus.php';
 
 /**
  * Список Товаров каталога — цена и фото на карточке берутся от самого
@@ -1346,6 +1347,57 @@ function getRelatedProducts(int $productId, int $categoryId, int $limit): array
     }
 
     return attachCheapestVariant($pdo, $products);
+}
+
+/**
+ * Блок «Хиты продаж» Главной по РЕАЛЬНЫМ продажам (не путать с
+ * `getFeaturedProducts()` — ручной отметкой `is_featured` Менеджером):
+ * сумма `order_items.quantity` по Заказам, кроме отменённых, за период.
+ * `$period`: `'all'` — без ограничения по дате, `'year'` — с начала
+ * текущего календарного года, `'month'` — с начала текущего месяца.
+ * Значение не приходит от пользователя (задаётся `HomeController`
+ * литералом), поэтому валидация диапазона не нужна — `match()` без
+ * `default` бросил бы `UnhandledMatchError` на опечатку при разработке,
+ * что и требуется.
+ *
+ * Продажи считаются отдельным `GROUP BY` в подзапросе — `pv`
+ * (все активные Варианты Товара, для `MIN(price)`) присоединяется уже
+ * после, иначе `JOIN` на несколько Вариантов одного Товара размножил бы
+ * строки `order_items` и завысил бы сумму продаж.
+ */
+function getBestsellingProducts(string $period, int $limit): array
+{
+    $pdo      = getPdo();
+    $priceSql = discountedPriceSql('pv');
+
+    $dateCondition = match ($period) {
+        'all'   => '1 = 1',
+        'year'  => "o.created_at >= DATE_FORMAT(CURDATE(), '%Y-01-01')",
+        'month' => "o.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')",
+    };
+
+    $stmt = $pdo->prepare("
+        SELECT p.id, p.name, p.slug, MIN({$priceSql}) AS min_price, sales.sold_quantity
+        FROM (
+            SELECT pvs.product_id, SUM(oi.quantity) AS sold_quantity
+            FROM order_items oi
+            INNER JOIN orders o ON o.id = oi.order_id
+                AND o.status != :cancelled_status AND {$dateCondition}
+            INNER JOIN product_variants pvs ON pvs.id = oi.product_variant_id
+            GROUP BY pvs.product_id
+        ) sales
+        INNER JOIN products p ON p.id = sales.product_id AND p.is_active = 1
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        GROUP BY p.id, p.name, p.slug, sales.sold_quantity
+        ORDER BY sales.sold_quantity DESC, p.id ASC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':cancelled_status', ORDER_STATUS_CANCELLED, PDO::PARAM_STR);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $products = $stmt->fetchAll();
+
+    return $products !== [] ? attachCheapestVariant($pdo, $products) : [];
 }
 
 /**

@@ -5,6 +5,33 @@ declare(strict_types=1);
 ?>
     <!-- Footer Section Start -->
     <div class="section footer-section">
+        <!-- Footer Top Start -->
+        <div class="footer-top">
+            <div class="container">
+                <div class="row align-items-center">
+                    <div class="col-lg-3 col-md-4">
+                        <div class="footer-logo">
+                            <a href="/"><img src="/assets/images/logo.png" width="159" height="46" alt="ДомФорм"></a>
+                        </div>
+                    </div>
+                    <div class="col-lg-9 col-md-8">
+                        <div class="footer-contact-payment">
+                            <div class="footer-contact ms-auto">
+                                <div class="contact-icon">
+                                    <img src="/assets/images/icon/icon-4.png" width="39" height="46" alt="">
+                                </div>
+                                <div class="contact-content">
+                                    <h6 class="title">Позвоните нам:</h6>
+                                    <p><a href="tel:<?= e(SHOP_PHONE_TEL) ?>"><?= e(SHOP_PHONE) ?></a></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Footer Top End -->
+
         <div class="footer-widget-section">
             <div class="container">
                 <div class="row">

@@ -3,13 +3,14 @@
 declare(strict_types=1);
 
 /** @var array $product */
-/** @var string $viewMode грид ('grid', по умолчанию) или список ('list') — Таск 3 */
+/** @var string $viewMode грид ('grid', по умолчанию), список ('list' — Таск 3) или карусель ('swiper' — блок «Товары» на Главной) */
 
 $productUrl = '/product/' . $product['slug'];
 $metaText   = trim(
     ($product['material'] ?? '') . ($product['material'] !== null && $product['color'] !== null ? ', ' : '') . ($product['color'] ?? '')
 );
-$isListView = ($viewMode ?? 'grid') === 'list';
+$isListView   = ($viewMode ?? 'grid') === 'list';
+$isSwiperView = ($viewMode ?? 'grid') === 'swiper';
 
 // `min_old_price` уже `null`, если скидки нет (посчитано в Model,
 // `attachCheapestVariant()`, Таск 1 Фазы 6) — View только проверяет
@@ -70,6 +71,27 @@ $productMeta = ob_get_clean();
             <?php if ($metaText !== ''): ?>
                 <p class="product-card__meta"><?= e($metaText) ?></p>
             <?php endif; ?>
+        </div>
+    </div>
+<?php elseif ($isSwiperView): ?>
+    <div class="swiper-slide">
+        <div class="single-product">
+            <a href="<?= e($productUrl) ?>">
+                <img src="<?= e($imageUrl) ?>" alt="<?= e($product['name']) ?>">
+            </a>
+            <div class="product-content">
+                <h4 class="title"><a href="<?= e($productUrl) ?>"><?= e($product['name']) ?></a></h4>
+                <div class="price">
+                    <span class="sale-price">от <?= formatPrice($product['min_price']) ?></span>
+                    <?php if ($oldPrice !== null): ?>
+                        <span class="old-price"><?= formatPrice($oldPrice) ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php if ($metaText !== ''): ?>
+                    <p class="product-card__meta"><?= e($metaText) ?></p>
+                <?php endif; ?>
+            </div>
+            <?= $productMeta ?>
         </div>
     </div>
 <?php else: ?>
