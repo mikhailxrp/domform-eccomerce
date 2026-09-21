@@ -3525,3 +3525,56 @@ class="img-fluid" alt="{title}">`, откачен на `NULL`; на Главно
 раздел «Настройки» (admin-only), замена констант `SHOP_*`.
 
 ---
+
+**Дата:** 21.09.2026
+**Что сделано:** Таск 2 Фазы 8 реализован по плану `TASK.md` без
+отклонений (`ADR-045`). Новая таблица `settings` (key/value,
+`UNIQUE(key)`), сид 6 строк значениями бывших констант `SHOP_*` +
+новые `shop_email`/`workshop_address`/`work_hours`/`map_embed_url`
+через `INSERT IGNORE`. `Core/Settings.php` — `SETTING_KEYS` (whitelist
+с подписями), `setting(string): string` (кэш на статической
+переменной — одна `getAllSettings()` на запрос), `validateSettingsInput()`
+(обязательны все поля кроме `map_embed_url`, WhatsApp/карта — только
+`https://`), `phoneToTel()` — не новый regex, а тонкая обёртка над уже
+существующим `normalizePhone()` (`Core/Validation.php`): он уже даёт
+формат `+79000000000` для валидного номера, дублировать эту логику не
+стали. `Models/Setting.php` — `getAllSettings()`, `updateSettings()`
+(whitelist ключей, одна транзакция на все UPDATE). `AdminSettingController`
+— первый маршрут проекта на `requireRole(['admin'])` без `manager`
+(`Q-DEV-001`). `admin-header.php` — у `$adminNavItems` необязательный
+`roles`, список фильтруется по роли перед рендером (пункт «Настройки»
+скрыт у Менеджера). Обращения к `SHOP_PHONE`/`SHOP_PHONE_TEL`/
+`SHOP_WHATSAPP_URL` в `footer.php`, `checkout/index.php`,
+`payment/stub.php`, `account/details.php` заменены на `setting()`/
+`phoneToTel()`; `require` на `Models/Setting.php` добавлен в
+витринный `header.php` (по образцу того, как `admin-header.php` уже
+требует `Models/Review.php` для бейджа) — так `setting()` доступен во
+всех View, подключающих layout, включая `footer.php`, который
+исполняется позже по ходу той же страницы.
+
+Проверено на реальной БД живым HTTP (`php -S` + `curl`, три временных
+пользователя ролей `admin`/`manager`/`customer`, удалены после
+проверки): `install.php` дважды → 6 строк без дублей, вручную
+изменённое значение сохранено; `admin` → 200 с формой и «О системе»,
+`manager` → редирект `/admin` (пункта в сайдбаре нет), `customer` →
+`/account`, гость → `/login`; POST без CSRF → 419; валидное обновление
+— новые значения сразу в футере и БД (проверено и с кириллицей —
+персональная находка: кириллица в аргументах shell/curl на этой
+Windows-машине бьётся Windows-кодировкой консоли при передаче через
+argv, это артефакт локального теста, не баг приложения — обошли,
+собрав urlencoded-тело запроса в отдельном PHP-скрипте и передав его
+`curl --data-binary @file`, там кириллица дошла и сохранилась
+корректно); неизвестный ключ (`app_env`) в POST не попал в БД;
+невалидный телефон и `http://` вместо `https://` у ссылки карты —
+обе подсветки, БД не изменена; пустой `map_embed_url` — валиден.
+Временной пробой (`file_put_contents` в `getAllSettings()`, откачен
+после проверки) подтверждено: ровно один `SELECT ... FROM settings`
+на главную и на `/admin/settings`. `grep -rn SHOP_ src/ config/` —
+пусто.
+
+`composer test`: 364/364 (было 350, +14 `SettingsTest`).
+
+**Что следующее:** Таск 3 Фазы 8 — «О компании» (SCR-11) и «Шоурум с
+картой».
+
+---

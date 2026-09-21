@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Models/Favorite.php';
+require_once ROOT_PATH . '/src/Models/Setting.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
 $pageTitle           = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';

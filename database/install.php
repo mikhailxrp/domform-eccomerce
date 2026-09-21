@@ -612,6 +612,33 @@ $pdo->exec("
         ('email',     'marketing', 'Email-рассылки', 'Автоматические письма клиентам и маркетинговые рассылки.', 'bx bx-mail-send', 0, 2);
 ");
 
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS settings (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        `key`      VARCHAR(60) NOT NULL UNIQUE,
+        value      TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+// Реквизиты магазина (`FR-ADM-007` п. 1 и 4 в минимальном составе,
+// `ADR-045`, Таск 2 Фазы 8) — сид значений бывших констант `SHOP_*`.
+// `INSERT IGNORE` по `UNIQUE(key)` — повторный запуск не перетирает
+// значение, отредактированное в Панели управления.
+$settingsSeed = [
+    ['key' => 'shop_phone',        'value' => '+7 900 000-00-00'],
+    ['key' => 'shop_whatsapp_url', 'value' => 'https://wa.me/79000000000'],
+    ['key' => 'shop_email',        'value' => 'info@domform.ru'],
+    ['key' => 'workshop_address',  'value' => 'г. Краснодар, ул. Промышленная, 1'],
+    ['key' => 'work_hours',        'value' => 'Пн–Сб, 9:00–19:00'],
+    ['key' => 'map_embed_url',     'value' => ''],
+];
+
+$insertSetting = $pdo->prepare('INSERT IGNORE INTO settings (`key`, value) VALUES (:key, :value)');
+foreach ($settingsSeed as $setting) {
+    $insertSetting->execute($setting);
+}
+
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");
 

@@ -24,7 +24,17 @@ $adminNavItems = [
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
     ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
+    ['url' => '/admin/settings',      'label' => 'Настройки',   'icon' => 'bx bx-cog', 'roles' => ['admin']],
 ];
+
+// `roles` — необязательный ключ; пункт без него виден и Менеджеру, и
+// Администратору (как раньше), с ключом — только перечисленным ролям
+// (первый случай, `FR-ADM-007`, `Q-DEV-001`).
+$currentRole   = (string) ($currentUser['role'] ?? '');
+$adminNavItems = array_values(array_filter(
+    $adminNavItems,
+    static fn (array $navItem): bool => !isset($navItem['roles']) || in_array($currentRole, $navItem['roles'], true)
+));
 
 $activeNavUrl    = null;
 $activeUrlLength = -1;

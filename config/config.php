@@ -35,13 +35,6 @@ define('SEARCH_MIN_QUERY_LENGTH', 2);
 // в config.php, который tests/bootstrap.php не подключает)
 define('CART_COOKIE_DAYS', 30);
 
-// Оформление заказа (`.docs/phases/phase-2.md`, Таск 3) — кнопка
-// «Позвонить/WhatsApp» (`FR-CHK-005`). TODO: заменить на реальный номер
-// магазина перед продакшеном.
-define('SHOP_PHONE', '+7 900 000-00-00');
-define('SHOP_PHONE_TEL', '+79000000000');
-define('SHOP_WHATSAPP_URL', 'https://wa.me/79000000000');
-
 // Панель управления — Заказы (`.docs/phases/phase-4.md`, Таск 2)
 define('ADMIN_ORDERS_PER_PAGE', 20);
 

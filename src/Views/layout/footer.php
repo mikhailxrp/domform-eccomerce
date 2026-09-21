@@ -22,7 +22,7 @@ declare(strict_types=1);
                                 </div>
                                 <div class="contact-content">
                                     <h6 class="title">Позвоните нам:</h6>
-                                    <p><a href="tel:<?= e(SHOP_PHONE_TEL) ?>"><?= e(SHOP_PHONE) ?></a></p>
+                                    <p><a href="tel:<?= e(phoneToTel(setting('shop_phone'))) ?>"><?= e(setting('shop_phone')) ?></a></p>
                                 </div>
                             </div>
                         </div>
