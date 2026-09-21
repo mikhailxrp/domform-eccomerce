@@ -2,84 +2,92 @@
 
 ## Фаза
 Phase 7 — Кабинет покупателя и уведомления
-(`.docs/phases/phase-7.md`), Таск 2 из 9.
+(`.docs/phases/phase-7.md`), Таск 3 из 9.
 
 **Статус:** ✅ Завершён 21.09.2026. Проверено на реальной БД живым HTTP
-(`php -S` + `curl`): 11 тестовых Заказов для одного Покупателя (пагинация
-2 страницы, 1 из них `delivered` с гарантией), 1 Заказ второго
-Покупателя (изоляция/404), полный цикл гостевой Заказ → регистрация на
-тот же email → Заказ появляется в кабинете (`linkGuestOrdersToUser()`).
-Все тестовые Заказы/Покупатели удалены после проверки. `composer test`
-— 296/296 (без изменений, регрессия). Реализация полностью соответствует
-плану ниже, отклонений не потребовалось.
+(`php -S` + `curl`): смена имени без пароля, смена email без пароля
+(отклонено), смена email с неверным паролем и на чужой email (оба
+отклонены общим сообщением, оба поля подсвечены), смена email с верным
+паролем (успех, вход по новому email работает, по старому — нет),
+смена пароля (пустая форма/короче 8/несовпадение/совпадение с текущим
+— отклонено; неверный текущий — отклонено; успех — старый пароль
+не входит, старый remember-cookie не авторизует, id сессии сменился),
+419 без CSRF на обеих формах, подделанный `phone` в POST проигнорирован.
+Тестовые Покупатели удалены после проверки. `composer test` — 308/308
+(было 296, +12 `AccountTest`). Одно отклонение от плана, найдено в
+процессе живой проверки: текст подсказки под полем `email`/
+`current_password` изначально оставался специфичным («Введите
+корректный email» / «Укажите текущий пароль») даже когда причина
+отказа — неверный пароль или занятый email, а не формат/пустота; это
+частично раскрывало, какая из двух business-rule причин сработала
+(нарушение DoD). Исправлено отдельным флагом `account_error`/
+`wrong_password` в `$errors`/`$passwordErrors` — текст под полем
+подменяется на общую формулировку только для business-rule случая,
+специфичные сообщения (пустое поле, неверный формат) остаются как есть.
 
 ## Задача
-`FR-ACC-001` — `/account/orders`: таблица Заказов текущего пользователя
-(№, дата, статус, сумма, «Подробнее») с пагинацией; `/account/orders/{id}`
-— состав заказа (снэпшоты позиций), способ получения/адрес, способ и
-статус оплаты, стоимость доставки, гарантия для `delivered`. Чужой или
-несуществующий Заказ → 404.
-
-Уточнение против черновика `phase-7.md` (обсуждено и подтверждено перед
-записью): `components/empty-state.php` требует `$resetUrl` и текст
-«Сбросить фильтры» — для списка заказов без фильтров не подходит.
-Пустое состояние — инлайн, по образцу `empty-cart` в `cart/index.php`,
-не через этот компонент.
+`FR-ACC-004` — `/account/details`: форма «имя + email» и отдельный блок
+смены пароля (текущий/новый/подтверждение). Смена email и смена пароля
+требуют текущий пароль; имя меняется без него. Телефон — read-only с
+контактом Менеджера. После смены пароля — инвалидация remember-токенов
+и текущей сессии.
 
 ## Scope — что трогаем
 
-- [ ] `config/config.php` — изменить: добавить `ACCOUNT_ORDERS_PER_PAGE = 10`
-      (по аналогии с `ADMIN_ORDERS_PER_PAGE`, но кабинет одного
-      покупателя — меньше записей)
-- [ ] `src/Models/Order.php` — изменить: `getUserOrders(int $userId,
-      int $page, int $perPage): array` (по `INDEX(user_id)`,
-      `ORDER BY created_at DESC LIMIT/OFFSET`), `countUserOrders(int
-      $userId): int`, `findOrderForUser(int $id, int $userId): ?array`
-- [ ] `src/Controllers/AccountController.php` — изменить: добавить
-      `orders()` и `orderShow(string $id)` (`requireAuth()`,
-      `buildPagination()`, `abort404()` на чужом/несуществующем id;
-      `require_once` `Core/Pagination.php` и `Core/Warranty.php`)
-- [ ] `src/Views/account/orders.php` — создать: таблица по
-      `my-account.html` («Orders»), инлайн-пустое состояние,
-      `components/pagination.php`
-- [ ] `src/Views/account/order-show.php` — создать: карточка заказа по
-      образцу `checkout/success.php` (состав, способ получения/адрес,
-      оплата, доставка, гарантия для `delivered`)
-- [ ] `config/routes.php` — изменить: `GET /account/orders`,
-      `GET /account/orders/{id}`
+- [ ] `src/Core/Account.php` — создать: `validateProfileInput(array
+      $input, string $currentEmail): array` (имя 2–100, `validateEmail()`,
+      `current_password` обязателен, если email изменился),
+      `validatePasswordChangeInput(array $input): array`
+      (`validatePassword()` ≥8, совпадение подтверждения, новый ≠
+      текущему) — чистые функции без БД, по образцу `Core/Checkout.php`
+- [ ] `tests/Unit/AccountTest.php` — создать
+- [ ] `tests/bootstrap.php` — изменить: подключить `Core/Account.php`
+- [ ] `src/Models/User.php` — изменить: `updateUserProfile(int $userId,
+      string $name, string $email): void`, `isEmailTakenByOther(string
+      $email, int $userId): bool`
+- [ ] `src/Controllers/AccountController.php` — изменить: `details()`,
+      `updateDetails()`, `updatePassword()` — `requireCsrf()`,
+      `password_verify()` текущего пароля в Controller (Model паролей
+      не проверяет), общее сообщение об ошибке без различения причины;
+      успех смены пароля — `updateUserPasswordHash()` +
+      `deleteRememberTokens()` + `regenerateSession()`
+- [ ] `src/Views/account/details.php` — создать: по «Account Details»
+      `my-account.html` (одно поле имени, без First/Last/Display Name
+      — в `users` только `name`), телефон read-only + `SHOP_PHONE`,
+      блок смены пароля через уже существующий
+      `components/password-field.php`
+- [ ] `config/routes.php` — изменить: `GET /account/details`,
+      `POST /account/details`, `POST /account/password`
 
 ## Out of scope — не трогаем
 
-- Личные данные, адреса, избранное, СМС — Таски 3–9 этой же фазы
-- `AdminOrderController`, панель менеджера — не связаны с задачей
-- `account-sidebar.php` — ссылка на «Заказы» уже проставлена в Таске 1
-- `components/empty-state.php` — не переиспользуется (см. уточнение выше)
-- Изменение схемы БД — `orders`/`order_items` не меняются
+- История заказов, адреса, избранное, СМС — Таски 2, 4–9 этой же фазы
+- Редактирование телефона — по `FR-ACC-004` правило 3 доступно только
+  через Менеджера, не строится
+- `AuthController` (login/register/forgot) — не трогается, только
+  переиспользуются его helpers (`deleteRememberTokens`,
+  `regenerateSession`)
+- `account-sidebar.php` — ссылка на «Личные данные» уже проставлена в
+  Таске 1
 
 ## Definition of Done
 
-- [x] Список на `/account/orders` содержит только Заказы текущего
-      пользователя; подмена `id` чужого Заказа в URL на
-      `/account/orders/{id}` → 404 (изоляция по `user_id`,
-      `dod-global.md`) — проверено: чужой `id` и несуществующий `id`
-      оба дают 404
-- [x] Гостевой Заказ, привязанный после регистрации на тот же email
-      (`linkGuestOrdersToUser()`), виден в списке — проверено полным
-      циклом (гостевой чекаут → регистрация → заказ в кабинете)
-- [x] Статусы — подписи `orderStatusLabel()` (не демо
-      `Pending/Approved/On Hold`); статус и способ оплаты — подписи
-      `PAYMENT_*_LABELS`
-- [x] Суммы через `formatPrice()`; позиции карточки заказа — из
-      снэпшотов `order_items` (материал/цвет/цена на момент заказа),
-      не из текущей цены Варианта
-- [x] У `delivered` показан срок гарантии (`warrantyExpiresAt()`/
-      `isUnderWarranty()`), у остальных статусов — не показан —
-      проверено на тестовом заказе (`delivered_at` −2 мес. → «В
-      пределах гарантии», дата верная)
-- [x] Пустое состояние при отсутствии Заказов; пагинация появляется
-      при `> ACCOUNT_ORDERS_PER_PAGE` — проверено на 11 заказах
-      (страница 1 — 10 строк, страница 2 — 1 строка)
-- [x] `composer test` зелёный (296/296, без изменений — регрессия)
+- [x] Смена email без текущего пароля → отклонено, поле подсвечено; с
+      верным паролем — email изменён в БД, вход по новому email работает
+- [x] Неверный текущий пароль / email занят другим пользователем →
+      одно общее сообщение, без раскрытия причины (`php.md`, без
+      перечисления аккаунтов) — включая текст под полем (см. отклонение
+      выше)
+- [x] Имя меняется без ввода пароля
+- [x] Поля `phone` в форме нет; подделанный `phone` в POST → в БД не
+      изменился; на странице показан `SHOP_PHONE`
+- [x] После смены пароля: вход по старому паролю невозможен; cookie
+      `remember_token` с другого устройства (созданная заранее) больше
+      не авторизует; id текущей сессии сменился (`regenerateSession()`)
+- [x] Пустая форма / пароль короче 8 / несовпадающее подтверждение →
+      поля подсвечены, введённые значения (кроме паролей) сохранены;
+      419 без CSRF на обеих формах
+- [x] `composer test` зелёный, включая `AccountTest` (308/308)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила
