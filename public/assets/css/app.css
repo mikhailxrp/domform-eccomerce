@@ -424,6 +424,33 @@
     color: #c28100;
 }
 
+/* «В избранное» в строке корзины (Таск 7 Фазы 7) — тот же сброс, что
+   у `.remove` выше, и по той же причине (`<button>` в форме, не `<a>`
+   темы). Обе формы в этой ячейке — блочные по умолчанию, без
+   `inline-block` вставали одна над другой, а не рядом. */
+.cart-table .table tbody tr td.product-action button.favorite {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: #f2a100;
+    cursor: pointer;
+}
+
+.cart-table .table tbody tr td.product-action button.favorite:hover {
+    color: #c28100;
+}
+
+.cart-table .table tbody tr td.product-action form {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.cart-table .table tbody tr td.product-action form + form {
+    margin-left: 12px;
+}
+
 /* Корзина на узких/средних экранах (<992px, Bootstrap `lg`) — 5 колонок
    таблицы не помещаются по ширине без горизонтальной прокрутки
    (`.cart-table .table thead tr th.product-thumb{min-width:150px}` и

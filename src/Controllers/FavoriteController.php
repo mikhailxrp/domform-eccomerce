@@ -26,6 +26,32 @@ class FavoriteController
         $this->redirectBack();
     }
 
+    public function index(): void
+    {
+        requireAuth();
+
+        $userId = (int) currentUser()['id'];
+
+        render('account/favorites', [
+            'title'         => 'Избранное',
+            'activeSection' => 'favorites',
+            'products'      => getFavoriteProducts($userId),
+        ]);
+    }
+
+    public function remove(): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $userId    = (int) currentUser()['id'];
+        $productId = (int) input('product_id');
+
+        removeFavorite($userId, $productId);
+
+        redirect('/account/favorites');
+    }
+
     /**
      * Назад туда, откуда пришла форма (карточка/мини-карточка) — тот
      * же приём, что `CartController::redirectBack()`: только путь из

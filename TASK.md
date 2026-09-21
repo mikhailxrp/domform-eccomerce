@@ -2,114 +2,105 @@
 
 ## Фаза
 Phase 7 — Кабинет покупателя и уведомления
-(`.docs/phases/phase-7.md`), Таск 6 из 9.
+(`.docs/phases/phase-7.md`), Таск 7 из 9.
 
 **Статус:** ✅ Завершён 21.09.2026 — проверено на реальной БД живым HTTP
-(`php -S` + `curl`): временный тестовый Покупатель
-(`task6-test-customer-*@example.com`) зарегистрирован, вошёл. Проверено:
-клик по сердцу на мини-карточке каталога → строка в `favorites`,
-иконка становится активной (`action--active`) сразу на обеих
-раскладках карточки (grid/list — карточка рендерит обе, видна одна по
-CSS) и в AJAX-partial (`X-Requested-With: fetch`, `components/catalog-grid`
-рендерится без `header.php`, `$favoriteIds` передан явно контроллером
-— подтверждает решение из плана); счётчик в шапке (обе копии) = 1;
-повторный клик → строка удалена, не ошибка дубля `UNIQUE(user_id,
-product_id)`; на Главной — 33 формы `/favorites/toggle` в блоках
-товаров, без ошибок; на странице Товара — кнопка «В избранном» с
-`action--active`, когда Товар в избранном. Несуществующий `product_id`
-→ 404; без CSRF → 419; гость на POST → редирект `/login`; redirect
-после клика вернул на `/catalog?sort=price_asc` (referer с
-query-параметрами сохранён). Тестовый Покупатель, избранное и корзина
-удалены после проверки. `composer test` — 325/325 (без изменений —
-регрессия, чистая логика без БД в этом таске не добавлялась).
+(`php -S` + `curl`): временный Покупатель
+(`task7-test-customer-*@example.com`) зарегистрирован, вошёл. Пустое
+избранное показывает инлайн-заглушку со ссылкой в каталог. Товар
+добавлен в избранное напрямую (`/favorites/toggle`) и перенесён из
+корзины (`/cart/move-to-favorites`) — оба оказались на
+`/account/favorites` с корректной ценой (старая/новая), фото и формой
+«В корзину», которая добавляет тот же Вариант/цвет, что кнопка
+мини-карточки; строка `cart_items` при переносе удалена, счётчики в
+шапке (избранное/корзина) обновились. Удаление из избранного убрало
+строку из БД и со страницы, счётчик уменьшился. Идемпотентность:
+перенос уже избранного Товара из второй строки корзины не создал дубль
+в `favorites` и не упал (500 нет), сама строка корзины удалена.
+Изоляция: Гость не видит кнопку «В избранное» в строке корзины,
+GET `/account/favorites` и POST `/cart/move-to-favorites` для Гостя —
+редирект на `/login`; чужой `item_id` в `moveToFavorites()` (запрос от
+другого авторизованного пользователя) — без изменений ни в чужой
+корзине, ни в своём избранном. Тестовые Покупатель, избранное, обе
+корзины (авторизованная и гостевая) удалены после проверки. `composer
+test` — 325/325 (без изменений — регрессия, чистая логика без БД в
+этом таске не добавлялась).
 
 ## Задача
-`FR-CAT-009` (иконка на мини-карточке) и первая половина `FR-ACC-003`:
-иконка-сердце на мини-карточке (каталог, поиск, похожие, блоки
-Главной), кнопка «В избранное» на карточке товара и иконка в шапке со
-счётчиком. Клик добавляет/убирает Товар, иконка отражает состояние.
-Гостю иконка ведёт на `/login`.
+Вторая половина `FR-ACC-003` и `FR-CART-004`: `/account/favorites` —
+список избранных Товаров с фото, ценой (старая/новая), «В корзину» и
+удалением; перенос позиции из корзины в Избранное кнопкой в строке
+корзины.
 
 ## Scope — что трогаем
 
-- [ ] `src/Models/Favorite.php` — создать: `toggleFavorite(int $userId,
-      int $productId): bool` (вернул `true` = добавлен; `INSERT` с
-      перехватом дубля по `UNIQUE(user_id, product_id)` → `DELETE`),
-      `getFavoriteProductIds(int $userId): array`,
-      `countFavorites(int $userId): int`
-- [ ] `src/Models/Product.php` — изменить: добавить
-      `findActiveProductById(int $id): ?array` (минимальная строка,
-      только для проверки существования/активности в
-      `FavoriteController::toggle()` — `findProductById()` в проекте
-      нет, ближайшие функции — `findProductForToggle()`/
-      `findProductForAdmin()` — обе для админки, не переиспользуются)
-- [ ] `src/Controllers/FavoriteController.php` — создать: `toggle()` —
-      `requireAuth()`, `requireCsrf()`, `findActiveProductById()` или
-      404, `toggleFavorite()`, `redirectBack()` (приватный метод —
-      только путь из `HTTP_REFERER`, без хоста, по образцу
-      `CartController::redirectBack()`; фолбэк `/`, не `/catalog`)
-- [ ] `src/Controllers/HomeController.php` — изменить: `index()` —
-      `$favoriteIds = $userId !== null ? getFavoriteProductIds($userId)
-      : []`, передать в `render()`
-- [ ] `src/Controllers/CatalogController.php` — изменить:
-      `renderCatalog()` — `$favoriteIds` в `$viewData` (общий массив
-      для полной страницы и AJAX-partial `components/catalog-grid`,
-      который рендерится без `header.php`)
-- [ ] `src/Controllers/SearchController.php` — изменить: `index()` —
-      `$favoriteIds` в `render()`
-- [ ] `src/Controllers/ProductController.php` — изменить: `show()` —
-      `$favoriteIds` в `render()` (используется и для «Похожие товары»,
-      и для кнопки на самом Товаре через `in_array()`)
-- [ ] `src/Views/layout/header.php` — изменить: `$favoriteCount =
-      $isLoggedIn ? countFavorites(currentUser()['id']) : 0` (по
-      образцу `$cartCount = currentCartCount(...)` — прямое вычисление
-      в `header.php`, не через `render()`); иконка `pe-7s-like` со
-      счётчиком `.number` (обе копии шапки — десктоп и мобильная)
-- [ ] `src/Views/components/product-card.php` — изменить: третий `<li>`
-      в существующем `<ul class="product-meta">` (после иконки корзины,
-      порядок как в теме: лупа → корзина → сердце) — POST-форма
-      `/favorites/toggle` с классом `action--active` при
-      `in_array($product['id'], $favoriteIds, true)` для
-      авторизованного, `<a href="/login">` для гостя
-- [ ] `src/Views/product/show.php` — изменить: кнопка «В избранное» /
-      «В избранном» сразу после `include variant-selector.php` (не
-      внутри самого компонента — избранное на уровне Товара, а не
-      Варианта)
-- [ ] `public/assets/css/app.css` — изменить: `.product-meta
-      .action--active { color: #f2a100; }` рядом с существующим
-      правилом `.header-meta .action--active`
-- [ ] `config/routes.php` — изменить: `POST /favorites/toggle`
+- [ ] `src/Models/Favorite.php` — изменить: добавить
+      `getFavoriteProducts(int $userId): array` (Товары пользователя из
+      `favorites` с активным Вариантом — `INNER JOIN product_variants
+      ... is_active = 1`, по образцу `getRelatedProducts()`, затем
+      `attachCheapestVariant()` — неактивный Товар и Товар без
+      активного Варианта отсекаются самим запросом),
+      `removeFavorite(int $userId, int $productId): bool` (`DELETE`,
+      `rowCount() > 0`), `addFavorite(int $userId, int $productId): void`
+      (идемпотентно — перехват `SQLSTATE 23000`/MySQL 1062 как «уже в
+      избранном», тот же приём, что `toggleFavorite()`)
+- [ ] `src/Controllers/FavoriteController.php` — изменить: добавить
+      `index()` — `requireAuth()`, `getFavoriteProducts()`,
+      `countFavorites()`, рендер с сайдбаром кабинета
+      (`$activeSection = 'favorites'`); `remove()` — `requireAuth()`,
+      `requireCsrf()`, `removeFavorite()`, `redirect('/account/favorites')`
+      (фиксированный путь, не `HTTP_REFERER` — действие только с этой
+      страницы)
+- [ ] `src/Views/account/favorites.php` — создать: таблица по
+      `wishlist.html` (фото, название, цена старая/новая — как в Фазе
+      6, «В корзину», удаление; без колонки количества — Избранное на
+      уровне Товара, не корзины) с сайдбаром кабинета; инлайн пустое
+      состояние по образцу `empty-cart` (`cart/index.php`), не
+      `components/empty-state.php` (жёстко зашитый текст «Сбросить
+      фильтры» не подходит — та же находка, что в Тасках 2/4)
+- [ ] `src/Controllers/CartController.php` — изменить: добавить
+      `moveToFavorites()` — `requireAuth()`, `requireCsrf()`, находит
+      строку корзины владельца (`getCartItems()` уже содержит
+      `product_id`), `addFavorite()` + `removeCartItem()` +
+      `refreshCartCount()`, `redirect('/cart')`
+- [ ] `src/Views/components/cart-row.php` — изменить: кнопка «В
+      избранное» в существующем `<td class="product-action">` —
+      только для авторизованного (`isAuthenticated()`, без отдельной
+      переданной переменной, как в `product-card.php` Таска 6)
+- [ ] `config/routes.php` — изменить: `GET /account/favorites`,
+      `POST /favorites/remove`, `POST /cart/move-to-favorites`
 
 ## Out of scope — не трогаем
 
-- Страница `/account/favorites` и перенос из корзины — Таск 7 этой же
-  фазы
-- СМС — Таски 8–9
-- `src/Views/components/variant-selector.php` — избранное не входит в
-  его зону ответственности (только Вариант/корзина)
-- `CartController::redirectBack()` — не выносится в общий хелпер
-  `functions.php`; `FavoriteController` получает свою копию того же
-  приёма (не рефакторим существующий код попутно)
-- `account-sidebar.php` — пункт «Избранное» уже добавлен в Таске 1
+- `src/Views/components/account-sidebar.php` — пункт «Избранное» уже
+  добавлен в Таске 1, ведёт на `/account/favorites`
+- `src/Views/components/empty-state.php` — не переиспользуется (см.
+  Scope выше)
+- СМС — Таски 8–9 этой же фазы
+- `FavoriteController::toggle()` и приватный `redirectBack()` — уже
+  реализованы в Таске 6, не трогаются
 
 ## Definition of Done
 
-- [x] Клик по сердцу → строка в `favorites`; повторный клик → строка
-      удалена (не ошибка дубля `UNIQUE(user_id, product_id)`); иконка
-      активна ровно у избранных Товаров на всех типах мини-карточки
-      (grid/list/swiper — каталог/поиск/похожие/Главная) и на странице
-      Товара
-- [x] Счётчик в шапке = число строк `favorites` текущего пользователя;
-      у гостя иконка ведёт на `/login`, счётчика нет
-- [x] На каждой странице с карточками — ровно один запрос
-      `getFavoriteProductIds()` (проверено и на обычном рендере, и на
-      AJAX-фильтре каталога — оба пути получают `$favoriteIds` явно из
-      `CatalogController::renderCatalog()`, не полагаются на `header.php`)
-- [x] Несуществующий/неактивный `product_id` → 404 без 500; 419 без
-      CSRF; гость на POST → `/login`
-- [x] Redirect после клика возвращает на ту же страницу (в т.ч. с
-      GET-параметрами каталога/поиска — проверено на `?sort=price_asc`);
-      внешний или отсутствующий referer → `/`
+- [x] Перенос из корзины (`/cart/move-to-favorites`) → строка
+      `cart_items` удалена, строка `favorites` есть; счётчики корзины и
+      избранного в шапке обновлены; уже избранный Товар — перенос не
+      создаёт дубль и не падает (`FR-CART-004`)
+- [x] Гостю в строке корзины кнопки «В избранное» нет в HTML; чужой
+      `item_id` в форме → без изменений (изоляция по владельцу корзины)
+- [x] «В корзину» со страницы Избранного добавляет тот же (самый
+      дешёвый активный) Вариант, что кнопка мини-карточки — тот же
+      `attachCheapestVariant()`, что и мини-карточка (регрессии Резерва
+      на образце нет, код общий и не менялся)
+- [x] Неактивный Товар или Товар без активных Вариантов в Избранном не
+      показывается на странице (запрос `getFavoriteProducts()`
+      отсекает их `INNER JOIN`)
+- [x] Удаление (`/favorites/remove`) → строка исчезла со страницы и из
+      БД, счётчик в шапке уменьшился; чужой `product_id` → без
+      изменений
+- [x] Пустое состояние с ссылкой в каталог при пустом избранном;
+      разметка на общем шаблоне кабинета (Bootstrap grid, тот же, что
+      уже проверенные на 320px `cart/index.php`/`account/addresses.php`)
 - [x] `composer test` зелёный (325/325, регрессия)
 - [x] Проверить `.docs/dod-global.md`
 
