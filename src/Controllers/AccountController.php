@@ -11,6 +11,8 @@ require_once ROOT_PATH . '/src/Models/RememberToken.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/Warranty.php';
 require_once ROOT_PATH . '/src/Core/Account.php';
+require_once ROOT_PATH . '/src/Models/Address.php';
+require_once ROOT_PATH . '/src/Core/Address.php';
 
 class AccountController
 {
@@ -30,8 +32,9 @@ class AccountController
      * через уже существующую `getCustomerOrders()` (Панель управления,
      * Фаза 4) — той же функцией, что видит Менеджер, только по своему
      * `user_id`; отдельная Model для кабинета не заводится ради одного
-     * счётчика. Адреса и Избранное появятся в Тасках 4/6 этой фазы — до
-     * них счётчики нулевые, своих Model у них ещё нет.
+     * счётчика. Адреса — `countUserAddresses()` (Таск 4). Избранное
+     * появится в Таске 6 этой фазы — до него счётчик нулевой, своей
+     * Model ещё нет.
      */
     public function index(): void
     {
@@ -44,7 +47,7 @@ class AccountController
             'activeSection'  => 'dashboard',
             'userName'       => $user['name'],
             'ordersCount'    => count(getCustomerOrders('user', (string) $user['id'])),
-            'addressesCount' => 0,
+            'addressesCount' => countUserAddresses($user['id']),
             'favoritesCount' => 0,
         ]);
     }
@@ -246,5 +249,144 @@ class AccountController
 
         setFlash('success', 'Пароль изменён.');
         redirect('/account/details');
+    }
+
+    /**
+     * Список адресов + форма добавления/редактирования на одной
+     * странице (`FR-ACC-002`, Таск 4) — `?edit={id}` подставляет
+     * существующий адрес в форму; чужой/несуществующий `id` в
+     * `?edit=` тихо игнорируется (список без формы редактирования),
+     * а не 404 — это необязательный query-параметр отображения, не
+     * адрес действия.
+     */
+    public function addresses(): void
+    {
+        requireAuth();
+
+        $user   = currentUser();
+        $editId = (int) input('edit', 0);
+
+        $editingAddress = $editId > 0 ? findUserAddress($editId, $user['id']) : null;
+
+        $this->renderAddresses(getUserAddresses($user['id']), $editingAddress, [], []);
+    }
+
+    /**
+     * Новый адрес (`FR-ACC-002`) — лимит `ACCOUNT_ADDRESSES_MAX`
+     * проверяется уже после структурной валидации (не тратим лишний
+     * запрос на заведомо невалидную форму) и до `createAddress()`
+     * (Model создаёт запись безусловно — лимит бизнес-правило
+     * Controller, не инвариант хранения, как «ровно один основной»).
+     */
+    public function storeAddress(): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $user   = currentUser();
+        $input  = $this->addressInputFromRequest();
+        $errors = validateAddressInput($input);
+
+        if (in_array(true, $errors, true)) {
+            $this->renderAddresses(getUserAddresses($user['id']), null, $input, $errors);
+            return;
+        }
+
+        if (countUserAddresses($user['id']) >= ACCOUNT_ADDRESSES_MAX) {
+            setFlash('error', 'Достигнут лимит сохранённых адресов (' . ACCOUNT_ADDRESSES_MAX . ').');
+            redirect('/account/addresses');
+        }
+
+        createAddress($input + ['user_id' => $user['id']]);
+
+        setFlash('success', 'Адрес добавлен.');
+        redirect('/account/addresses');
+    }
+
+    /**
+     * Редактирование адреса — `findUserAddress()` до валидации, чтобы
+     * чужой/несуществующий `id` получал 404 сразу, не после проверки
+     * полей формы.
+     */
+    public function updateAddress(string $id): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $user    = currentUser();
+        $address = findUserAddress((int) $id, $user['id']);
+        if ($address === null) {
+            abort404();
+        }
+
+        $input  = $this->addressInputFromRequest();
+        $errors = validateAddressInput($input);
+
+        if (in_array(true, $errors, true)) {
+            $this->renderAddresses(getUserAddresses($user['id']), $address, $input, $errors);
+            return;
+        }
+
+        updateAddress((int) $id, $user['id'], $input);
+
+        setFlash('success', 'Адрес обновлён.');
+        redirect('/account/addresses');
+    }
+
+    public function deleteAddress(string $id): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $user = currentUser();
+
+        if (!deleteAddress((int) $id, $user['id'])) {
+            setFlash('error', 'Адрес не найден.');
+            redirect('/account/addresses');
+        }
+
+        setFlash('success', 'Адрес удалён.');
+        redirect('/account/addresses');
+    }
+
+    public function setDefaultAddress(string $id): void
+    {
+        requireAuth();
+        requireCsrf();
+
+        $user = currentUser();
+
+        if (!setDefaultAddress((int) $id, $user['id'])) {
+            setFlash('error', 'Адрес не найден.');
+            redirect('/account/addresses');
+        }
+
+        setFlash('success', 'Основной адрес изменён.');
+        redirect('/account/addresses');
+    }
+
+    private function addressInputFromRequest(): array
+    {
+        return [
+            'title'     => trim((string) input('title')),
+            'city'      => trim((string) input('city')),
+            'street'    => trim((string) input('street')),
+            'house'     => trim((string) input('house')),
+            'apartment' => trim((string) input('apartment')),
+            'comment'   => trim((string) input('comment')),
+        ];
+    }
+
+    private function renderAddresses(array $addresses, ?array $editingAddress, array $old, array $errors): void
+    {
+        render('account/addresses', [
+            'title'          => 'Мои адреса',
+            'activeSection'  => 'addresses',
+            'addresses'      => $addresses,
+            'editingAddress' => $editingAddress,
+            'old'            => $old,
+            'errors'         => $errors,
+            'maxReached'     => count($addresses) >= ACCOUNT_ADDRESSES_MAX,
+        ]);
     }
 }

@@ -254,6 +254,24 @@ $pdo->exec("
 ");
 
 $pdo->exec("
+    CREATE TABLE IF NOT EXISTS addresses (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        user_id    INT NOT NULL,
+        title      VARCHAR(100) NULL,
+        city       VARCHAR(100) NOT NULL,
+        street     VARCHAR(150) NOT NULL,
+        house      VARCHAR(20) NOT NULL,
+        apartment  VARCHAR(20) NULL,
+        comment    VARCHAR(255) NULL,
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_addresses_user (user_id),
+        CONSTRAINT fk_addresses_user
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
     CREATE TABLE IF NOT EXISTS orders (
         id                  INT AUTO_INCREMENT PRIMARY KEY,
         user_id             INT NULL,
