@@ -7,6 +7,7 @@ namespace App\Controllers;
 require_once ROOT_PATH . '/src/Models/Cart.php';
 require_once ROOT_PATH . '/src/Models/User.php';
 require_once ROOT_PATH . '/src/Models/Order.php';
+require_once ROOT_PATH . '/src/Models/Address.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
 
@@ -81,7 +82,13 @@ class CheckoutController
             'phone'              => input('phone'),
             'email'              => input('email'),
             'fulfillment_method' => input('fulfillment_method'),
-            'delivery_address'   => input('delivery_address'),
+            'address_city'       => input('address_city'),
+            'address_street'     => input('address_street'),
+            'address_house'      => input('address_house'),
+            'address_apartment'  => input('address_apartment'),
+            'address_comment'    => input('address_comment'),
+            'save_address'       => input('save_address'),
+            'saved_address_id'   => input('saved_address_id'),
             'comment'            => input('comment'),
             'payment_method'     => input('payment_method'),
             'create_account'     => input('create_account'),
@@ -127,13 +134,15 @@ class CheckoutController
             }
         }
 
+        $isDelivery = $input['fulfillment_method'] === FULFILLMENT_DELIVERY;
+
         $order = [
             'user_id'            => $userId,
             'guest_name'         => $userId === null ? $input['name'] : null,
             'guest_phone'        => $userId === null ? $input['phone'] : null,
             'guest_email'        => $userId === null && $input['email'] !== '' ? $input['email'] : null,
             'fulfillment_method' => $input['fulfillment_method'],
-            'delivery_address'   => $input['fulfillment_method'] === FULFILLMENT_DELIVERY ? $input['delivery_address'] : null,
+            'delivery_address'   => $isDelivery ? formatAddress($this->deliveryAddressData($input)) : null,
             'comment'            => $input['comment'],
             'payment_method'     => $input['payment_method'],
         ];
@@ -150,6 +159,10 @@ class CheckoutController
             logWarning('Заказ не создан — позиция стала недоступна между проверкой и оформлением', ['owner_type' => array_key_first($owner)]);
             setFlash('error', 'Один из товаров стал недоступен — проверьте заказ ещё раз.');
             redirect('/checkout');
+        }
+
+        if ($isDelivery && $input['save_address'] && $userId !== null) {
+            $this->maybeSaveDeliveryAddress($userId, $input);
         }
 
         clearCart(cartOwner());
@@ -217,6 +230,15 @@ class CheckoutController
         $user    = currentUser();
         $prefill = ['name' => '', 'phone' => '', 'email' => ''];
 
+        $addresses      = [];
+        $addressPrefill = [
+            'address_city'      => 'Краснодар',
+            'address_street'    => '',
+            'address_house'     => '',
+            'address_apartment' => '',
+            'address_comment'   => '',
+        ];
+
         if ($user !== null) {
             $account = findUserById($user['id']);
             if ($account !== null) {
@@ -225,6 +247,21 @@ class CheckoutController
                     'phone' => (string) ($account['phone'] ?? ''),
                     'email' => $account['email'],
                 ];
+            }
+
+            $addresses = getUserAddresses($user['id']);
+
+            foreach ($addresses as $address) {
+                if ((int) $address['is_default'] === 1) {
+                    $addressPrefill = [
+                        'address_city'      => $address['city'],
+                        'address_street'    => $address['street'],
+                        'address_house'     => $address['house'],
+                        'address_apartment' => (string) ($address['apartment'] ?? ''),
+                        'address_comment'   => (string) ($address['comment'] ?? ''),
+                    ];
+                    break;
+                }
             }
         }
 
@@ -235,11 +272,55 @@ class CheckoutController
             'isBlocked'          => $priceChanges !== [] || $hasUnavailable,
             'isAuthenticated'    => $user !== null,
             'prefill'            => $prefill,
+            'addresses'          => $addresses,
+            'addressPrefill'     => $addressPrefill,
             'fulfillmentOptions' => FULFILLMENT_LABELS,
             'paymentOptions'     => PAYMENT_METHOD_LABELS,
             'checkoutToken'      => $_SESSION['checkout_token'],
             'old'                => $old,
             'errors'             => $errors,
         ]);
+    }
+
+    /**
+     * `$input` — результат `normalizeCheckoutInput()`; поля `address_*`
+     * собираются в форму `validateAddressInput()`/`formatAddress()`
+     * (`Core/Address.php`) — один и тот же состав адреса на чекауте и
+     * в книге адресов кабинета (`Q-DEV-002`, Таск 4).
+     */
+    private function deliveryAddressData(array $input): array
+    {
+        return [
+            'city'      => $input['address_city'],
+            'street'    => $input['address_street'],
+            'house'     => $input['address_house'],
+            'apartment' => $input['address_apartment'],
+            'comment'   => $input['address_comment'],
+        ];
+    }
+
+    /**
+     * Заказ важнее адреса (`phase-7.md`, Таск 5): совпадение с уже
+     * сохранённым адресом или достижение `ACCOUNT_ADDRESSES_MAX` тихо
+     * пропускает сохранение, без flash-ошибки — заказ уже создан.
+     */
+    private function maybeSaveDeliveryAddress(int $userId, array $input): void
+    {
+        $addressData          = $this->deliveryAddressData($input);
+        $addressData['title'] = '';
+        $formatted            = formatAddress($addressData);
+
+        foreach (getUserAddresses($userId) as $existing) {
+            if (formatAddress($existing) === $formatted) {
+                return;
+            }
+        }
+
+        if (countUserAddresses($userId) >= ACCOUNT_ADDRESSES_MAX) {
+            return;
+        }
+
+        $addressData['user_id'] = $userId;
+        createAddress($addressData);
     }
 }

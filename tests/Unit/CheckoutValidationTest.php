@@ -15,7 +15,13 @@ final class CheckoutValidationTest extends TestCase
             'phone'              => '+79001234567',
             'email'              => '',
             'fulfillment_method' => FULFILLMENT_PICKUP,
-            'delivery_address'   => '',
+            'address_city'       => '',
+            'address_street'     => '',
+            'address_house'      => '',
+            'address_apartment'  => '',
+            'address_comment'    => '',
+            'save_address'       => false,
+            'saved_address_id'   => null,
             'comment'            => 'Позвонить перед доставкой',
             'payment_method'     => PAYMENT_CASH,
             'create_account'     => false,
@@ -27,27 +33,49 @@ final class CheckoutValidationTest extends TestCase
     {
         $errors = validateCheckoutInput($this->validInput(), false);
 
-        $this->assertFalse($errors['delivery_address']);
+        $this->assertFalse($errors['address_city']);
+        $this->assertFalse($errors['address_street']);
+        $this->assertFalse($errors['address_house']);
     }
 
     public function testDeliveryWithoutAddressIsInvalid(): void
     {
         $errors = validateCheckoutInput($this->validInput([
             'fulfillment_method' => FULFILLMENT_DELIVERY,
-            'delivery_address'   => '',
         ]), false);
 
-        $this->assertTrue($errors['delivery_address']);
+        $this->assertTrue($errors['address_city']);
+        $this->assertTrue($errors['address_street']);
+        $this->assertTrue($errors['address_house']);
     }
 
     public function testDeliveryWithAddressIsValid(): void
     {
         $errors = validateCheckoutInput($this->validInput([
             'fulfillment_method' => FULFILLMENT_DELIVERY,
-            'delivery_address'   => 'ул. Ленина, 1',
+            'address_city'       => 'Краснодар',
+            'address_street'     => 'Красная',
+            'address_house'      => '10',
         ]), false);
 
-        $this->assertFalse($errors['delivery_address']);
+        $this->assertFalse($errors['address_city']);
+        $this->assertFalse($errors['address_street']);
+        $this->assertFalse($errors['address_house']);
+        $this->assertFalse($errors['address_apartment']);
+        $this->assertFalse($errors['address_comment']);
+    }
+
+    public function testDeliveryWithTooLongApartmentIsInvalid(): void
+    {
+        $errors = validateCheckoutInput($this->validInput([
+            'fulfillment_method' => FULFILLMENT_DELIVERY,
+            'address_city'       => 'Краснодар',
+            'address_street'     => 'Красная',
+            'address_house'      => '10',
+            'address_apartment'  => str_repeat('1', 21),
+        ]), false);
+
+        $this->assertTrue($errors['address_apartment']);
     }
 
     public function testEmptyEmailIsValidWithoutAccountCreation(): void
@@ -145,7 +173,13 @@ final class CheckoutValidationTest extends TestCase
             'phone'              => '8 900 123-45-67',
             'email'              => '  USER@EXAMPLE.COM ',
             'fulfillment_method' => FULFILLMENT_DELIVERY,
-            'delivery_address'   => '  ул. Ленина, 1  ',
+            'address_city'       => '  Краснодар  ',
+            'address_street'     => '  Красная  ',
+            'address_house'      => '  10  ',
+            'address_apartment'  => '  5  ',
+            'address_comment'    => '  домофон 25  ',
+            'save_address'       => '1',
+            'saved_address_id'   => '3',
             'comment'            => '  комментарий  ',
             'payment_method'     => PAYMENT_CARD_ONLINE,
             'create_account'     => '1',
@@ -155,8 +189,28 @@ final class CheckoutValidationTest extends TestCase
         $this->assertSame('Иван', $normalized['name']);
         $this->assertSame('+79001234567', $normalized['phone']);
         $this->assertSame('user@example.com', $normalized['email']);
-        $this->assertSame('ул. Ленина, 1', $normalized['delivery_address']);
+        $this->assertSame('Краснодар', $normalized['address_city']);
+        $this->assertSame('Красная', $normalized['address_street']);
+        $this->assertSame('10', $normalized['address_house']);
+        $this->assertSame('5', $normalized['address_apartment']);
+        $this->assertSame('домофон 25', $normalized['address_comment']);
+        $this->assertTrue($normalized['save_address']);
+        $this->assertSame(3, $normalized['saved_address_id']);
         $this->assertSame('комментарий', $normalized['comment']);
         $this->assertTrue($normalized['create_account']);
+    }
+
+    public function testNormalizeCheckoutInputMissingSavedAddressIdIsNull(): void
+    {
+        $normalized = normalizeCheckoutInput([
+            'name'               => 'Иван',
+            'phone'              => '+79001234567',
+            'fulfillment_method' => FULFILLMENT_PICKUP,
+            'comment'            => 'комментарий',
+            'payment_method'     => PAYMENT_CASH,
+        ]);
+
+        $this->assertNull($normalized['saved_address_id']);
+        $this->assertFalse($normalized['save_address']);
     }
 }

@@ -8,6 +8,8 @@ declare(strict_types=1);
 /** @var bool $isBlocked есть неприменённое изменение цены или недоступный образец */
 /** @var bool $isAuthenticated */
 /** @var array{name:string,phone:string,email:string} $prefill */
+/** @var array<int,array> $addresses сохранённые адреса авторизованного (Модель Address) */
+/** @var array<string,string> $addressPrefill address_city/address_street/address_house/address_apartment/address_comment */
 /** @var array<string,string> $fulfillmentOptions */
 /** @var array<string,string> $paymentOptions */
 /** @var string $checkoutToken */
@@ -117,15 +119,108 @@ $breadcrumbs = [['name' => 'Оформление заказа']];
                                 <div class="invalid-feedback d-block">Выберите способ получения.</div>
                             <?php endif; ?>
 
-                            <div class="single-form" id="checkout-delivery-address">
-                                <label class="form-label">Адрес доставки *</label>
-                                <textarea
-                                    name="delivery_address"
-                                    placeholder="Улица, дом, квартира"
-                                    class="<?= !empty($errors['delivery_address']) ? 'is-invalid' : '' ?>"
-                                ><?= e($old['delivery_address'] ?? '') ?></textarea>
-                                <?php if (!empty($errors['delivery_address'])): ?>
-                                    <div class="invalid-feedback">Укажите адрес доставки.</div>
+                            <div id="checkout-delivery-address">
+                                <?php if ($addresses !== []): ?>
+                                    <div class="single-form">
+                                        <label class="form-label" for="checkout-saved-address">Выбрать сохранённый адрес</label>
+                                        <select id="checkout-saved-address" data-checkout-address>
+                                            <option value="">Свой адрес</option>
+                                            <?php foreach ($addresses as $address): ?>
+                                                <option
+                                                    value="<?= e((string) $address['id']) ?>"
+                                                    data-city="<?= e($address['city']) ?>"
+                                                    data-street="<?= e($address['street']) ?>"
+                                                    data-house="<?= e($address['house']) ?>"
+                                                    data-apartment="<?= e((string) ($address['apartment'] ?? '')) ?>"
+                                                    data-comment="<?= e((string) ($address['comment'] ?? '')) ?>"
+                                                    <?= (int) $address['is_default'] === 1 && !isset($old['address_city']) ? 'selected' : '' ?>
+                                                >
+                                                    <?= e($address['title'] !== null ? $address['title'] : formatAddress($address)) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
+
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <div class="single-form">
+                                            <input
+                                                type="text"
+                                                name="address_city"
+                                                placeholder="Город *"
+                                                class="<?= !empty($errors['address_city']) ? 'is-invalid' : '' ?>"
+                                                value="<?= e($old['address_city'] ?? $addressPrefill['address_city']) ?>"
+                                                required
+                                            >
+                                            <?php if (!empty($errors['address_city'])): ?>
+                                                <div class="invalid-feedback">Укажите город.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="single-form">
+                                            <input
+                                                type="text"
+                                                name="address_street"
+                                                placeholder="Улица *"
+                                                class="<?= !empty($errors['address_street']) ? 'is-invalid' : '' ?>"
+                                                value="<?= e($old['address_street'] ?? $addressPrefill['address_street']) ?>"
+                                                required
+                                            >
+                                            <?php if (!empty($errors['address_street'])): ?>
+                                                <div class="invalid-feedback">Укажите улицу.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="single-form">
+                                            <input
+                                                type="text"
+                                                name="address_house"
+                                                placeholder="Дом *"
+                                                class="<?= !empty($errors['address_house']) ? 'is-invalid' : '' ?>"
+                                                value="<?= e($old['address_house'] ?? $addressPrefill['address_house']) ?>"
+                                                required
+                                            >
+                                            <?php if (!empty($errors['address_house'])): ?>
+                                                <div class="invalid-feedback">Укажите дом.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="single-form">
+                                            <input
+                                                type="text"
+                                                name="address_apartment"
+                                                placeholder="Квартира/офис"
+                                                class="<?= !empty($errors['address_apartment']) ? 'is-invalid' : '' ?>"
+                                                value="<?= e($old['address_apartment'] ?? $addressPrefill['address_apartment']) ?>"
+                                            >
+                                            <?php if (!empty($errors['address_apartment'])): ?>
+                                                <div class="invalid-feedback">Слишком длинное значение.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-12">
+                                        <div class="single-form">
+                                            <textarea
+                                                name="address_comment"
+                                                placeholder="Подъезд, этаж, домофон"
+                                                class="<?= !empty($errors['address_comment']) ? 'is-invalid' : '' ?>"
+                                            ><?= e($old['address_comment'] ?? $addressPrefill['address_comment']) ?></textarea>
+                                            <?php if (!empty($errors['address_comment'])): ?>
+                                                <div class="invalid-feedback">Слишком длинный комментарий.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <?php if ($isAuthenticated): ?>
+                                    <div class="single-form checkbox-checkbox">
+                                        <input type="checkbox" id="save_address" name="save_address" value="1" <?= ($old['save_address'] ?? false) === true ? 'checked' : '' ?>>
+                                        <label for="save_address"> <span></span> Сохранить адрес в кабинете</label>
+                                    </div>
                                 <?php endif; ?>
                             </div>
 
