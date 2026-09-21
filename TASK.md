@@ -2,81 +2,94 @@
 
 ## Фаза
 Phase 7 — Кабинет покупателя и уведомления
-(`.docs/phases/phase-7.md`), Таск 8 из 9.
+(`.docs/phases/phase-7.md`), Таск 9 из 9 — последний таск, фаза
+закрыта.
 
-**Статус:** ✅ Завершён 21.09.2026 — проверено на реальной БД: временный
-скрипт (scratchpad) создавал тестовые Заказы (с `guest_phone` и без
-телефона) и вызывал `sendOrderSms()` напрямую. Заказ с телефоном →
-строка в `sms_notifications` (`phone=+79261234567`, `event=accepted`,
-текст с номером Заказа) и запись в `app.log` с замаскированным
-телефоном (`+792****4567`); Заказ без телефона → только `WARNING` в
-логе, ни строки в БД, исключение не брошено. Тестовые Заказы удалены
-после проверки. `php database/install.php` дважды подряд — без
-ошибок. `composer test` — 337/337 (было 325, +12 `NotificationTest`).
-Реализовано без отклонений от плана ниже.
+**Статус:** ✅ Завершён 21.09.2026 — проверено живым HTTP на реальной
+БД (`php -S` + `curl`, временный Менеджер и тестовые Заказы, удалены
+после проверки). Ручной Заказ с предоплатой сразу → 2 строки
+(«принят», «подтверждён»); полный проход
+`in_production → ready_for_shipment → shipping → delivered` →
+ровно 5 строк, блок «Уведомления» отразил их в верном порядке;
+запрещённый переход и повторное «Отметить предоплату» — без лишних
+строк; отдельный гостевой Заказ → «принят» с `guest_phone`, отмена из
+`new` → «отменён». Искусственная ошибка внутри `sendOrderSms()`
+(нарушение FK) не вышла наружу — `ERROR` в `app.log`, без 500.
+`composer test` — 337/337 (регрессия). Реализовано без отклонений от
+плана ниже.
 
 ## Задача
-Основа `FR-NOTIF-001` без подключения к Заказам: чистые функции
-маппинга статус → событие и текстов 5 уведомлений; заглушка
-`sendOrderSms()`, которая по Заказу и событию пишет «СМС» в лог и
-строку в `sms_notifications`. Реального провайдера нет и не
-проектируется (демо-проект, `Q-032`). Хуки в контроллерах — Таск 9.
+`FR-NOTIF-001` целиком: уведомление фиксируется при создании Заказа
+(чекаут и ручное создание Менеджером), на `confirmed` (в т.ч. через
+фиксацию предоплаты), `in_production`, `ready_for_shipment`,
+`shipping`, `cancelled` — всегда после commit, сбой заглушки не
+блокирует переход (правило 7). На странице Заказа в Панели управления
+— блок «Уведомления»: событие, телефон, текст, время (`AC-05`).
 
 ## Scope — что трогаем
 
-- [x] `database/install.php` — изменить: добавить `CREATE TABLE IF NOT
-      EXISTS sms_notifications` (`id`, `order_id` FK → orders ON DELETE
-      CASCADE, `phone VARCHAR(20) NOT NULL`, `event VARCHAR(30) NOT
-      NULL`, `message VARCHAR(500) NOT NULL`, `created_at`;
-      `KEY idx_sms_notifications_order (order_id)`) — по образцу
-      `addresses`/`payment_logs`
-- [x] `.docs/database.md` — изменить: раздел `sms_notifications`
-- [x] `.docs/planning-log.md` — изменить: ADR «СМС — журнал-заглушка
-      вместо провайдера, `Q-032` для демо снят»
-- [x] `src/Core/Notification.php` — создать: константы 5 событий
-      (`SMS_EVENT_ACCEPTED`/`CONFIRMED`/`STATUS_CHANGED`/`READY`/
-      `CANCELLED`), `smsEventForStatus(string $status, string
-      $fulfillment): ?string` (`delivered` → `null`),
-      `smsMessageForEvent(string $event, int $orderId, string
-      $fulfillment): string` (тексты с номером Заказа, «готов к
-      доставке» / «готов к выдаче» по способу получения),
-      `orderNotificationPhone(array $order, ?array $user): ?string`
-      (`users.phone` либо `guest_phone`) — чистые функции
-- [x] `tests/Unit/NotificationTest.php` — создать
-- [x] `tests/bootstrap.php` — изменить: подключить `Core/Notification.php`
-- [x] `src/Services/Sms.php` — создать: `sendOrderSms(array $order,
-      string $event): void` — собирает телефон и текст, `logInfo()` с
-      маскированным телефоном, `logSmsNotification()`; Заказ без
-      телефона → `logWarning()`, без записи; никогда не бросает
-      исключения наружу (`try/catch` + `logError()`)
-- [x] `src/Models/SmsNotification.php` — создать:
-      `logSmsNotification(int $orderId, string $phone, string $event,
-      string $message): void`, `getOrderSmsNotifications(int
-      $orderId): array`
+- [x] `src/Controllers/CheckoutController.php` — изменить: `store()`,
+      после успешного `createOrder()` — `sendOrderSms(array_merge($order,
+      ['id' => $orderId]), SMS_EVENT_ACCEPTED)` (`$order` уже содержит
+      `user_id`/`guest_phone`/`fulfillment_method`)
+- [x] `src/Controllers/AdminOrderController.php` — изменить:
+      - `store()` (ручное создание) — СМС «принят» после `createOrder()`;
+        если `markOrderPrepaid()` вернул `PREPAID_RESULT_OK` и
+        перечитанный `findOrderById($orderId)['status'] === 'confirmed'`
+        — доп. СМС «подтверждён» (перепроверка статуса нужна, потому что
+        `transitionOrderStatus()` внутри `markOrderPrepaid()` не бросает
+        на запрещённом переходе)
+      - `transition()` — после успешного `transitionOrderStatus()` —
+        `sendOrderSms()` с `smsEventForStatus($to, $order['fulfillment_method'])`,
+        если событие не `null`
+      - `markPrepaid()` — та же проверка `PREPAID_RESULT_OK` +
+        перечитанный статус `confirmed`, что и в `store()` (вынесено в
+        общий приватный `notifyPrepaidConfirmed()`)
+      - `cancel()` — после `cancelOrder()` — СМС «отменён»
+      - `show()` — передаёт `$smsNotifications =
+        getOrderSmsNotifications((int) $id)` в View
+- [x] `src/Views/admin/orders/show.php` — изменить: блок «Уведомления»
+      (по образцу карточки «Возврат и гарантия») — событие/телефон/
+      текст/время, пустое состояние «уведомлений ещё не было»
+- [x] `.docs/modules/ord.md` — изменить: пометка у `NOTIF` —
+      «реализовано в Фазе 7 как журнал-заглушка,
+      `Services/Sms.php::sendOrderSms()`, точки вызова: чекаут, ручное
+      создание, `transition()`, `markPrepaid()`, `cancel()`»
 
 ## Out of scope — не трогаем
 
-- Хуки вызова `sendOrderSms()` в `CheckoutController`/
-  `AdminOrderController` — Таск 9
-- Блок «Уведомления» в `src/Views/admin/orders/show.php` — Таск 9
-- `.docs/modules/ord.md` — трогается в Таске 9
-- Реальный СМС-провайдер, `.env`-настройки, слот под провайдера — не
-  проектируются вообще (решение фазы, `phase-7.md`)
+- `Core/Notification.php`, `Services/Sms.php`, `Models/SmsNotification.php`,
+  таблица `sms_notifications` — готовы в Таске 8, не меняются
+- Реальный СМС-провайдер — не проектируется (решение фазы)
+- `markOrderPaidFull()`, `setShipping()`, работа с Резервами/Возвратами —
+  вне 5 СМС-событий
+- Закрытие фазы (`_status.md`, `tz-coverage.md`, `dev-log.md` — «Решения
+  фазы») — отдельный шаг после этого таска
 
 ## Definition of Done
 
-- [x] `NotificationTest`: маппинг всех 7 статусов (`new`, `confirmed`,
-      `in_production`, `ready_for_shipment` × delivery/pickup,
-      `shipping`, `cancelled`, `delivered` → `null`); тексты содержат
-      номер Заказа; телефон — `users.phone` при наличии пользователя,
-      иначе `guest_phone`, иначе `null`
-- [x] Прямой вызов `sendOrderSms()` на существующем Заказе → строка в
-      `sms_notifications` и запись в `app.log`, телефон в логе
-      замаскирован (`+7900***0000`)
-- [x] Заказ без телефона → предупреждение в логе, строки нет, вызов не
-      бросает исключение
-- [x] `php database/install.php` дважды подряд — без ошибок
-- [x] `composer test` зелёный, включая `NotificationTest`
+- [x] Проход Заказа `new → confirmed → in_production →
+      ready_for_shipment → shipping → delivered` даёт ровно 5 строк
+      `sms_notifications` (на `delivered` — нет); каждая видна в блоке
+      на странице Заказа в порядке времени (`FR-NOTIF-001`, `AC-05`)
+- [x] Отмена из `new`/`confirmed`/`in_production` → строка «Заказ
+      отменён»
+- [x] Гостевой Заказ → телефон из `guest_phone`; Заказ Покупателя —
+      из `users.phone`
+- [x] Повторное «Отметить предоплату» (`PREPAID_RESULT_ALREADY`) и
+      проигрыш конкуренции за образец (`PREPAID_RESULT_SAMPLE_TAKEN`)
+      → второго/лишнего СМС нет; запрещённый переход (`transition()`
+      вернул `false`) → СМС нет (`PREPAID_RESULT_ALREADY` проверен
+      живьём; `PREPAID_RESULT_SAMPLE_TAKEN` защищён тем же кодом
+      `notifyPrepaidConfirmed()`, что и `ALREADY` — оба исключены одной
+      проверкой `=== PREPAID_RESULT_OK`, отдельный сценарий гонки за
+      образец не переигрывался — уже покрыт тестами Фазы 5)
+- [x] Ручной Заказ Менеджера с предоплатой сразу → две строки: «принят»
+      и «подтверждён»
+- [x] Искусственная ошибка в заглушке (временно) → переход статуса
+      всё равно прошёл, в `app.log` ошибка, 500 нет
+- [x] `composer test` зелёный (регрессия — таск не добавляет чистую
+      логику без БД)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила

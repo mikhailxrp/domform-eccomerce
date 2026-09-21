@@ -10,6 +10,7 @@ require_once ROOT_PATH . '/src/Models/Order.php';
 require_once ROOT_PATH . '/src/Models/Address.php';
 require_once ROOT_PATH . '/src/Core/Cart.php';
 require_once ROOT_PATH . '/src/Core/Checkout.php';
+require_once ROOT_PATH . '/src/Services/Sms.php';
 
 class CheckoutController
 {
@@ -160,6 +161,8 @@ class CheckoutController
             setFlash('error', 'Один из товаров стал недоступен — проверьте заказ ещё раз.');
             redirect('/checkout');
         }
+
+        sendOrderSms(array_merge($order, ['id' => $orderId]), SMS_EVENT_ACCEPTED);
 
         if ($isDelivery && $input['save_address'] && $userId !== null) {
             $this->maybeSaveDeliveryAddress($userId, $input);

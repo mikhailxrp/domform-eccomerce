@@ -10,6 +10,7 @@ declare(strict_types=1);
 /** @var bool $canEditItems */
 /** @var array<int, array<string, mixed>> $reserves */
 /** @var array<int, array<string, mixed>> $returns */
+/** @var array<int, array<string, mixed>> $smsNotifications */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
@@ -232,6 +233,29 @@ $orderId = (string) $order['id'];
         <p class="mb-1"><strong>Создан:</strong> <?= e(date('d.m.Y H:i', strtotime((string) $order['created_at']))) ?></p>
         <p class="mb-1"><strong>Обновлён:</strong> <?= e(date('d.m.Y H:i', strtotime((string) $order['updated_at']))) ?></p>
         <p class="mb-0"><strong>Доставлен/собран:</strong> <?= $order['delivered_at'] !== null ? e(date('d.m.Y H:i', strtotime((string) $order['delivered_at']))) : '—' ?></p>
+    </div>
+</div>
+
+<div class="card custom-card">
+    <div class="card-header">
+        <div class="card-title">Уведомления</div>
+    </div>
+    <div class="card-body">
+        <?php if ($smsNotifications === []): ?>
+            <p class="text-muted mb-0">Уведомлений ещё не было.</p>
+        <?php else: ?>
+            <ul class="list-group list-group-flush">
+                <?php foreach ($smsNotifications as $notification): ?>
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-semibold"><?= e($notification['message']) ?></span>
+                            <span class="text-muted"><?= e(date('d.m.Y H:i', strtotime((string) $notification['created_at']))) ?></span>
+                        </div>
+                        <div class="text-muted small">Телефон: <?= e($notification['phone']) ?></div>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
     </div>
 </div>
 
