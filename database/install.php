@@ -421,6 +421,20 @@ $pdo->exec("
 ");
 
 $pdo->exec("
+    CREATE TABLE IF NOT EXISTS sms_notifications (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        order_id   INT NOT NULL,
+        phone      VARCHAR(20) NOT NULL,
+        event      VARCHAR(30) NOT NULL,
+        message    VARCHAR(500) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_sms_notifications_order (order_id),
+        CONSTRAINT fk_sms_notifications_order
+            FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+$pdo->exec("
     CREATE TABLE IF NOT EXISTS content_pages (
         id         INT AUTO_INCREMENT PRIMARY KEY,
         slug       VARCHAR(60) NOT NULL UNIQUE,

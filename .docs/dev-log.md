@@ -3365,3 +3365,41 @@ product_id)`, SQLSTATE 23000/1062, тот же приём, что `createUser()`
 (без хуков).
 
 ---
+
+**Дата:** 21.09.2026
+**Что сделано:** Таск 8 Фазы 7 реализован по плану `TASK.md` без
+отклонений. Новая таблица `sms_notifications` (`order_id`, `phone`,
+`event`, `message`) — по образцу `payment_logs`/`returns`
+(`database/install.php`, `ADR-043`). `Core/Notification.php` — три
+чистые функции: `smsEventForStatus()` (маппинг 7 статусов на 5
+событий, `delivered` → `null`), `smsMessageForEvent()` (тексты с
+номером Заказа, «готов к доставке»/«готов к выдаче» по
+`fulfillment_method`), `orderNotificationPhone()` (`users.phone` →
+`orders.guest_phone` → `null`). `Services/Sms.php::sendOrderSms()` —
+заглушка: определяет телефон, пишет замаскированную строку в
+`app.log` (`maskPhone()` — свой helper, готового в проекте не было) и
+строку в `sms_notifications`; Заказ без телефона — только
+`logWarning()`, без записи; весь вызов в `try/catch` с `logError()`,
+исключение наружу никогда не выходит (правило 7 `FR-NOTIF-001`).
+`Models/SmsNotification.php` — `logSmsNotification()`/
+`getOrderSmsNotifications()` (сортировка по времени — для блока
+«Уведомления» Таска 9).
+
+Проверено на реальной (боевой, shared-хостинг) БД: временный скрипт в
+scratchpad создавал два тестовых Заказа — с `guest_phone` и без
+телефона вовсе — и вызывал `sendOrderSms()` напрямую. Заказ с
+телефоном дал одну строку `sms_notifications` (`phone=+79261234567`,
+`event=accepted`, текст с номером Заказа) и строку в `app.log` с
+`phone` замаскированным до `+792****4567`; Заказ без телефона — ни
+одной строки в таблице, только `WARNING` в логе. Оба тестовых Заказа
+удалены после проверки. `php database/install.php` дважды подряд —
+без ошибок.
+
+`composer test`: 337/337 (было 325, +12 `NotificationTest` — все 7
+статусов маппинга, тексты обоих `ready`-вариантов, три комбинации
+`orderNotificationPhone()`).
+
+**Что следующее:** Таск 9 Фазы 7 — СМС-хуки на 5 событиях и блок
+«Уведомления» в Панели управления.
+
+---
