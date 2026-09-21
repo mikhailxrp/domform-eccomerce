@@ -110,6 +110,7 @@ $cartCount           = currentCartCount(cartOwner());
                             <ul class="dropdown-menu dropdown-profile">
                                 <?php if ($isLoggedIn): ?>
                                     <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>
+                                    <li><a href="/account">Личный кабинет</a></li>
                                     <li>
                                         <form method="post" action="/logout">
                                             <?= csrfField() ?>
@@ -160,6 +161,7 @@ $cartCount           = currentCartCount(cartOwner());
                                 <ul class="dropdown-menu dropdown-profile">
                                     <?php if ($isLoggedIn): ?>
                                         <li><span class="dropdown-item-text"><?= e($userName) ?></span></li>
+                                        <li><a href="/account">Личный кабинет</a></li>
                                         <li>
                                             <form method="post" action="/logout">
                                                 <?= csrfField() ?>
