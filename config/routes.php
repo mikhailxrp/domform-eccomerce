@@ -67,6 +67,7 @@ return [
         '/account/addresses/{id}'            => ['AccountController', 'updateAddress'],
         '/account/addresses/{id}/delete'     => ['AccountController', 'deleteAddress'],
         '/account/addresses/{id}/default'    => ['AccountController', 'setDefaultAddress'],
+        '/favorites/toggle'        => ['FavoriteController', 'toggle'],
         '/admin/orders'                  => ['AdminOrderController', 'store'],
         '/admin/orders/{id}/transition'  => ['AdminOrderController', 'transition'],
         '/admin/orders/{id}/prepaid'     => ['AdminOrderController', 'markPrepaid'],

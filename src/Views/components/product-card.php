@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 /** @var array $product */
 /** @var string $viewMode грид ('grid', по умолчанию), список ('list' — Таск 3) или карусель ('swiper' — блок «Товары» на Главной) */
+/** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
+
+$isFavorite = in_array((int) $product['id'], $favoriteIds ?? [], true);
 
 $productUrl = '/product/' . $product['slug'];
 $metaText   = trim(
@@ -46,6 +49,17 @@ ob_start();
                 <button class="action" type="submit" aria-label="В корзину"><i class="pe-7s-shopbag"></i></button>
             </form>
         </li>
+    <?php endif; ?>
+    <?php if (isAuthenticated()): ?>
+        <li>
+            <form method="post" action="/favorites/toggle">
+                <?= csrfField() ?>
+                <input type="hidden" name="product_id" value="<?= e((string) $product['id']) ?>">
+                <button class="action<?= $isFavorite ? ' action--active' : '' ?>" type="submit" aria-label="<?= $isFavorite ? 'Убрать из избранного' : 'В избранное' ?>"><i class="pe-7s-like"></i></button>
+            </form>
+        </li>
+    <?php else: ?>
+        <li><a class="action" href="/login" aria-label="В избранное"><i class="pe-7s-like"></i></a></li>
     <?php endif; ?>
 </ul>
 <?php

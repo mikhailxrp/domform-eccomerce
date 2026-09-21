@@ -5,6 +5,7 @@ declare(strict_types=1);
 /** @var string|null $title */
 
 require_once ROOT_PATH . '/src/Models/Category.php';
+require_once ROOT_PATH . '/src/Models/Favorite.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
 $pageTitle           = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
@@ -13,6 +14,7 @@ $userName            = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '
 $catalogCategories   = getCategoryTree();
 $currentSearchQuery  = normalizeSearchQuery((string) ($_GET['q'] ?? ''));
 $cartCount           = currentCartCount(cartOwner());
+$favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -124,6 +126,11 @@ $cartCount           = currentCartCount(cartOwner());
                             </ul>
                         </div>
 
+                        <a class="action" href="/account/favorites">
+                            <i class="pe-7s-like"></i>
+                            <span class="number"><?= e((string) $favoriteCount) ?></span>
+                        </a>
+
                         <a class="action" href="/cart">
                             <i class="pe-7s-shopbag"></i>
                             <span class="number"><?= e((string) $cartCount) ?></span>
@@ -174,6 +181,11 @@ $cartCount           = currentCartCount(cartOwner());
                                     <?php endif; ?>
                                 </ul>
                             </div>
+                            <a class="action" href="/account/favorites">
+                                <i class="pe-7s-like"></i>
+                                <span class="number"><?= e((string) $favoriteCount) ?></span>
+                            </a>
+
                             <a class="action" href="/cart">
                                 <i class="pe-7s-shopbag"></i>
                                 <span class="number"><?= e((string) $cartCount) ?></span>

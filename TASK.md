@@ -2,139 +2,115 @@
 
 ## Фаза
 Phase 7 — Кабинет покупателя и уведомления
-(`.docs/phases/phase-7.md`), Таск 5 из 9.
+(`.docs/phases/phase-7.md`), Таск 6 из 9.
 
 **Статус:** ✅ Завершён 21.09.2026 — проверено на реальной БД живым HTTP
-(`php -S` + `curl`): тестовый Покупатель (`task5-test-customer-*@example.com`)
-зарегистрирован, вошёл, добавил товар в корзину. Проверено: селект
-«Выбрать сохранённый адрес» рендерит все сохранённые адреса с
-`data-city/street/house/apartment/comment`, автоматически выбран
-основной; доставка с полным адресом + отмеченным чекбоксом →
-`orders.delivery_address` = `formatAddress()` от отправленных полей,
-новая строка в `addresses`; повторная отправка того же адреса → дубль
-не создан (сравнение по `formatAddress()`); самовывоз с пустыми полями
-адреса и отмеченным чекбоксом → `delivery_address = NULL`, адрес не
-сохранён (чекбокс игнорируется при самовывозе); доставка без города/
-улицы/дома у гостя → все три поля подсвечены с текстом ошибки, книги
-адресов и селекта в HTML у гостя нет. Тестовые Заказы, адреса, корзины
-и Покупатель удалены после проверки. `composer test` — 325/325 (было
-323, +2: длина квартиры, `saved_address_id` по умолчанию `null`).
-
-Артефакт тестирования (не код), тот же баг инструмента, что уже
-фиксировался в `dev-log.md` для Таска 4: `curl --data-urlencode` с
-кириллицей в этом Windows/Git-Bash окружении при прямой передаче даёт
-**невалидные UTF-8 байты** на сервере (не просто пустые поля, как
-казалось раньше) — `json_encode()` тихо возвращает `false` на таких
-данных, а `orders.delivery_address` обрывается на первом валидном
-фрагменте («г. » вместо полной строки), хотя ASCII-поля (дом, квартира)
-проходят нормально. Диагностировано временным логированием `$_POST`
-внутри `CheckoutController::store()` (добавлено и убрано в этом же
-прогоне, в коммит не попало). Обойдено сборкой POST-тела вручную через
-`rawurlencode()` в PHP (гарантированно валидный UTF-8) и отправкой уже
-готового тела через `curl --data-binary` — так дошли до реальной
-проверки. Сам код (`formatAddress()`, `normalizeCheckoutInput()`) при
-подаче корректных строк проверен отдельно напрямую в PHP CLI — работает
-verbatim.
+(`php -S` + `curl`): временный тестовый Покупатель
+(`task6-test-customer-*@example.com`) зарегистрирован, вошёл. Проверено:
+клик по сердцу на мини-карточке каталога → строка в `favorites`,
+иконка становится активной (`action--active`) сразу на обеих
+раскладках карточки (grid/list — карточка рендерит обе, видна одна по
+CSS) и в AJAX-partial (`X-Requested-With: fetch`, `components/catalog-grid`
+рендерится без `header.php`, `$favoriteIds` передан явно контроллером
+— подтверждает решение из плана); счётчик в шапке (обе копии) = 1;
+повторный клик → строка удалена, не ошибка дубля `UNIQUE(user_id,
+product_id)`; на Главной — 33 формы `/favorites/toggle` в блоках
+товаров, без ошибок; на странице Товара — кнопка «В избранном» с
+`action--active`, когда Товар в избранном. Несуществующий `product_id`
+→ 404; без CSRF → 419; гость на POST → редирект `/login`; redirect
+после клика вернул на `/catalog?sort=price_asc` (referer с
+query-параметрами сохранён). Тестовый Покупатель, избранное и корзина
+удалены после проверки. `composer test` — 325/325 (без изменений —
+регрессия, чистая логика без БД в этом таске не добавлялась).
 
 ## Задача
-Связка `FR-ACC-002` с чекаутом: `/checkout` при способе «Доставка»
-получает структурные поля адреса (город/улица/дом/квартира/
-комментарий) — те же, что в книге адресов — вместо свободного
-`textarea`. Авторизованный Покупатель с сохранёнными адресами видит
-селект «Выбрать сохранённый адрес» (автозаполнение полей без
-перезагрузки, при первом рендере подставлен основной адрес) и чекбокс
-«Сохранить адрес в кабинете». `orders.delivery_address` остаётся
-`TEXT`, собирается `formatAddress()` на сервере — структура Заказа не
-меняется.
+`FR-CAT-009` (иконка на мини-карточке) и первая половина `FR-ACC-003`:
+иконка-сердце на мини-карточке (каталог, поиск, похожие, блоки
+Главной), кнопка «В избранное» на карточке товара и иконка в шапке со
+счётчиком. Клик добавляет/убирает Товар, иконка отражает состояние.
+Гостю иконка ведёт на `/login`.
 
 ## Scope — что трогаем
 
-- [ ] `src/Core/Checkout.php` — изменить: `normalizeCheckoutInput()` —
-      заменить одно поле `delivery_address` на `address_city` /
-      `address_street` / `address_house` / `address_apartment` /
-      `address_comment` (+ `save_address` bool, `saved_address_id` —
-      только для повторного выбора в селекте при ошибке валидации, не
-      хранится); `validateCheckoutInput()` — переиспользует
-      `validateAddressInput()` (`Core/Address.php`) для этих 4 полей
-      при `fulfillment_method === delivery`; при самовывозе — ошибок
-      нет (поля скрыты и не проверяются, как раньше `delivery_address`)
-- [ ] `tests/Unit/CheckoutValidationTest.php` — изменить: тесты
-      `normalizeCheckoutInput()`/`validateCheckoutInput()` под новые
-      поля вместо `delivery_address`
-- [ ] `src/Controllers/CheckoutController.php` — изменить:
-  - `renderCheckoutPage()` — для авторизованного передаёт `$addresses`
-    (`getUserAddresses($user['id'])`, иначе `[]`); при первом рендере
-    (`$old === []`) подставляет структурные поля основного адреса
-    (`is_default = 1`), если он есть
-  - `store()` — собирает `delivery_address` через `formatAddress()` из
-    полей ввода при `fulfillment_method === delivery` (иначе `null`,
-    как сейчас); после успешного `createOrder()` — если
-    `save_address` и доставка и `$userId !== null`: сравнивает
-    `formatAddress()` с уже сохранёнными адресами пользователя
-    (`getUserAddresses()`), при отсутствии совпадения и не достигнутом
-    `ACCOUNT_ADDRESSES_MAX` — `createAddress()`; при достижении лимита
-    — молча не сохраняет (Заказ важнее адреса), без flash-ошибки
-- [ ] `src/Views/checkout/index.php` — изменить: блок «Адрес доставки»
-      — структурные поля вместо `textarea` (разметка по образцу
-      `account/addresses.php`: город с плейсхолдером/дефолтом
-      «Краснодар», улица, дом, квартира, комментарий); внутри того же
-      `#checkout-delivery-address` — для авторизованного с
-      `$addresses !== []` селект `data-checkout-address` (опции с
-      `data-city`/`data-street`/`data-house`/`data-apartment`/
-      `data-comment`, пустой пункт «Свой адрес») и чекбокс
-      `name="save_address"` «Сохранить адрес в кабинете»; видимость
-      всего блока при самовывозе — существующий JS
-      (`applyCheckoutFulfillmentVisibility()`), не меняется
-- [ ] `public/assets/js/app.js` — изменить: новый обработчик `change`
-      на `[data-checkout-address]` — заполняет 5 полей адреса из
-      `data-*` атрибутов выбранной опции; пустой пункт «Свой адрес»
-      поля не трогает (по аналогии с существующим
-      `initCheckoutFulfillmentToggle()`)
+- [ ] `src/Models/Favorite.php` — создать: `toggleFavorite(int $userId,
+      int $productId): bool` (вернул `true` = добавлен; `INSERT` с
+      перехватом дубля по `UNIQUE(user_id, product_id)` → `DELETE`),
+      `getFavoriteProductIds(int $userId): array`,
+      `countFavorites(int $userId): int`
+- [ ] `src/Models/Product.php` — изменить: добавить
+      `findActiveProductById(int $id): ?array` (минимальная строка,
+      только для проверки существования/активности в
+      `FavoriteController::toggle()` — `findProductById()` в проекте
+      нет, ближайшие функции — `findProductForToggle()`/
+      `findProductForAdmin()` — обе для админки, не переиспользуются)
+- [ ] `src/Controllers/FavoriteController.php` — создать: `toggle()` —
+      `requireAuth()`, `requireCsrf()`, `findActiveProductById()` или
+      404, `toggleFavorite()`, `redirectBack()` (приватный метод —
+      только путь из `HTTP_REFERER`, без хоста, по образцу
+      `CartController::redirectBack()`; фолбэк `/`, не `/catalog`)
+- [ ] `src/Controllers/HomeController.php` — изменить: `index()` —
+      `$favoriteIds = $userId !== null ? getFavoriteProductIds($userId)
+      : []`, передать в `render()`
+- [ ] `src/Controllers/CatalogController.php` — изменить:
+      `renderCatalog()` — `$favoriteIds` в `$viewData` (общий массив
+      для полной страницы и AJAX-partial `components/catalog-grid`,
+      который рендерится без `header.php`)
+- [ ] `src/Controllers/SearchController.php` — изменить: `index()` —
+      `$favoriteIds` в `render()`
+- [ ] `src/Controllers/ProductController.php` — изменить: `show()` —
+      `$favoriteIds` в `render()` (используется и для «Похожие товары»,
+      и для кнопки на самом Товаре через `in_array()`)
+- [ ] `src/Views/layout/header.php` — изменить: `$favoriteCount =
+      $isLoggedIn ? countFavorites(currentUser()['id']) : 0` (по
+      образцу `$cartCount = currentCartCount(...)` — прямое вычисление
+      в `header.php`, не через `render()`); иконка `pe-7s-like` со
+      счётчиком `.number` (обе копии шапки — десктоп и мобильная)
+- [ ] `src/Views/components/product-card.php` — изменить: третий `<li>`
+      в существующем `<ul class="product-meta">` (после иконки корзины,
+      порядок как в теме: лупа → корзина → сердце) — POST-форма
+      `/favorites/toggle` с классом `action--active` при
+      `in_array($product['id'], $favoriteIds, true)` для
+      авторизованного, `<a href="/login">` для гостя
+- [ ] `src/Views/product/show.php` — изменить: кнопка «В избранное» /
+      «В избранном» сразу после `include variant-selector.php` (не
+      внутри самого компонента — избранное на уровне Товара, а не
+      Варианта)
+- [ ] `public/assets/css/app.css` — изменить: `.product-meta
+      .action--active { color: #f2a100; }` рядом с существующим
+      правилом `.header-meta .action--active`
+- [ ] `config/routes.php` — изменить: `POST /favorites/toggle`
 
 ## Out of scope — не трогаем
 
-- Ручное создание заказа Менеджером (`AdminOrderController` /
-  `Core/ManualOrder.php` / `admin/orders/create.php`) — свой,
-  независимый `delivery_address`, книгой адресов не пользуется и не
-  трогается
-- Таски 6–9 этой же фазы (Избранное, СМС)
-- Схема `orders.delivery_address` в БД (остаётся `TEXT`) и вывод уже
-  готовой строки в `checkout/success.php` / `account/order-show.php` /
-  `admin/orders/show.php` — не меняются
-- `src/Models/Address.php`, `src/Core/Address.php`,
-  `src/Views/account/addresses.php` — переиспользуются как есть, без
-  изменений
+- Страница `/account/favorites` и перенос из корзины — Таск 7 этой же
+  фазы
+- СМС — Таски 8–9
+- `src/Views/components/variant-selector.php` — избранное не входит в
+  его зону ответственности (только Вариант/корзина)
+- `CartController::redirectBack()` — не выносится в общий хелпер
+  `functions.php`; `FavoriteController` получает свою копию того же
+  приёма (не рефакторим существующий код попутно)
+- `account-sidebar.php` — пункт «Избранное» уже добавлен в Таске 1
 
 ## Definition of Done
 
-- [x] Выбор адреса в селекте → 5 полей заполнены его данными без
-      перезагрузки; после отправки в `orders.delivery_address`
-      попадает `formatAddress()` от фактически отправленных полей
-- [x] Без JS: форма отправляется с полями основного адреса
-      (prefill при первом рендере для авторизованного) — проверено
-      статически кодом рендера (селект `selected` + `value` полей из
-      `$addressPrefill`); поведение самой отправки без JS не отличается
-      от отправки с JS на уровне сервера
-- [x] При самовывозе поля адреса, селект и чекбокс скрыты вместе
-      (регрессия `FR-SHIP-*`, существующая логика видимости —
-      `#checkout-delivery-address` не менялся как контейнер); отдельно
-      проверено, что самовывоз с непустым `save_address` не создаёт
-      адрес и не подставляет `delivery_address`
-- [x] Доставка без города/улицы/дома → эти поля подсвечены; при
-      самовывозе пустые поля — не ошибка
-- [x] Чекбокс «Сохранить адрес» → новая строка `addresses` с
-      `user_id` текущего пользователя; повторный заказ на тот же адрес
-      с отмеченным чекбоксом → дубль не создан; при самовывозе чекбокс
-      игнорируется
-- [x] `ACCOUNT_ADDRESSES_MAX` уже достигнут → заказ всё равно создан,
-      новый адрес не сохранён, ошибки оформления нет — проверено
-      статически (код `maybeSaveDeliveryAddress()` идентичен по форме
-      уже проверенной живьём в Таске 4 проверке лимита; отдельный живой
-      прогон 11-го адреса в этом таске не повторялся)
-- [x] Гостевой чекаут — регрессия: структурные поля адреса обязательны
-      при доставке как раньше `delivery_address`; книги адресов и
-      селекта в HTML нет
-- [x] `composer test` зелёный (325/325)
+- [x] Клик по сердцу → строка в `favorites`; повторный клик → строка
+      удалена (не ошибка дубля `UNIQUE(user_id, product_id)`); иконка
+      активна ровно у избранных Товаров на всех типах мини-карточки
+      (grid/list/swiper — каталог/поиск/похожие/Главная) и на странице
+      Товара
+- [x] Счётчик в шапке = число строк `favorites` текущего пользователя;
+      у гостя иконка ведёт на `/login`, счётчика нет
+- [x] На каждой странице с карточками — ровно один запрос
+      `getFavoriteProductIds()` (проверено и на обычном рендере, и на
+      AJAX-фильтре каталога — оба пути получают `$favoriteIds` явно из
+      `CatalogController::renderCatalog()`, не полагаются на `header.php`)
+- [x] Несуществующий/неактивный `product_id` → 404 без 500; 419 без
+      CSRF; гость на POST → `/login`
+- [x] Redirect после клика возвращает на ту же страницу (в т.ч. с
+      GET-параметрами каталога/поиска — проверено на `?sort=price_asc`);
+      внешний или отсутствующий referer → `/`
+- [x] `composer test` зелёный (325/325, регрессия)
 - [x] Проверить `.docs/dod-global.md`
 
 ## Важные правила

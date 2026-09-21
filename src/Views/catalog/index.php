@@ -15,6 +15,7 @@ declare(strict_types=1);
 /** @var array<int,string> $paginationLinks */
 /** @var string|null $prevUrl */
 /** @var string|null $nextUrl */
+/** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 ?>

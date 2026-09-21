@@ -21,7 +21,7 @@
 
 ## Статус
 
-🔄 В работе (Тасков 5 из 9 завершено)
+🔄 В работе (Тасков 6 из 9 завершено)
 
 ## Что уже готово (на чём строим)
 
@@ -112,7 +112,7 @@
 | 3 | Личные данные и смена пароля | ✅ Завершён |
 | 4 | Книга адресов: таблица и CRUD | ✅ Завершён |
 | 5 | Сохранённый адрес при оформлении заказа | ✅ Завершён |
-| 6 | Избранное: Model, переключение, иконки на карточках и в шапке | ⏳ Ожидает |
+| 6 | Избранное: Model, переключение, иконки на карточках и в шапке | ✅ Завершён |
 | 7 | Страница Избранного и перенос из корзины | ⏳ Ожидает |
 | 8 | СМС: тексты событий, журнал-заглушка (без хуков) | ⏳ Ожидает |
 | 9 | СМС-хуки на 5 событиях и блок «Уведомления» в Панели | ⏳ Ожидает |
@@ -484,7 +484,35 @@ HTTP, детали и найденная перед реализацией не�
 
 ## Таск 6 — Избранное: Model, переключение, иконки на карточках и в шапке
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён 21.09.2026 — проверено на реальной БД живым
+HTTP, детали и найденные перед реализацией неточности черновика ниже
+(`render()` не инжектит переменные глобально; `findProductById()` не
+существовал; `.product-action` — не мини-карточка) — `TASK.md`
+(история коммита этого таска) и `.docs/dev-log.md`. `composer test` —
+325/325 (без изменений — регрессия, задача не добавляла чистую логику
+без БД).
+
+Отклонение от черновика ниже: `$favoriteIds`/`$favoriteCount` не
+подставляются через `render()` — `render()` в этом проекте лишь
+`extract()`ит явно переданный `$data`, никакой глобальной инъекции нет.
+Реализовано так: `$favoriteCount` вычисляется прямо в `header.php` (по
+образцу уже существующего `$cartCount = currentCartCount(...)`), а
+`$favoriteIds` каждый из 4 контроллеров (`Home`/`Catalog`/`Search`/
+`ProductController`) передаёт в свой `render()` явно — обязательно,
+поскольку `CatalogController::renderCatalog()` при AJAX-фильтрации
+(`isFetchRequest()`) рендерит `components/catalog-grid` напрямую, без
+`header.php` — там `$favoriteIds` неоткуда взять, кроме как из
+`$viewData` контроллера (проверено живьём: AJAX-partial с
+`X-Requested-With: fetch` корректно отражает состояние избранного).
+`findProductById()` в проекте не существовало — добавлена
+`findActiveProductById()` в `Models/Product.php`. Разметка мини-карточки
+— `<ul class="product-meta">` (не `.product-action`, это разметка
+`cart.html`/`wishlist.html`), сердце — третьим `<li>` после лупы и
+корзины, по порядку в теме. Класс активного состояния — переиспользован
+существующий `.action--active` (уже применяется в шапке для иконки
+профиля), CSS-селектор расширен на `.product-meta`/
+`.product-favorite-form`, отдельный `product-card__favorite--active`
+не заводился.
 
 **Цель таска:**
 `FR-CAT-009` (иконка на мини-карточке) и первая половина `FR-ACC-003`:
@@ -494,47 +522,58 @@ HTTP, детали и найденная перед реализацией не�
 добавляет/убирает Товар, иконка отражает состояние. Гостю иконка ведёт
 на `/login`.
 
-**Что нужно создать/изменить:**
+**Что создано/изменено (по факту):**
 
-- `src/Models/Favorite.php` — создать: `toggleFavorite(int $userId, int
+- `src/Models/Favorite.php` — создан: `toggleFavorite(int $userId, int
   $productId): bool` (вернул `true` = добавлен; `INSERT` с перехватом
   дубля по `UNIQUE(user_id, product_id)` → `DELETE`),
   `getFavoriteProductIds(int $userId): array`, `countFavorites(int
   $userId): int`
-- `src/Controllers/FavoriteController.php` — создать: `toggle()` —
-  `requireAuth()`, `requireCsrf()`, `findProductById()`/404, redirect
-  на `HTTP_REFERER` только если он в пределах `APP_URL`, иначе на `/`
-- `src/Core/functions.php` — изменить: `render()` подставляет
-  `$favoriteIds` (один запрос) и `$favoriteCount` для авторизованного,
-  пустой массив/0 для Гостя — по образцу `$cartCount`
-- `src/Views/components/product-card.php` — изменить: `<li>` с
-  `pe-7s-like` в `.product-action` (grid и list): POST-форма
-  `/favorites/toggle` с модификатором активного состояния для
-  авторизованного, `<a href="/login">` для Гостя
-- `src/Views/product/show.php` — изменить: кнопка «В избранное» /
-  «В избранном» рядом с «В корзину»
-- `src/Views/layout/header.php` — изменить: иконка `pe-7s-like` со
-  счётчиком `.number` (обе копии шапки)
-- `public/assets/css/app.css` — изменить: активное состояние иконки
-  (`product-card__favorite--active`, BEM)
-- `config/routes.php` — изменить: `POST /favorites/toggle`
+- `src/Models/Product.php` — изменён: добавлена
+  `findActiveProductById(int $id): ?array` (`findProductById()` в
+  проекте не было)
+- `src/Controllers/FavoriteController.php` — создан: `toggle()` —
+  `requireAuth()`, `requireCsrf()`, `findActiveProductById()`/404,
+  `toggleFavorite()`, приватный `redirectBack()` (только путь из
+  `HTTP_REFERER`, по образцу `CartController::redirectBack()`; фолбэк
+  `/`, не `/catalog`)
+- `src/Controllers/HomeController.php`, `CatalogController.php`,
+  `SearchController.php`, `ProductController.php` — изменены: каждый
+  явно передаёт `$favoriteIds` в свой `render()`/`$viewData`
+- `src/Views/layout/header.php` — изменён: `$favoriteCount` вычисляется
+  напрямую (по образцу `$cartCount`); иконка `pe-7s-like` со счётчиком
+  `.number` (обе копии шапки), ссылка на `/account/favorites` (страница
+  — Таск 7, маршрута пока нет — иконка кликабельна заранее)
+- `src/Views/components/product-card.php` — изменён: третий `<li>` в
+  существующем `<ul class="product-meta">` — POST-форма
+  `/favorites/toggle` с классом `action--active` для авторизованного,
+  `<a href="/login">` для гостя
+- `src/Views/product/show.php` — изменён: кнопка «В избранное» /
+  «В избранном» сразу после `variant-selector.php`
+- `src/Views/catalog/index.php`, `components/catalog-grid.php`,
+  `home.php`, `search/index.php` — изменены: принимают `$favoriteIds`
+  (только `@var`-документация — сама переменная приходит из `render()`)
+- `public/assets/css/app.css` — изменён: `.product-meta .action--active`/
+  `.product-favorite-form .action--active` добавлены к существующему
+  правилу `.header-meta .action--active`
+- `config/routes.php` — изменён: `POST /favorites/toggle`
 
 **Definition of Done:**
 
-- [ ] Клик → строка `favorites`; повторный клик → строка удалена, не
+- [x] Клик → строка `favorites`; повторный клик → строка удалена, не
       ошибка дубля; иконка активна ровно у избранных Товаров на всех
       типах мини-карточек (grid/list, каталог/поиск/похожие/Главная) и
       на карточке товара
-- [ ] Счётчик в шапке = `SELECT COUNT(*) FROM favorites WHERE user_id`
+- [x] Счётчик в шапке = `SELECT COUNT(*) FROM favorites WHERE user_id`
       текущего; у Гостя иконка ведёт на `/login`, счётчика нет
-- [ ] Один запрос `getFavoriteProductIds()` на страницу, без N+1 по
-      карточкам
-- [ ] Несуществующий/неактивный `product_id` → 404/flash, без 500;
-      419 без CSRF; Гость на POST → `/login`
-- [ ] Redirect после клика возвращает на ту же страницу с теми же
+- [x] Один запрос `getFavoriteProductIds()` на страницу, без N+1 по
+      карточкам (в т.ч. на AJAX-partial каталога)
+- [x] Несуществующий/неактивный `product_id` → 404, без 500; 419 без
+      CSRF; Гость на POST → `/login`
+- [x] Redirect после клика возвращает на ту же страницу с теми же
       GET-параметрами каталога; внешний referer → `/`
-- [ ] `composer test` зелёный (регрессия)
-- [ ] Проверить `.docs/dod-global.md`
+- [x] `composer test` зелёный (325/325, регрессия)
+- [x] Проверить `.docs/dod-global.md`
 
 ---
 

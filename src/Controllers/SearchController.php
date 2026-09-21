@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 require_once ROOT_PATH . '/src/Models/Product.php';
+require_once ROOT_PATH . '/src/Models/Favorite.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
@@ -35,6 +36,8 @@ class SearchController
             $paginationLinks[$i] = buildPaginationUrl($path, $queryParams, $i);
         }
 
+        $user = currentUser();
+
         render('search/index', [
             'q'               => $q,
             'products'        => $products,
@@ -44,6 +47,7 @@ class SearchController
             'paginationLinks' => $paginationLinks,
             'prevUrl'         => $pagination['has_prev'] ? buildPaginationUrl($path, $queryParams, $pagination['prev_page']) : null,
             'nextUrl'         => $pagination['has_next'] ? buildPaginationUrl($path, $queryParams, $pagination['next_page']) : null,
+            'favoriteIds'     => $user !== null ? getFavoriteProductIds($user['id']) : [],
         ]);
     }
 
