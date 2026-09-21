@@ -208,6 +208,16 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+// `photo_path` добавлен позже (`ADR-046`, редизайн `/about`) — та же
+// идемпотентная проверка через information_schema, что и для
+// `categories.description` (Таск 1 Фазы 1): таблица `reviews` уже не
+// пуста на большинстве окружений.
+$columnExists->execute(['table' => 'reviews', 'column' => 'photo_path']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE reviews ADD COLUMN photo_path VARCHAR(255) NULL AFTER text;');
+}
+
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS cart_items (
         id                  INT AUTO_INCREMENT PRIMARY KEY,
@@ -638,6 +648,19 @@ $insertSetting = $pdo->prepare('INSERT IGNORE INTO settings (`key`, value) VALUE
 foreach ($settingsSeed as $setting) {
     $insertSetting->execute($setting);
 }
+
+// Галерея «О компании» (`ADR-046`) — до 4 фото, загружаются Менеджером/
+// Администратором в Панели управления; строк нет по умолчанию (секция
+// на `/about` отсутствует, пока не загружено хотя бы одно фото).
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS about_gallery_images (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        path       VARCHAR(255) NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_about_gallery_images_sort (sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
 
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");

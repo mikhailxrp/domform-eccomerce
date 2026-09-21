@@ -71,9 +71,15 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
                         <label for="setting-map-embed-url" class="form-label">Ссылка на карту (iframe Яндекс.Карт)</label>
                         <input type="text" id="setting-map-embed-url" name="map_embed_url" class="form-control <?= !empty($errors['map_embed_url']) ? 'is-invalid' : '' ?>" value="<?= e($values['map_embed_url'] ?? '') ?>" placeholder="https://yandex.ru/map-widget/v1/...">
                         <?php if (!empty($errors['map_embed_url'])): ?>
-                            <div class="invalid-feedback">Ссылка должна начинаться с https:// — оставьте поле пустым, чтобы скрыть карту.</div>
+                            <div class="invalid-feedback">Нужна ссылка на виджет Конструктора карт (содержит map-widget), не обычная ссылка «поделиться местом» — она не встраивается в iframe.</div>
                         <?php endif; ?>
-                        <div class="form-text">Пусто — карта на странице «Шоурум» не показывается.</div>
+                        <div class="form-text">
+                            Пусто — карта на странице «Шоурум» не показывается. Как получить
+                            ссылку: <a href="https://yandex.ru/map-constructor/" target="_blank" rel="noopener">Конструктор карт</a>
+                            → добавьте метку → «Готовый виджет» → скопируйте адрес из
+                            <code>src</code> готового кода (начинается с
+                            <code>https://yandex.ru/map-widget/v1/...</code>).
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary">Сохранить</button>

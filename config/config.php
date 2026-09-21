@@ -72,5 +72,17 @@ define('ACCOUNT_ADDRESSES_MAX', 10);
 // комментарий, tests/bootstrap.php не подключает config.php).
 define('UPLOAD_PRODUCTS_DIR', ROOT_PATH . '/public/uploads/products');
 
+// Галерея «О компании» (`ADR-046`) — загруженные фото интерьера/цеха,
+// та же схема каталогов, что у `UPLOAD_PRODUCTS_DIR`. Директория общая
+// с будущим редактированием фото статических страниц (Таск 6 Фазы 8,
+// `phase-8.md`) — то же имя константы, чтобы Таск 6 не переопределял
+// её заново.
+define('UPLOAD_CONTENT_DIR', ROOT_PATH . '/public/uploads/content');
+define('ABOUT_GALLERY_MAX', 4);
+
+// Фото к отзыву о магазине (`ADR-046`) — необязательное поле в форме
+// «Добавить отзыв о магазине» Панели управления.
+define('UPLOAD_REVIEWS_DIR', ROOT_PATH . '/public/uploads/reviews');
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

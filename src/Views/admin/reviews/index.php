@@ -108,7 +108,7 @@ $errors = $storeReviewErrors;
         <p class="mb-0 text-muted">Перенос отзыва из Instagram/WhatsApp (`FR-HOME-007`) — публикуется сразу, без модерации</p>
     </div>
     <div class="card-body">
-        <form method="post" action="/admin/reviews" class="row g-3">
+        <form method="post" action="/admin/reviews" class="row g-3" enctype="multipart/form-data">
             <?= csrfField() ?>
             <div class="col-md-4">
                 <label for="store-review-name" class="form-label">Имя</label>
@@ -142,6 +142,14 @@ $errors = $storeReviewErrors;
                 <?php if (!empty($errors['text'])): ?>
                     <div class="invalid-feedback">Напишите отзыв (не длиннее 2000 символов).</div>
                 <?php endif; ?>
+            </div>
+            <div class="col-md-6">
+                <label for="store-review-photo" class="form-label">Фото автора (необязательно)</label>
+                <input type="file" id="store-review-photo" name="photo" class="form-control<?= !empty($errors['photo']) ? ' is-invalid' : '' ?>" accept="image/jpeg,image/png,image/webp">
+                <?php if (!empty($errors['photo'])): ?>
+                    <div class="invalid-feedback">Только JPG, PNG или WEBP, до 5 МБ.</div>
+                <?php endif; ?>
+                <div class="form-text">Одобренный отзыв о магазине с фото может быть показан цитатой на странице «О компании».</div>
             </div>
             <div class="col-md-12">
                 <button type="submit" class="btn btn-primary">Добавить отзыв</button>

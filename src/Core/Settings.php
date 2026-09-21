@@ -50,10 +50,21 @@ function phoneToTel(string $phone): string
 }
 
 /**
+ * Обычная ссылка на Яндекс.Карты (`yandex.ru/maps/-/...`,
+ * «поделиться местом») отдаёт `X-Frame-Options`/CSP, запрещающие
+ * встраивание — в `<iframe>` она не откроется, только виджет
+ * Конструктора (`yandex.ru/map-widget/v1/...`) специально предназначен
+ * для встраивания. Проверка по подстроке, а не домену целиком — ссылка
+ * тем же способом получается и на других поддоменах Карт.
+ */
+const SETTINGS_MAP_EMBED_MARKER = 'map-widget';
+
+/**
  * Обрезает пробелы сама, по образцу `validateAddressInput()`
  * (`Core/Address.php`). `map_embed_url` — единственное необязательное
  * поле: пустая строка допускается (карта на `/showroom` тогда не
- * выводится, Таск 3), но заполненная должна быть `https://`.
+ * выводится, Таск 3), но заполненная должна быть `https://` и вести на
+ * виджет Конструктора, а не на обычную страницу Яндекс.Карт.
  */
 function validateSettingsInput(array $input): array
 {
@@ -70,6 +81,9 @@ function validateSettingsInput(array $input): array
         'shop_email'        => !validateEmail($shopEmail),
         'workshop_address'  => $workshopAddress === '' || mb_strlen($workshopAddress, 'UTF-8') > SETTINGS_ADDRESS_MAX_LENGTH,
         'work_hours'        => $workHours === '' || mb_strlen($workHours, 'UTF-8') > SETTINGS_WORK_HOURS_MAX_LENGTH,
-        'map_embed_url'     => $mapEmbedUrl !== '' && !str_starts_with($mapEmbedUrl, 'https://'),
+        'map_embed_url'     => $mapEmbedUrl !== '' && (
+            !str_starts_with($mapEmbedUrl, 'https://')
+            || !str_contains($mapEmbedUrl, SETTINGS_MAP_EMBED_MARKER)
+        ),
     ];
 }

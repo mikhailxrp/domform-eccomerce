@@ -268,6 +268,7 @@ M:N вместо 1:N: «Товар может входить в нескольк
 | rating | TINYINT NOT NULL | 1–5, как в форме |
 | text | TEXT NOT NULL | |
 | status | ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending' | новый отзыв всегда `pending` (`FR-ADM-004` правило 1); виден Покупателям только `approved` |
+| photo_path | VARCHAR(255) NULL | фото автора _(новая — `ADR-046`)_; только у отзыва о магазине, добавляется вручную в Панели при заполнении формы (Таск 5 Фазы 6); одобренный отзыв о магазине с фото показывается как цитата на `/about` |
 | created_at | TIMESTAMP DEFAULT NOW | |
 
 **Индексы:**
@@ -658,6 +659,30 @@ URL встраиваемой карты — то, что раньше лежал
 > Строки сидятся один раз значениями бывших констант `SHOP_*`
 > (`INSERT IGNORE` в `database/install.php`) — повторный запуск не
 > перетирает значение, отредактированное в Панели управления.
+
+---
+
+### `about_gallery_images` _(новая — `ADR-046`)_
+
+Декоративная галерея фото интерьера/цеха на `/about` (`FR-CNT-002`,
+внеплановый редизайн после Таска 3 Фазы 8) — до `ABOUT_GALLERY_MAX`
+(4) фото, загружаются Менеджером/Администратором в Панели управления
+(`/admin/about-gallery`).
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| path | VARCHAR(255) NOT NULL | веб-путь загруженного фото (`/uploads/content/...`) |
+| sort_order | INT NOT NULL DEFAULT 0 | порядок в галерее — присваивается по счётчику при загрузке, ручной перестановки нет |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(sort_order)` — выборка в порядке показа
+
+> Лимит в 4 строки — проверка в `AdminAboutGalleryController`
+> (`ABOUT_GALLERY_MAX`), не ограничение схемы — тот же приём, что
+> `ACCOUNT_ADDRESSES_MAX` у `addresses`. Секция на `/about` отсутствует
+> в HTML целиком, если таблица пуста (не просто скрыта CSS) — тот же
+> приём, что пустой `settings.map_embed_url` на `/showroom`.
 
 ---
 

@@ -27,7 +27,7 @@ $breadcrumbs = [['name' => $page['title']]];
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-8">
-                    <article class="content-page">
+                    <article class="information-content">
                         <?php if (!empty($page['image_path'])): ?>
                             <img src="<?= e('/' . ltrim((string) $page['image_path'], '/')) ?>" alt="<?= e($page['title']) ?>" class="img-fluid mb-4">
                         <?php endif; ?>

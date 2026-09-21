@@ -64,21 +64,99 @@ function storeProductImage(array $file): ?string
 }
 
 /**
- * `$path` — значение из `variant_images.path` (веб-путь с ведущим `/`,
- * как возвращает `storeProductImage()`). Проверка реального пути через
- * `realpath()` — защита от `..` в подделанном значении, даже если оно
- * сюда никогда не должно попасть не из БД.
+ * Фото галереи «О компании» (`about_gallery_images`, `ADR-046`) —
+ * тот же приём, что `storeProductImage()`, другой каталог
+ * (`UPLOAD_CONTENT_DIR`) и префикс веб-пути.
+ */
+function storeContentImage(array $file): ?string
+{
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    $mime    = detectUploadedMime($tmpName);
+    $ext     = uploadExtensionForMime($mime);
+
+    if ($ext === null) {
+        return null;
+    }
+
+    if (!is_dir(UPLOAD_CONTENT_DIR) && !mkdir(UPLOAD_CONTENT_DIR, 0755, true) && !is_dir(UPLOAD_CONTENT_DIR)) {
+        logError('Не удалось создать каталог для фото контента', ['dir' => UPLOAD_CONTENT_DIR]);
+        return null;
+    }
+
+    $filename    = bin2hex(random_bytes(16)) . '.' . $ext;
+    $destination = UPLOAD_CONTENT_DIR . '/' . $filename;
+
+    if (!move_uploaded_file($tmpName, $destination)) {
+        logError('Не удалось сохранить загруженное фото контента', ['destination' => $destination]);
+        return null;
+    }
+
+    return '/uploads/content/' . $filename;
+}
+
+/**
+ * Фото автора отзыва о магазине (`reviews.photo_path`, `ADR-046`) —
+ * тот же приём, что `storeProductImage()`, свой каталог
+ * (`UPLOAD_REVIEWS_DIR`).
+ */
+function storeReviewImage(array $file): ?string
+{
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    $mime    = detectUploadedMime($tmpName);
+    $ext     = uploadExtensionForMime($mime);
+
+    if ($ext === null) {
+        return null;
+    }
+
+    if (!is_dir(UPLOAD_REVIEWS_DIR) && !mkdir(UPLOAD_REVIEWS_DIR, 0755, true) && !is_dir(UPLOAD_REVIEWS_DIR)) {
+        logError('Не удалось создать каталог для фото отзывов', ['dir' => UPLOAD_REVIEWS_DIR]);
+        return null;
+    }
+
+    $filename    = bin2hex(random_bytes(16)) . '.' . $ext;
+    $destination = UPLOAD_REVIEWS_DIR . '/' . $filename;
+
+    if (!move_uploaded_file($tmpName, $destination)) {
+        logError('Не удалось сохранить загруженное фото отзыва', ['destination' => $destination]);
+        return null;
+    }
+
+    return '/uploads/reviews/' . $filename;
+}
+
+/**
+ * `$path` — веб-путь с ведущим `/`, как возвращают `storeProductImage()`/
+ * `storeContentImage()`/`storeReviewImage()`. Каждый разрешённый
+ * префикс проверяется через `realpath()` на свой каталог — защита от
+ * `..` в подделанном значении, даже если оно сюда никогда не должно
+ * попасть не из БД.
  */
 function deleteStoredFile(string $path): void
 {
     $relative = ltrim($path, '/');
-    if (!str_starts_with($relative, 'uploads/products/')) {
+
+    $allowedPrefixes = [
+        'uploads/products/' => UPLOAD_PRODUCTS_DIR,
+        'uploads/content/'  => UPLOAD_CONTENT_DIR,
+        'uploads/reviews/'  => UPLOAD_REVIEWS_DIR,
+    ];
+
+    $uploadDir = null;
+    foreach ($allowedPrefixes as $prefix => $dir) {
+        if (str_starts_with($relative, $prefix)) {
+            $uploadDir = $dir;
+            break;
+        }
+    }
+
+    if ($uploadDir === null) {
         return;
     }
 
     $filesystemPath = ROOT_PATH . '/public/' . $relative;
     $realPath       = realpath($filesystemPath);
-    $realDir        = realpath(UPLOAD_PRODUCTS_DIR);
+    $realDir        = realpath($uploadDir);
 
     if ($realPath === false || $realDir === false || !str_starts_with($realPath, $realDir)) {
         return;

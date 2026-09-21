@@ -25,6 +25,7 @@ $adminNavItems = [
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
     ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
     ['url' => '/admin/settings',      'label' => 'Настройки',   'icon' => 'bx bx-cog', 'roles' => ['admin']],
+    ['url' => '/admin/about-gallery', 'label' => 'Галерея «О компании»', 'icon' => 'bx bx-images'],
 ];
 
 // `roles` — необязательный ключ; пункт без него виден и Менеджеру, и

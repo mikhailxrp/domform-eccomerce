@@ -50,7 +50,8 @@ declare(strict_types=1);
                         <div class="footer-widget">
                             <h4 class="footer-widget-title">Информация</h4>
                             <ul class="footer-link">
-                                <li><a href="/pages/about">О компании</a></li>
+                                <li><a href="/about">О компании</a></li>
+                                <li><a href="/showroom">Шоурум</a></li>
                                 <li><a href="/pages/contacts">Контакты</a></li>
                             </ul>
                         </div>

@@ -164,19 +164,45 @@ function countPendingReviews(): int
  * (`FR-HOME-007` правило 5: перенос из Instagram/WhatsApp) —
  * `product_id IS NULL`, сразу `approved`: модератор и автор одно лицо,
  * лишний клик «одобрить» не нужен (`phase-6.md`, «Решения фазы»).
+ * `photo_path` (`ADR-046`) — необязателен, `null` если не загружали.
  */
 function createStoreReview(array $data): int
 {
     $stmt = getPdo()->prepare("
-        INSERT INTO reviews (product_id, name, email, rating, text, status)
-        VALUES (NULL, :name, :email, :rating, :text, 'approved')
+        INSERT INTO reviews (product_id, name, email, rating, text, photo_path, status)
+        VALUES (NULL, :name, :email, :rating, :text, :photo_path, 'approved')
     ");
     $stmt->execute([
-        'name'   => $data['name'],
-        'email'  => $data['email'],
-        'rating' => $data['rating'],
-        'text'   => $data['text'],
+        'name'       => $data['name'],
+        'email'      => $data['email'],
+        'rating'     => $data['rating'],
+        'text'       => $data['text'],
+        'photo_path' => $data['photo_path'] ?? null,
     ]);
 
     return (int) getPdo()->lastInsertId();
+}
+
+/**
+ * Слайдер цитат на `/about` (внеплановый редизайн, `ADR-046`) —
+ * только отзывы с фото: без него слайд не оформить как цитату (пустой
+ * круглый аватар выглядел бы как ошибка, а не как решение «фото не
+ * нужно»). `$limit` — тот же `HOME_BLOCK_LIMIT`, что у
+ * `getApprovedStoreReviews()` на Главной: одна и та же санитарная
+ * граница для отзывов о магазине, не отдельная константа ради одного
+ * блока.
+ */
+function getApprovedStoreReviewsWithPhoto(int $limit): array
+{
+    $stmt = getPdo()->prepare('
+        SELECT name, rating, text, photo_path
+        FROM reviews
+        WHERE product_id IS NULL AND status = \'approved\' AND photo_path IS NOT NULL
+        ORDER BY created_at DESC, id DESC
+        LIMIT :limit
+    ');
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
 }

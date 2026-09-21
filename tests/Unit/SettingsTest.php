@@ -115,4 +115,16 @@ final class SettingsTest extends TestCase
 
         $this->assertTrue($errors['map_embed_url']);
     }
+
+    /**
+     * Обычная ссылка «поделиться местом» (не виджет Конструктора) не
+     * встраивается в `<iframe>` — Яндекс отдаёт `X-Frame-Options`,
+     * страница показывает «Сайт yandex.ru заблокирован» вместо карты.
+     */
+    public function testPlainMapsShareLinkIsRejected(): void
+    {
+        $errors = validateSettingsInput($this->validInput(['map_embed_url' => 'https://yandex.ru/maps/-/CXEI7Fms']));
+
+        $this->assertTrue($errors['map_embed_url']);
+    }
 }
