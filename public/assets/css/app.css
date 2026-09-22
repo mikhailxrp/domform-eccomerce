@@ -711,69 +711,19 @@
     margin-bottom: 30px;
 }
 
-/* Отзывы о магазине на Главной (`FR-HOME-007`, Таск 6 Фазы 6) — макета
-   у карточки нет (`C-009`: «карточки готовит исполнитель доработки, не
-   отдельный дизайнер»), звёзды переиспользуют `.review-list__stars`
-   выше. Текст обрезается по высоте (`line-clamp`) — иначе длинный
-   отзыв растягивал карточку в 2-3 раза выше соседних; дата прижата
-   вниз (`margin-top: auto` на flex-колонке), чтобы у карточек с
-   короткими и длинными отзывами низ совпадал. */
-.store-review-card {
-    position: relative;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 28px 24px;
-    border-radius: 8px;
-    background-color: #fff;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, .07);
-    transition: box-shadow .3s ease, transform .3s ease;
-}
-
-.store-review-card:hover {
-    box-shadow: 0 10px 24px rgba(0, 0, 0, .1);
-    transform: translateY(-4px);
-}
-
-.store-review-card::before {
-    content: '\201C';
-    position: absolute;
-    top: 0;
-    right: 20px;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 64px;
-    line-height: 1;
-    color: var(--bs-primary);
-    opacity: .15;
-}
-
-.store-review-card__header {
+/* Отзывы о магазине на Главной (`FR-HOME-007`) — с 22.09.2026 тот же
+   слайдер `.testimonial-active`, что на `/about` (правка по скриншоту
+   пользователя, `dev-log.md`), карточки `.store-review-card` заменены
+   — своих правил под них больше нет. Заглушка вместо фото у отзыва
+   без `photo_path` — тот же размер/форма, что `.author-thumb` (ниже),
+   с нейтральной иконкой по центру вместо выдуманного фото. */
+.author-thumb--placeholder {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-    margin-bottom: 14px;
-}
-
-.store-review-card__name {
-    font-weight: 600;
-}
-
-.store-review-card__text {
-    margin-bottom: 16px;
-    color: #494949;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.store-review-card__date {
-    margin-top: auto;
-    padding-top: 14px;
-    border-top: 1px solid #ececec;
-    font-size: 13px;
-    color: #777;
+    justify-content: center;
+    background-color: #f2f2f2;
+    color: #a8a8a8;
+    font-size: 32px;
 }
 
 /* Блок «Бренды» на Главной, сразу после Call To Action — класс из
@@ -958,8 +908,8 @@
     gap: 12px;
 }
 
-/* Карта под карточкой реквизитов — те же скруглённые углы и тень, что
-   у карточек отзывов (`.store-review-card`), чтобы `<iframe>` не
+/* Карта под карточкой реквизитов — те же скруглённые углы и мягкая
+   тень, что у карточек в остальной админ-панели, чтобы `<iframe>` не
    выглядел вставленным как есть поверх остального контента. */
 .showroom-map {
     border-radius: 8px;

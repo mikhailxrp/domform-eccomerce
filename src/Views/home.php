@@ -319,16 +319,42 @@ include ROOT_PATH . '/src/Views/layout/header.php';
   <?php endif; ?>
 
   <?php if ($storeReviews !== []): ?>
-  <!-- Store Reviews Section Start -->
+  <!-- Store Reviews Section Start — тот же слайдер, что на `/about`
+       (`.testimonial-active`/`.swiper-container`, уже инициализирован
+       в `main.js` по этому классу, второй JS не нужен); в отличие от
+       `/about` показываются все одобренные отзывы, не только с фото —
+       у отзыва без фото вместо `<img>` нейтральная иконка-заглушка
+       (правка по скриншоту пользователя, `dev-log.md` 22.09.2026). -->
   <div class="section section-padding">
     <div class="container">
       <div class="section-title">
-        <h2 class="title">Отзывы наших покупателей</h2>
+        <h2 class="title text-center">Отзывы наших покупателей</h2>
       </div>
-      <div class="row g-4">
-        <?php foreach ($storeReviews as $review): ?>
-        <?php include ROOT_PATH . '/src/Views/components/store-review-card.php'; ?>
-        <?php endforeach; ?>
+      <div class="testimonial-wrapper testimonial-active">
+        <div class="swiper-container">
+          <div class="swiper-wrapper">
+            <?php foreach ($storeReviews as $review): ?>
+            <div class="single-testimonial swiper-slide">
+              <img class="quote" src="/assets/images/icon/quote.png" alt="">
+              <p><?= e($review['text']) ?></p>
+              <?php if ($review['photo_path'] !== null): ?>
+              <img class="author-thumb" src="<?= e($review['photo_path']) ?>" alt="<?= e($review['name']) ?>">
+              <?php else: ?>
+              <span class="author-thumb author-thumb--placeholder" aria-hidden="true"><i class="fa fa-user"></i></span>
+              <?php endif; ?>
+              <h6 class="name"><?= e($review['name']) ?></h6>
+              <span class="designation">
+                <span class="review-list__stars" aria-hidden="true">
+                  <span class="review-list__stars-fill"
+                    style="width: <?= e((string) ((int) $review['rating'] * 20)) ?>%"></span>
+                </span>
+                <span class="visually-hidden">Оценка <?= e((string) $review['rating']) ?> из 5</span>
+              </span>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <div class="swiper-pagination"></div>
+        </div>
       </div>
     </div>
   </div>

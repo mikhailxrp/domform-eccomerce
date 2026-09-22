@@ -57,11 +57,16 @@ function getApprovedProductReviews(int $productId): array
  * Блок «Отзывы о магазине» Главной (`FR-HOME-007`) — одобренные отзывы
  * с `product_id IS NULL`, ограничены `HOME_BLOCK_LIMIT`; отзывы о
  * конкретном Товаре сюда не попадают (`FR-HOME-007` правило 3).
+ * `photo_path` — `NULL` у большинства отзывов (необязательное поле,
+ * `ADR-046`); слайдер Главной показывает нейтральную иконку-заглушку
+ * вместо фото, а не скрывает отзыв (правка по скриншоту пользователя,
+ * `dev-log.md` 22.09.2026) — в отличие от `getApprovedStoreReviewsWithPhoto()`
+ * на `/about`, где фото обязательно.
  */
 function getApprovedStoreReviews(int $limit): array
 {
     $stmt = getPdo()->prepare('
-        SELECT id, name, rating, text, created_at
+        SELECT id, name, rating, text, photo_path, created_at
         FROM reviews
         WHERE product_id IS NULL AND status = \'approved\'
         ORDER BY created_at DESC, id DESC
