@@ -108,5 +108,25 @@ define('ADMIN_AI_SPECS_PER_PAGE', 20);
 define('AI_SPECS_BATCH_MAX', 5);
 define('AI_SPECS_BATCH_OVERHEAD_SECONDS', 20);
 
+// Консультант в чате (`.docs/phases/phase-9.md`, Таск 5) —
+// `AI_MAX_QUESTION_LENGTH`/`AI_CHAT_HISTORY_LIMIT` живут в
+// `src/Core/AiChat.php`, не здесь: их использует чистая логика
+// (`normalizeChatQuestion()`/`trimChatHistory()`), которую подключает
+// `tests/bootstrap.php`, а он не подключает `config.php` (по образцу
+// констант `AiSpecs.php`/`AiDescription.php`). `AI_CHAT_LOG_RETENTION_DAYS`/
+// `AI_CHAT_LOG_GC_DIVISOR` нужны только `Models/AiChatLog.php` (работа
+// с БД, юнит-тестами не покрывается) — хранение лога переписки 3
+// месяца (`NFR-AI-*`, `Q-028`) и вероятностная чистка при записи, как
+// GC сессий.
+define('AI_CHAT_LOG_RETENTION_DAYS', 90);
+define('AI_CHAT_LOG_GC_DIVISOR', 100);
+
+// Демо-лимит вопросов на один диалог Консультанта (не часть ТЗ —
+// ограничение показа для демо/портфолио-стенда, запрошено отдельно).
+// `AI_CHAT_LIMIT_ENABLED` — единственное, что нужно `AiChatController`
+// из `.env`; сам предел (`AI_CHAT_DEMO_LIMIT`) — в `src/Core/AiChat.php`,
+// рядом с проверяющей его чистой функцией `chatLimitReached()`.
+define('AI_CHAT_LIMIT_ENABLED', env('LIMIT_REQUESTS', 'false') === 'true');
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

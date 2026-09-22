@@ -87,6 +87,7 @@ return [
         '/favorites/toggle'        => ['FavoriteController', 'toggle'],
         '/favorites/remove'        => ['FavoriteController', 'remove'],
         '/cart/move-to-favorites'  => ['CartController', 'moveToFavorites'],
+        '/ai/consultant'           => ['AiChatController', 'consultant'],
         '/admin/orders'                  => ['AdminOrderController', 'store'],
         '/admin/orders/{id}/transition'  => ['AdminOrderController', 'transition'],
         '/admin/orders/{id}/prepaid'     => ['AdminOrderController', 'markPrepaid'],

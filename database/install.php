@@ -756,6 +756,25 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+// Лог переписки Консультанта/Подбора диалогом (`FR-AI-003`/`FR-AI-004`,
+// `ADR-050`, Таск 5 Фазы 9) — без FK: Покупатель может быть гостем,
+// `conversation_id` — не внешний ключ, а группировка сообщений одной
+// сессии (`bin2hex(random_bytes(16))`, как токен корзины). Хранение —
+// 3 месяца (`NFR-AI-*`), чистка вероятностная при записи, отдельного
+// cron на shared-хостинге может не быть.
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS ai_chat_logs (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        conversation_id CHAR(32) NOT NULL,
+        assistant       ENUM('consultant', 'picker') NOT NULL,
+        role            ENUM('user', 'assistant') NOT NULL,
+        message         TEXT NOT NULL,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_ai_chat_logs_conversation (conversation_id),
+        KEY idx_ai_chat_logs_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");
 

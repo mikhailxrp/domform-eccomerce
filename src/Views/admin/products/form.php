@@ -61,7 +61,7 @@ $specErrors    = $errors['specs'] ?? [];
                     <label for="product-description" class="form-label">Описание</label>
                     <textarea id="product-description" name="description" class="form-control" rows="4"><?= e($description) ?></textarea>
                 </div>
-                <?php if ($isEdit): ?>
+                <?php if ($isEdit && (string) (currentUser()['role'] ?? '') === 'admin'): ?>
                     <div class="col-12">
                         <?php if ($aiDescriptionAvailable): ?>
                             <div class="border rounded p-3" data-ai-description data-product-id="<?= e((string) $product['id']) ?>">
