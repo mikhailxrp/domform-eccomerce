@@ -642,6 +642,13 @@ $settingsSeed = [
     ['key' => 'workshop_address',  'value' => 'г. Краснодар, ул. Промышленная, 1'],
     ['key' => 'work_hours',        'value' => 'Пн–Сб, 9:00–19:00'],
     ['key' => 'map_embed_url',     'value' => ''],
+    // ИИ-помощники (`BR-AI-001` правило 5, `ADR-048`, Таск 1 Фазы 9) —
+    // месячный лимит расхода и курсы для перевода стоимости вызова в
+    // рубли. Значения — стартовые ориентиры, правятся в Панели
+    // управления Таском 8 Фазы 9 (UI ещё не существует).
+    ['key' => 'ai_monthly_limit_rub',   'value' => '5000'],
+    ['key' => 'ai_usd_rate',            'value' => '95.00'],
+    ['key' => 'ai_yandex_price_per_1k', 'value' => '1.20'],
 ];
 
 $insertSetting = $pdo->prepare('INSERT IGNORE INTO settings (`key`, value) VALUES (:key, :value)');
@@ -675,6 +682,66 @@ $pdo->exec("
         created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         processed_at DATETIME NULL,
         KEY idx_callback_requests_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+// Журнал вызовов ИИ (`BR-AI-001` правило 5, `ADR-048`, Таск 1 Фазы 9) —
+// без FK: помощник и Товар/Заказ, к которым относится вызов, здесь не
+// нужны (расход считается по классу задачи и помощнику в целом, не по
+// конкретной сущности). `cost_rub` — уже переведённая в рубли
+// стоимость (`Models/AiUsage.php::logAiRequest()`), провайдеры её сами
+// не считают.
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS ai_requests (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        provider    VARCHAR(30) NOT NULL,
+        task_class  VARCHAR(20) NOT NULL,
+        assistant   VARCHAR(30) NOT NULL,
+        tokens_in   INT NOT NULL DEFAULT 0,
+        tokens_out  INT NOT NULL DEFAULT 0,
+        cost_rub    DECIMAL(10, 4) NOT NULL DEFAULT 0,
+        status      ENUM('ok', 'error') NOT NULL,
+        error       VARCHAR(255) NULL,
+        duration_ms INT NOT NULL DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_ai_requests_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
+// `products.specs_status` — очередь «требует разбора» / «характеристики
+// подтверждены» (`FR-AI-001` правило 4, `FR-AI-004` правило 1, `ADR-049`,
+// Таск 2 Фазы 9) — та же идемпотентная проверка через information_schema,
+// что и для `categories.description` (Таск 1 Фазы 1): таблица `products`
+// уже не пуста на большинстве окружений.
+$columnExists->execute(['table' => 'products', 'column' => 'specs_status']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec("ALTER TABLE products ADD COLUMN specs_status ENUM('pending', 'confirmed') NOT NULL DEFAULT 'pending' AFTER is_featured;");
+}
+
+$indexExists->execute(['table' => 'products', 'index_name' => 'idx_products_specs_status']);
+
+if ((int) $indexExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE products ADD INDEX idx_products_specs_status (specs_status);');
+}
+
+// Предложения разбора характеристик (`FR-AI-001`, `ADR-049`, Таск 2
+// Фазы 9) — до подтверждения Администратором (Таск 3) ничего не попадает
+// в `product_specs`/`product_variants`; строки этой таблицы одноразовые,
+// каждый новый разбор Товара полностью заменяет прежний набор
+// (`replaceSpecSuggestions()`), поэтому колонки `updated_at` нет.
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS ai_spec_suggestions (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        target     ENUM('spec', 'variant_material', 'variant_mechanism', 'color') NOT NULL,
+        name       VARCHAR(100) NOT NULL,
+        value      VARCHAR(255) NOT NULL,
+        status     ENUM('ok', 'needs_decision') NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_ai_spec_suggestions_product (product_id),
+        CONSTRAINT fk_ai_spec_suggestions_product
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 

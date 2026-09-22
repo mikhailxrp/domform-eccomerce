@@ -140,6 +140,7 @@ shared-хостинге разлогинивает раньше, чем ожид
 | description | TEXT NULL | |
 | is_active | TINYINT(1) NOT NULL DEFAULT 1 | товар не удаляют физически, а деактивируют |
 | is_featured | TINYINT(1) NOT NULL DEFAULT 0 | ручная отметка «хит продаж» Менеджером/Администратором для блока Главной (`FR-HOME-004`) — не расчёт по продажам (ТЗ прямо: отдельного справочника продаж нет, раздел 10.1); по аналогии с `product_variants.is_showroom_sample`. Колонки не было в схеме, найдено ревью перед `phase-init` (`ADR-024`, `Q-DEV-010`) |
+| specs_status | ENUM('pending','confirmed') NOT NULL DEFAULT 'pending' | очередь разбора характеристик ИИ (`FR-AI-001` правило 4, `ADR-049`, Таск 2 Фазы 9) — `pending` до подтверждения Администратором хотя бы одного предложения (или ручного подтверждения без ИИ), `confirmed` — допуск в подбор Товара диалогом (`FR-AI-004` правило 1) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
@@ -152,6 +153,9 @@ shared-хостинге разлогинивает раньше, чем ожид
   идёт через join с `product_categories`, см. ниже)
 - `INDEX(is_featured)` — отбор блока «Хиты продаж» Главной (`FR-HOME-004`),
   тот же паттерн, что `INDEX(is_showroom_sample)` у `product_variants`
+- `INDEX(specs_status)` — очередь «требует разбора» в Панели управления
+  (`/admin/ai/specs`, Таск 2 Фазы 9) и фильтр допуска в подбор диалогом
+  (`FR-AI-004`)
 - `FULLTEXT(name, description)` — поиск; `LIKE '%...%'` не использует индекс
 
 ---
@@ -707,6 +711,62 @@ URL встраиваемой карты — то, что раньше лежал
 
 **Индексы:** `INDEX(status)` — фильтр списка заявок по умолчанию
 (`new`) в Панели управления
+
+---
+
+### `ai_requests` _(новая — `ADR-048`)_
+
+Журнал каждого вызова ИИ (`BR-AI-001` правило 5, Таск 1 Фазы 9) —
+без него не посчитать месячный расход по классам задач/помощникам
+(`/admin/ai`, Таск 8). Без FK на `products`/`orders` — расход
+считается по помощнику/классу в целом, не по конкретной сущности,
+к которой относился вызов.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| provider | VARCHAR(30) NOT NULL | `openrouter` / `yandexgpt` — кто фактически ответил на этот вызов |
+| task_class | VARCHAR(20) NOT NULL | `anonymous` / `user_input` — класс задачи по `BR-AI-001`, не помощник |
+| assistant | VARCHAR(30) NOT NULL | `specs` / `description` / `consultant` / `picker` — какой помощник вызвал `aiComplete()` |
+| tokens_in | INT NOT NULL DEFAULT 0 | токены запроса, как отдал провайдер |
+| tokens_out | INT NOT NULL DEFAULT 0 | токены ответа |
+| cost_rub | DECIMAL(10,4) NOT NULL DEFAULT 0 | уже переведённая в рубли стоимость — `Models/AiUsage.php::logAiRequest()` считает её из `usage.cost` (OpenRouter, USD × курс) или из токенов (YandexGPT × цена за 1000); провайдеры сами стоимость в рублях не знают |
+| status | ENUM('ok','error') NOT NULL | `error` — таймаут, сетевой сбой, невалидный ключ или пустой ответ; помощник в этом случае отключается, покупка не блокируется (`AC-06`) |
+| error | VARCHAR(255) NULL | текст ошибки (обрезан), только при `status='error'` |
+| duration_ms | INT NOT NULL DEFAULT 0 | время вызова провайдера — для проверки `NFR-AI-*` (≤10 секунд на ответ консультанта) |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(created_at)` — расход считается за календарный
+месяц (`getAiSpendForMonth()`)
+
+> Модель никогда не пишет в эту (и любую другую) таблицу напрямую —
+> `AiProvider::complete()` (`src/Services/Ai/*`) не получает `PDO`/
+> DB-credentials, только текст переписки. Строку журнала формирует и
+> вставляет `Models/AiUsage.php` на основе сырых токенов/стоимости,
+> которые вернул провайдер (`phase-9.md`, «Решения фазы»).
+
+---
+
+### `ai_spec_suggestions` _(новая — `ADR-049`)_
+
+Предложения разбора характеристик (`FR-AI-001`, Таск 2 Фазы 9) — до
+подтверждения Администратором (Таск 3) ничего не попадает в
+`product_specs`/`product_variants`. Каждый новый разбор Товара
+полностью заменяет прежний набор (`replaceSpecSuggestions()`), поэтому
+`updated_at` не нужен — строка либо свежая, либо уже удалена.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| product_id | INT NOT NULL, FK → products.id, ON DELETE CASCADE | |
+| target | ENUM('spec','variant_material','variant_mechanism','color') NOT NULL | куда попадёт значение при подтверждении: `spec` — строка `product_specs` (размер, форма и подобное, свободное название в `name`); `variant_material`/`variant_mechanism` — поле выбранного Администратором Варианта (`ADR-004`: материал/механизм принадлежат Варианту, не Товару); `color` — только подсказка, автоматически никуда не пишется (цвет — атрибут фото Варианта, `ADR-006`) |
+| name | VARCHAR(100) NOT NULL | для `target='spec'` — название характеристики, как показать Покупателю («Ширина»); для остальных целей — фиксированная подпись («Материал», «Механизм раскладки», «Цвет»), не то, что прислала модель — единообразие в экране ревью (Таск 3) |
+| value | VARCHAR(255) NOT NULL | предложенное значение |
+| status | ENUM('ok','needs_decision') NOT NULL | `needs_decision` — значение вне списка, уже встречавшегося в каталоге в тех же Категориях (`FR-AI-001` правило 3); применяется только к `variant_material`/`variant_mechanism`/`color` — у `target='spec'` закрытого словаря по Категории нет (размер и подобное не перечислимы), поэтому он всегда `ok` (`ADR-049`) |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(product_id)` — все предложения одного Товара для
+экрана ревью
 
 ---
 

@@ -1,119 +1,164 @@
 # Current Task
 
 ## Фаза
-Phase 8 — Админ-панель (контент и доступ) и статические страницы
-(`.docs/phases/phase-8.md`), Таск 8 из 8 (последний таск фазы).
+Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 2 из 8.
 
-**Статус:** ✅ Завершён 22.09.2026 — проверено на реальной БД живым
-HTTP (`php -S` + `curl`), тремя временными пользователями ролей
-`admin`/`manager`/`customer` (удалены после проверки, включая их
-`remember_tokens`): `admin` → 200 на `/admin/users` со списком и
-формой; `manager` → редирект на `/admin`, в сайдбаре нет пунктов
-«Сотрудники»/«Настройки»; `customer` → редирект `/account`; Гость →
-`/login`; POST без CSRF → 419. Создание Менеджера через форму →
-строка появилась в списке; дубликат email / пароль короче 8 / роль вне
-`STAFF_ROLES` — поля подсвечены, в БД лишних строк нет (проверено
-отдельным запросом). Блокировка собственной учётки → flash-отказ,
-`is_blocked` не изменился. Блокировка другого Менеджера →
-`is_blocked=1`, его `remember_tokens` удалены: новый вход с тем же
-паролем → общий `AUTH_ERROR` (причина не раскрывается); чистая сессия
-с одним только старым `remember_token`-cookie (после удаления токена
-из БД) → редирект на `/login`, не авто-вход; уже открытая до блокировки
-сессия не обрывается принудительно — осознанно вне скоупа (правило 3
-`FR-ADM-007` про «следующую попытку входа»). «Заблокировать»
-несуществующего id и id Покупателя (`role='customer'`, не
-`manager`/`admin`) → одинаковый flash «не найден» — `setUserBlocked()`
-ограничена `role IN ('manager','admin')` прямо в SQL, Покупателя через
-этот маршрут заблокировать нельзя, даже подставив его id. Разблокировка
-возвращает доступ (подтверждено повторным логином). `storage/logs/
-app.log` — без новых ошибок (только ожидаемый `WARNING` о неудачной
-попытке входа заблокированного тестового Менеджера). `composer test`
-— 408/408 (+13 `StaffFormTest`). Реализовано по плану ниже без
-отклонений.
+**Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной
+БД (`php -S` + `curl`), реальным вызовом Claude через OpenRouter (не
+моком). Ролевой доступ: `admin` → 200 на `/admin/ai/specs`; временный
+`manager` (создан и удалён после проверки, включая `remember_tokens`)
+→ редирект `/admin`, пункта «ИИ-помощники» в сайдбаре нет; Гость →
+`/login`. Реальный разбор на живом Товаре (описание временно
+проставлено на существующий Товар и возвращено в `NULL` после
+проверки): «Угловой диван раскладной, механизм еврокнижка. Обивка —
+вельвет тёмно-синий. Ширина 320 см, глубина 180 см.» → 6 предложений
+(`variant_material`/`variant_mechanism`/`color` — все `needs_decision`,
+верно: этих значений не было в каталоге категории; 3× `spec` — `Форма`/
+`Ширина`/`Глубина` — все `ok`, спецификация без словаря по конструкции
+`ADR-049`). Второй такой же товар без упоминания размера в описании →
+предложение только по материалу (совпало со словарём → `ok`) и одна
+`spec`-характеристика из текста; поля «размер» нет вовсе — не пустое
+значение (правило 2). Повторный запуск того же Товара — новые 5 строк
+вместо старых 6 (замена, не накопление, `SELECT` до/после). На
+протяжении обеих проверок `products.description`, `product_specs`
+(4 предпосуществующие строки Товара) и `product_variants` не
+изменились ни на байт (`SELECT` до/после). Ключ класса `specs`
+временно затёрт в `.env` (после — восстановлен, сверено `diff`):
+кнопка «Разобрать» пропала из HTML, алерт «недоступно» показан, прямой
+POST на `/admin/ai/specs/run` в обход UI не создал ни одной строки в
+`ai_spec_suggestions` (проверка на уровне сервера, не только UI). POST
+без CSRF → 419. `php database/install.php` дважды подряд —
+`products.specs_status`/её индекс/таблица `ai_spec_suggestions` без
+дублей; 34 существующих Товара получили `specs_status='pending'`.
+`composer test` — 454/454 (+25 `AiSpecsTest`). Все временные данные
+(описания тестовых Товаров, тестовые предложения, тестовый Менеджер)
+удалены после проверки. Реализовано по плану ниже без отклонений в
+scope; уточнены детали `normalizeSpecSuggestions()` (словарная проверка
+`needs_decision` только для `variant_material`/`variant_mechanism`/
+`color`, не для `spec`) — см. `ADR-049`.
 
 ## Задача
-`FR-ADM-007` п. 1–3 — `/admin/users` только для `admin`: список
-пользователей с ролями `manager`/`admin` (имя, email, телефон, роль,
-дата, бейдж «Заблокирован»); форма создания (имя, email, пароль ≥ 8,
-роль, телефон необязателен); «Заблокировать» / «Разблокировать». Себя
-заблокировать нельзя. Менеджер раздел не видит и не открывает.
+Разбор характеристик Товара (`FR-AI-001` правила 1, 2, 5, 6):
+`/admin/ai/specs` показывает очередь Товаров со `specs_status='pending'`,
+Администратор отмечает несколько чекбоксами и запускает разбор
+**пакетом**. Предложения (материал/механизм/цвет/произвольная
+характеристика) сохраняются в новую таблицу `ai_spec_suggestions` со
+статусом `ok`/`needs_decision` (значение вне известных в каталоге).
+Ничего не пишется в карточку Товара — `product_specs`/
+`product_variants`/`description` не меняются. Экран подтверждения —
+следующий таск.
 
 ## Что проверено в коде перед планом
-- `src/Models/User.php` — уже есть `findUserByEmail()`,
-  `findUserById()`, `createUser()` (паттерн перехвата дубликата email
-  через `errorInfo[1] === 1062` → `null`), `updateUserPasswordHash()` —
-  новые функции добавлены рядом по тому же стилю.
-- `src/Core/functions.php:231` — `requireRole(array $roles)` готов.
-- `src/Core/Validation.php` — `normalizePhone()`, `validatePassword()`
-  готовы, переиспользованы как есть.
-- `src/Models/RememberToken.php:50` — `deleteRememberTokens(int
-  $userId)` готов.
-- `src/Views/layout/admin-header.php` — `$adminNavItems` уже
-  поддерживает необязательный ключ `roles` (фильтрация по
-  `currentUser()['role']`), пункт «Настройки» — готовый образец
-  `roles => ['admin']`.
-- `config/routes.php` — секции GET/POST уже содержат
-  `/admin/content*`, `/admin/settings` как образец для новых
-  `/admin/users*` маршрутов.
-- `src/Controllers/AdminSettingController.php` — образец
-  admin-only контроллера (`requireRole(['admin'])` во всех методах).
+- `src/Models/Product.php::findProductForAdmin()` уже отдаёт Товар с
+  `description`, `category_ids`, Вариантами, `specs` — переиспользуется
+  для сборки промпта и подсчёта известных значений, отдельную
+  fetch-функцию под это не заводим.
+- `src/Models/Product.php::syncProductSpecs()`/`getProductSpecs()` —
+  образец «удалить все строки Товара → вставить заново», тот же приём
+  для `replaceSpecSuggestions()`.
+- `database/install.php` — идемпотентные `$columnExists`/`$indexExists`
+  (`information_schema.COLUMNS`/`STATISTICS`) уже объявлены один раз и
+  переиспользуются по всему файлу (`ADR-031`/`ADR-037`) — для
+  `products.specs_status` и её индекса используем те же переменные, не
+  заводим новые `->prepare()`.
+- `src/Models/Product.php::getAdminProducts()`/`countAdminProducts()` —
+  образец пагинированного списка с фильтром для
+  `getProductsForSpecsQueue()`/`countProductsForSpecsQueue()`.
+- `src/Views/layout/admin-header.php` — `$adminNavItems` с ключом
+  `roles => ['admin']` (готовый образец — «Сотрудники», «Настройки»);
+  новый пункт «ИИ-помощники» добавляется тем же способом.
+- `config/routes.php` — секции GET/POST плоские, без вложенности;
+  `/admin/ai/specs` и `/admin/ai/specs/run` встают рядом с
+  `/admin/reviews`-подобными маршрутами.
+- `src/Services/Ai/ai.php::aiComplete('specs', $messages)` (Таск 1) —
+  уже возвращает `null` при недоступном классе без исключений, ядро
+  не дорабатывается.
+- `src/Controllers/AdminReviewController::index()` — образец
+  `requireRole()` + пагинация + `render()` с `paginationLinks`.
+- `config/config.php` пока не содержит `ADMIN_AI_SPECS_PER_PAGE`/
+  `AI_SPECS_BATCH_MAX` — добавляются этим таском.
 
-## Scope — что трогали
-- [x] `src/Core/StaffForm.php` — создан: `STAFF_ROLES`,
-      `validateStaffInput(array): array`
-- [x] `tests/Unit/StaffFormTest.php` — создан (13 тестов)
-- [x] `tests/bootstrap.php` — подключён `Core/StaffForm.php`
-- [x] `src/Models/User.php` — добавлены `getStaffUsers()`,
-      `createStaffUser()`, `setUserBlocked()` (ограничена
-      `role IN ('manager','admin')` в SQL — сверх исходного плана,
-      защита от блокировки Покупателя по id)
-- [x] `src/Controllers/AdminUserController.php` — создан: `index()`,
-      `store()`, `block()`, `unblock()`
-- [x] `src/Views/admin/users/index.php` — создан: таблица сотрудников
-      + форма создания на одной странице
-- [x] `src/Views/layout/admin-header.php` — пункт «Сотрудники» с
-      `roles => ['admin']`
-- [x] `config/routes.php` — маршруты `/admin/users*`
-- [x] `.docs/dev-log.md`, `.docs/phases/phase-8.md` — запись по итогам
-      таска
+## Scope — что трогаем
+- [ ] `database/install.php` — изменить: `products.specs_status
+      ENUM('pending','confirmed') NOT NULL DEFAULT 'pending'` +
+      `INDEX(specs_status)` (идемпотентно, через уже существующие
+      `$columnExists`/`$indexExists`); новая таблица
+      `ai_spec_suggestions` (`product_id` FK CASCADE, `target
+      ENUM('spec','variant_material','variant_mechanism','color')`,
+      `name VARCHAR(100)`, `value VARCHAR(255)`,
+      `status ENUM('ok','needs_decision')`, `created_at`,
+      `INDEX(product_id)`)
+- [ ] `.docs/database.md` — изменить: разделы `products.specs_status` и
+      `ai_spec_suggestions`
+- [ ] `.docs/planning-log.md` — изменить: ADR-049 (справочник известных
+      значений из существующих данных каталога, цели предложений,
+      `specs_status`)
+- [ ] `src/Core/AiSpecs.php` — создать, чистые функции:
+      `buildSpecsPrompt(array $product, array $knownValues): array`,
+      `normalizeSpecSuggestions(array $decoded, array $knownValues):
+      array` (отбрасывает пустые значения, режет длину, помечает
+      `needs_decision` для значений вне известных, схлопывает дубли)
+- [ ] `src/Models/AiSpec.php` — создать:
+      `getProductsForSpecsQueue(string $status, int $page, int
+      $perPage): array`, `countProductsForSpecsQueue(string $status):
+      int`, `getKnownSpecValues(array $categoryIds): array` (`DISTINCT`
+      по `product_specs`, `product_variants.material`/
+      `mechanism_type`, `variant_images.color`),
+      `replaceSpecSuggestions(int $productId, array $rows): void`
+      (транзакция)
+- [ ] `src/Controllers/AdminAiSpecController.php` — создать: `index()`
+      (очередь + пагинация), `run()` (POST, `requireCsrf()`, до
+      `AI_SPECS_BATCH_MAX` Товаров за раз, по Товару — `aiComplete()`,
+      неответившие пропускаются с flash «разобрано N из M»), оба —
+      `requireRole(['admin'])`
+- [ ] `src/Views/admin/ai/specs/index.php` — создать: список Товаров
+      (чекбоксы, статус, число предложений), кнопка «Разобрать
+      выбранные»; при недоступном классе — алерт вместо кнопки
+- [ ] `src/Views/layout/admin-header.php` — изменить: пункт
+      «ИИ-помощники» с `roles => ['admin']`
+- [ ] `config/routes.php` — изменить: `GET /admin/ai/specs`,
+      `POST /admin/ai/specs/run`
+- [ ] `config/config.php` — изменить: `ADMIN_AI_SPECS_PER_PAGE`,
+      `AI_SPECS_BATCH_MAX`
+- [ ] `tests/Unit/AiSpecsTest.php` — создать: юнит-тесты
+      `normalizeSpecSuggestions()`; `tests/bootstrap.php` — изменить:
+      подключить `src/Core/AiSpecs.php`
 
-## Out of scope — не трогали
-- Смена роли/пароля другого сотрудника Администратором
-- Принудительное завершение активной сессии при блокировке (только
-  `deleteRememberTokens()`)
-- Редактирование профиля Покупателей — не входит в список
-  `/admin/users`
-- `editprofile.html` из макетов — не использован, только
-  `userlist.html` (список + создание)
-- Закрытие фазы (`_status.md`, `tz-coverage.md`, `planning-log.md`,
-  `admin-assembly.md`) — не тронуты, это Таск 8 и был последним в
-  Фазе 8, но её формальное закрытие — отдельный шаг
+## Out of scope — не трогаем
+- Экран подтверждения предложений, запись в `product_specs`/
+  `product_variants`, установка `specs_status='confirmed'` — Таск 3
+- Бейдж/ссылка на форме Товара (`src/Views/admin/products/form.php`) —
+  Таск 3
+- Генератор описания, консультант, подбор товара, бюджет/лимит —
+  Таски 4–8
+- Любые изменения в `src/Services/Ai/*` и `src/Core/Ai.php` — ядро
+  Таска 1 используется как есть, не рефакторится
 
 ## Definition of Done
-- [x] Созданный Менеджер входит по выданным email/паролю и видит
-      Панель без пунктов «Сотрудники»/«Настройки»; `/admin/users` и
-      `/admin/settings` под ним → редирект на `/admin`
-- [x] Заблокированный Менеджер: вход → общее сообщение ошибки; remember-
-      cookie не восстанавливает сессию, его строки `remember_tokens`
-      удалены при блокировке; «Разблокировать» возвращает доступ
-- [x] Блокировка собственной учётки → flash-отказ, `is_blocked` не
-      изменился
-- [x] Дубликат email / пароль < 8 / роль вне `STAFF_ROLES` —
-      подсветка полей, строки в БД нет; телефон пустой — допускается
-- [x] `manager`/`customer` на `/admin/users` → редирект; Гость →
-      `/login`; POST без CSRF → 419
-- [x] Покупатели (`role='customer'`) в списке `/admin/users` не
-      показываются
-- [x] `composer test` зелёный (408/408, новые тесты
-      `validateStaffInput()`)
-- [x] Проверить `.docs/dod-global.md`
-- [x] Все тестовые учётные записи, созданные при ручной проверке,
-      удалены после проверки
+- [ ] Описание реального Товара «диван раскладной, обивка — рогожка
+      бежевая» → в `ai_spec_suggestions` появились предложения по
+      механизму и цвету (проверено `SELECT` на реальной БД)
+- [ ] Описание без размера → строки «размер» нет вовсе (не пустое
+      значение), Товар не помечен ошибочным
+- [ ] Значение вне `getKnownSpecValues()` → `status='needs_decision'`
+      (юнит-тест `normalizeSpecSuggestions()` + проверка на живом
+      разборе)
+- [ ] `products.description`, `product_specs`, `product_variants` не
+      изменились после разбора (`SELECT` до и после)
+- [ ] Повторный разбор того же Товара заменяет прежние предложения, не
+      дублирует их
+- [ ] Класс `specs` недоступен (ключ снят) → кнопка «Разобрать» не
+      активна/алерт, очередь по-прежнему открывается, характеристики
+      вводятся вручную в форме Товара
+- [ ] POST `/admin/ai/specs/run` без CSRF → 419; `manager` на
+      `/admin/ai/specs` → редирект на `/admin`, пункта в сайдбаре нет
+- [ ] `php database/install.php` дважды подряд — без дублей колонки
+      `specs_status`/индекса/таблицы `ai_spec_suggestions`
+- [ ] `composer test` зелёный
+- [ ] Проверить `.docs/dod-global.md`
 
 ## Важные правила
 - Следовать `CLAUDE.md`
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
-- Каждый шаг проверялся тем, что указано в DoD: доступ/блокировка/
-  CSRF — живым HTTP на реальной БД, чистая логика — `composer test`

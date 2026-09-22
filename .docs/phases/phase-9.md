@@ -24,7 +24,7 @@
 
 ## Статус
 
-⏳ Ожидает
+🔄 В работе
 
 ## Что уже готово (на чём строим)
 
@@ -83,6 +83,28 @@
   `aiClassAvailable()` возвращает `false`, помощник показывает
   «недоступно» (`AC-06`). Поэтому фазу можно вести и проверять, имея
   настроенным один ключ из двух.
+- **Модель никогда не имеет доступа к БД — ни на чтение, ни на
+  запись.** Это архитектурная гарантия интерфейса, а не соглашение
+  между разработчиками: `AiProvider::complete()` (Таск 1) принимает
+  только массив сообщений (текст) и не получает `PDO`/DB-credentials
+  ни при вызове, ни через конструктор — файлы `src/Services/Ai/*`
+  не подключают `Core/Database.php` и не могут физически выполнить
+  SQL. Все данные, которые попадают в промпт, заранее выбирает наш
+  собственный код через обычные `SELECT`-функции Model (`Таск 2` —
+  `getKnownSpecValues()`, `Таск 5` — чтение `content_pages`, `Таск 7`
+  — `getConfirmedProductsForAi()`) — модель их только читает как текст,
+  повлиять на сам запрос не может. Запись результата ИИ в БД идёт
+  только через отдельные, специально написанные Model-функции с
+  проверкой/подтверждением (`applySpecSuggestions()` — только после
+  явного ревью Администратором, Таск 3; `extractPickedSlugs()` —
+  каждый slug сверяется с БД перед показом, Таск 7; `ai_chat_logs`
+  пишет наш контроллер, а не модель, Таск 5) — модель никогда не
+  выполняет запись сама, максимум её текст становится входом для уже
+  существующей, проверяемой цепочки записи. Отдельный read-only
+  MySQL-пользователь для этого не заводится — на shared-хостинге это
+  дополнительный ручной шаг в панели хостинга, а границу и так держит
+  сам интерфейс `AiProvider`, у которого просто нет параметра для
+  подключения к БД.
 - **Стоимость считается по-разному у двух провайдеров, наружу отдаётся
   одинаково.** OpenRouter возвращает в ответе `usage.cost` —
   фактическую стоимость запроса в USD (своя таблица тарифов не нужна),
@@ -139,7 +161,7 @@
   slug проверяется по БД; несуществующий отбрасывается, карточки
   рендерятся из данных БД, а не из текста модели (`FR-AI-004`
   правило 2). Формат ответа модели — JSON, разбор через
-  `decodeAiJson()` с юнит-тестами на мусор, обрамление ```` ```json ````
+  `decodeAiJson()` с юнит-тестами на мусор, обрамление ` ```json `
   и пустой ответ.
 - **Лог переписки — 3 месяца** (`NFR-AI-*`, `Q-028`): чистка
   вероятностная при записи (1 к `AI_CHAT_LOG_GC_DIVISOR`, как GC
@@ -156,16 +178,16 @@
 
 ## Таски
 
-| # | Название | Статус |
-|---|----------|--------|
-| 1 | Ядро ИИ: провайдеры по классу задачи, вызов с таймаутом, журнал `ai_requests` | ⏳ Ожидает |
-| 2 | Разбор характеристик: схема, очередь «требует разбора», пакетный запуск | ⏳ Ожидает |
-| 3 | Ревью и подтверждение предложений, статус «характеристики подтверждены» | ⏳ Ожидает |
-| 4 | Генератор черновика описания Товара | ⏳ Ожидает |
-| 5 | Консультант в чате: промпт из `content_pages`, endpoint, лог 3 месяца | ⏳ Ожидает |
-| 6 | Виджет чата на витрине и предупреждение о личных данных | ⏳ Ожидает |
-| 7 | Подбор Товара диалогом | ⏳ Ожидает |
-| 8 | Расход, месячный лимит, ручное отключение + приёмка `AC-06`/`NFR-AI-*` | ⏳ Ожидает |
+| #   | Название                                                                      | Статус      |
+| --- | ----------------------------------------------------------------------------- | ----------- |
+| 1   | Ядро ИИ: провайдеры по классу задачи, вызов с таймаутом, журнал `ai_requests` | ✅ Завершён |
+| 2   | Разбор характеристик: схема, очередь «требует разбора», пакетный запуск       | ✅ Завершён |
+| 3   | Ревью и подтверждение предложений, статус «характеристики подтверждены»       | ⏳ Ожидает  |
+| 4   | Генератор черновика описания Товара                                           | ⏳ Ожидает  |
+| 5   | Консультант в чате: промпт из `content_pages`, endpoint, лог 3 месяца         | ⏳ Ожидает  |
+| 6   | Виджет чата на витрине и предупреждение о личных данных                       | ⏳ Ожидает  |
+| 7   | Подбор Товара диалогом                                                        | ⏳ Ожидает  |
+| 8   | Расход, месячный лимит, ручное отключение + приёмка `AC-06`/`NFR-AI-*`        | ⏳ Ожидает  |
 
 Порядок по зависимостям: ядро → помощники Панели (они наполняют
 подтверждённые характеристики, без которых подбор пуст — «Порядок
@@ -175,7 +197,8 @@
 
 ## Таск 1 — Ядро ИИ: провайдеры по классу задачи, вызов с таймаутом, журнал `ai_requests`
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён 22.09.2026 — подробности проверки в `TASK.md`
+и `.docs/dev-log.md`.
 
 **Цель таска:**
 Появляется единственная точка вызова модели —
@@ -188,6 +211,7 @@
 проверяется временным CLI-скриптом.
 
 **Что нужно создать/изменить:**
+
 - `database/install.php` — изменить: таблица `ai_requests`
   (`provider VARCHAR(30)`, `task_class VARCHAR(20)`,
   `assistant VARCHAR(30)`, `tokens_in INT`, `tokens_out INT`,
@@ -203,7 +227,7 @@
   `AI_CLASS_ANONYMOUS`/`AI_CLASS_USER_INPUT`, `AI_ASSISTANTS`
   (`specs`/`description`/`consultant`/`picker` → класс),
   `aiClassForAssistant()`, `decodeAiJson(string): ?array` (снимает
-  ```` ``` ````-обрамление, отсекает мусор),
+  ` ``` `-обрамление, отсекает мусор),
   `costRubFromUsd(float $usd, string $rate): string` и
   `costRubFromTokens(int $in, int $out, string $pricePer1k): string`
   (`bcmath`, как `discountedPrice()` в `Core/Price.php` — деньги не
@@ -237,6 +261,7 @@
   `AI_YANDEX_KEY`, `AI_YANDEX_FOLDER_ID`, `AI_YANDEX_MODEL`
 
 **Definition of Done:**
+
 - [ ] Временный CLI-скрипт: реальный вызов каждого настроенного
       провайдера возвращает текст; в `ai_requests` появилась строка с
       ненулевыми `tokens_in`/`tokens_out`, `cost_rub > 0` и заполненным
@@ -247,7 +272,7 @@
       `status='error'`, исключение наружу не вышло
 - [ ] Ключ класса не задан → `aiClassAvailable()` = `false`,
       `aiComplete()` = `null`, HTTP-запрос не отправлялся
-- [ ] `decodeAiJson()`: чистый JSON, JSON в ```` ```json ````, текст
+- [ ] `decodeAiJson()`: чистый JSON, JSON в ` ```json `, текст
       без JSON, пустая строка — юнит-тесты; расчёт рублей из USD и из
       токенов — юнит-тесты (`bcmath`, без `float`)
 - [ ] Ключи и секреты только в `.env` — ни в репозитории, ни в БД
@@ -258,7 +283,8 @@
 
 ## Таск 2 — Разбор характеристик: схема, очередь «требует разбора», пакетный запуск
 
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ Завершён 22.09.2026 — подробности проверки в `TASK.md` и
+`.docs/dev-log.md`.
 
 **Цель таска:**
 `FR-AI-001` правила 1, 2, 5, 6: Администратор открывает
@@ -269,11 +295,12 @@
 не меняется. Экран подтверждения — следующий таск.
 
 **Что нужно создать/изменить:**
+
 - `database/install.php` — изменить: `products.specs_status
-  ENUM('pending','confirmed') NOT NULL DEFAULT 'pending'` +
+ENUM('pending','confirmed') NOT NULL DEFAULT 'pending'` +
   `INDEX(specs_status)`; таблица `ai_spec_suggestions`
   (`product_id` FK CASCADE, `target ENUM('spec','variant_material',
-  'variant_mechanism','color')`, `name VARCHAR(100)`,
+'variant_mechanism','color')`, `name VARCHAR(100)`,
   `value VARCHAR(255)`, `status ENUM('ok','needs_decision')`,
   `created_at`, `INDEX(product_id)`); добавление колонки и индекса —
   идемпотентно через `information_schema` (приём `ADR-031`/`ADR-037`);
@@ -291,7 +318,7 @@
   `getKnownSpecValues(array $categoryIds): array` (`DISTINCT` по
   `product_specs`, `product_variants.material`/`mechanism_type`,
   `variant_images.color`), `replaceSpecSuggestions(int $productId,
-  array $rows): void` (транзакция: удалить прежние предложения Товара,
+array $rows): void` (транзакция: удалить прежние предложения Товара,
   вставить новые)
 - `src/Controllers/AdminAiSpecController.php` — создать: `index()`
   (очередь + пагинация), `run()` (POST, `requireCsrf()`, до
@@ -309,6 +336,7 @@
   подключить
 
 **Definition of Done:**
+
 - [ ] Описание «диван раскладной, обивка — рогожка бежевая» → в
       `ai_spec_suggestions` появились предложения по механизму и цвету
       (проверено `SELECT` на реальной БД)
@@ -346,19 +374,20 @@
 ИИ.
 
 **Что нужно создать/изменить:**
+
 - `src/Core/AiSpecs.php` — изменить: `validateSpecReviewInput(array):
-  array` — принятое `needs_decision` без правки значения не проходит;
+array` — принятое `needs_decision` без правки значения не проходит;
   цель `variant_*` требует выбранного `variant_id`; пустое значение
   принять нельзя
 - `src/Models/AiSpec.php` — изменить: `applySpecSuggestions(int
-  $productId, array $accepted): bool` — одна транзакция: `INSERT` в
+$productId, array $accepted): bool` — одна транзакция: `INSERT` в
   `product_specs` без дублей по `name`, `UPDATE product_variants`,
   `UPDATE products SET specs_status='confirmed'`, удаление обработанных
   предложений; `setProductSpecsStatus(int $productId, string $status)`
 - `src/Controllers/AdminAiSpecController.php` — изменить:
   `review(string $id)`, `apply(string $id)` (POST, `requireCsrf()` →
   при ошибке прямой рендер с `$old`/`$errors`, при успехе `redirect()`
-  + flash), `confirmManually(string $id)`
+  - flash), `confirmManually(string $id)`
 - `src/Views/admin/ai/specs/review.php` — создать: таблица предложений
   (цель, название, значение, бейдж «требует решения»), поле правки,
   выбор Варианта для `variant_*`, кнопки «Применить»/«Отклонить»/
@@ -370,6 +399,7 @@
 - `tests/Unit/AiSpecsTest.php` — изменить
 
 **Definition of Done:**
+
 - [ ] Принято 2 предложения из 3 → в `product_specs` ровно 2 новые
       строки, отклонённого нет нигде, `specs_status='confirmed'`
       (проверено `SELECT`)
@@ -403,8 +433,9 @@
 создание и сохранение Товара не блокируются.
 
 **Что нужно создать/изменить:**
+
 - `database/install.php` — изменить: `products.description_draft TEXT
-  NULL` (идемпотентно); `.docs/database.md`
+NULL` (идемпотентно); `.docs/database.md`
 - `src/Core/AiDescription.php` — создать, чистые:
   `validateDescriptionBrief(array): array` (в промпт попадает только
   то, что ввёл Администратор — правило 3),
@@ -416,7 +447,7 @@
   `requireCsrf()`, JSON-ответ `{draft|unavailable|error}`,
   `tooManyAttempts('ai_description', …)`
 - `src/Models/Product.php` — изменить: `saveDescriptionDraft(int
-  $productId, string $draft): void`
+$productId, string $draft): void`
 - `src/Views/admin/products/form.php` — изменить: блок «Краткие
   данные», кнопка, поле черновика, «Применить к описанию»
 - `public/assets/js/admin.js` — изменить: `fetch` на endpoint,
@@ -427,6 +458,7 @@
   подключить
 
 **Definition of Done:**
+
 - [ ] Краткие данные → черновик в отдельном поле;
       `products.description` в БД не изменился (`SELECT` до и после)
 - [ ] «Применить к описанию» + сохранение формы → описание Товара
@@ -457,6 +489,7 @@
 Виджета ещё нет — проверяется `curl`'ом.
 
 **Что нужно создать/изменить:**
+
 - `database/install.php` — изменить: таблица `ai_chat_logs`
   (`conversation_id CHAR(32)`, `assistant ENUM('consultant','picker')`,
   `role ENUM('user','assistant')`, `message TEXT`, `created_at`,
@@ -481,6 +514,7 @@
   подключить
 
 **Definition of Done:**
+
 - [ ] `curl` с вопросом про сроки доставки → ответ по тексту страницы
       `delivery-payment`, без даты конкретного Заказа
 - [ ] Вопрос про гарантийный ремонт купленного дивана и вопрос про цвет
@@ -515,6 +549,7 @@
 Заказа проходит без ошибок.
 
 **Что нужно создать/изменить:**
+
 - `src/Views/components/ai-chat.php` — создать: разметка виджета в
   стиле темы, семантические теги, `aria-*` на кнопке открытия и области
   сообщений, предупреждение о личных данных
@@ -530,6 +565,7 @@
   CSRF-токеном для JS-запросов
 
 **Definition of Done:**
+
 - [ ] Виджет есть на Главной, в Каталоге, на карточке, в корзине и на
       `/checkout`; в Панели управления его нет
 - [ ] Диалог из 3 сообщений работает; ответ модели выводится как текст
@@ -561,6 +597,7 @@
 найдено → пустое состояние со ссылкой на каталог и на Менеджера.
 
 **Что нужно создать/изменить:**
+
 - `src/Core/AiPicker.php` — создать, чистые:
   `buildPickerPrompt(array $catalog, string $query): array`,
   `extractPickedSlugs(?array $decoded, int $limit): array` — только
@@ -587,6 +624,7 @@
   подключить
 
 **Definition of Done:**
+
 - [ ] «Диван в бежевых тонах, не больше 200 см» → 2–3 реальные карточки
       со ссылками на `/product/{slug}`, цены совпадают с каталогом
       (включая скидочные)
@@ -623,15 +661,16 @@
 Финальная сквозная приёмка фазы и закрытие `Q-DEV-005`.
 
 **Что нужно создать/изменить:**
+
 - `src/Core/Ai.php` — изменить: `AI_SETTING_KEYS`
   (`ai_monthly_limit_rub`, `ai_usd_rate`, `ai_yandex_price_per_1k`,
   `ai_specs_enabled`, `ai_description_enabled`, `ai_consultant_enabled`,
   `ai_picker_enabled`), `validateAiSettingsInput(array): array`,
   `aiAssistantEnabled(string): bool` (тумблер гасит помощника так же,
   как отсутствие ключа), `isAiLimitExceeded(string $spend,
-  string $limit): bool`
+string $limit): bool`
 - `src/Models/Setting.php` — изменить: `updateSettings(array $values,
-  array $allowed = SETTING_KEYS)` — форма «Настройки» вызывает как
+array $allowed = SETTING_KEYS)` — форма «Настройки» вызывает как
   раньше, `/admin/ai` передаёт `AI_SETTING_KEYS`; чужие ключи ни одна
   из форм не трогает
 - `src/Models/AiUsage.php` — изменить: разбивка расхода по классам и
@@ -655,6 +694,7 @@
   `.docs/database.md` (сверка с `database/install.php`)
 
 **Definition of Done:**
+
 - [ ] Расход за месяц на `/admin/ai` совпадает с `SUM(cost_rub)` из
       `ai_requests` за тот же период (сверено `SELECT`), разбивка по
       классам и помощникам сходится в сумме

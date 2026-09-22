@@ -29,6 +29,7 @@ $adminNavItems = [
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
     ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
+    ['url' => '/admin/ai/specs',      'label' => 'ИИ-помощники', 'icon' => 'bx bx-bot', 'roles' => ['admin']],
     ['url' => '/admin/users',         'label' => 'Сотрудники',  'icon' => 'bx bx-user-check', 'roles' => ['admin']],
     ['url' => '/admin/settings',      'label' => 'Настройки',   'icon' => 'bx bx-cog', 'roles' => ['admin']],
     ['url' => '/admin/about-gallery', 'label' => 'Галерея «О компании»', 'icon' => 'bx bx-images'],

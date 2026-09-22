@@ -87,5 +87,19 @@ define('ABOUT_GALLERY_MAX', 4);
 // «Добавить отзыв о магазине» Панели управления.
 define('UPLOAD_REVIEWS_DIR', ROOT_PATH . '/public/uploads/reviews');
 
+// ИИ-помощники (`.docs/phases/phase-9.md`, Таск 1) — таймаут одного
+// HTTP-вызова к провайдеру. Ответ консультанта нужен Покупателю за
+// ≤10 секунд (`NFR-AI-*`) — 15 секунд оставляют запас на сеть, не
+// превращая зависший провайдер в долгое ожидание для пользователя.
+define('AI_TIMEOUT_SECONDS', 15);
+
+// Панель управления — очередь разбора характеристик (`.docs/phases/phase-9.md`,
+// Таск 2). `AI_SPECS_BATCH_MAX` — небольшой пакет: несколько
+// последовательных блокирующих вызовов провайдера в одном POST-запросе
+// рискуют упереться в `max_execution_time` shared-хостинга при большем
+// числе Товаров.
+define('ADMIN_AI_SPECS_PER_PAGE', 20);
+define('AI_SPECS_BATCH_MAX', 5);
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';
