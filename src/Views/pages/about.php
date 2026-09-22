@@ -100,7 +100,7 @@ $galleryColumnClasses = ['col-lg-8', 'col-lg-4', 'col-lg-6', 'col-lg-6'];
         </div>
         <div class="col-lg-3 col-6">
           <div class="single-counter">
-            <span class="count"><span class="odometer" data-count-to="18"></span><sub>мес.</sub></span>
+            <span class="count"><span class="odometer" data-count-to="24"></span><sub>мес.</sub></span>
             <p>Гарантия на мебель</p>
           </div>
         </div>
@@ -126,19 +126,19 @@ $galleryColumnClasses = ['col-lg-8', 'col-lg-4', 'col-lg-6', 'col-lg-6'];
         <div class="swiper-container">
           <div class="swiper-wrapper">
             <?php foreach ($testimonials as $testimonial): ?>
-              <div class="single-testimonial swiper-slide">
-                <img class="quote" src="/assets/images/icon/quote.png" alt="">
-                <p><?= e($testimonial['text']) ?></p>
-                <img class="author-thumb" src="<?= e($testimonial['photo_path']) ?>" alt="<?= e($testimonial['name']) ?>">
-                <h6 class="name"><?= e($testimonial['name']) ?></h6>
-                <span class="designation">
-                  <span class="review-list__stars" aria-hidden="true">
-                    <span class="review-list__stars-fill"
-                      style="width: <?= e((string) ((int) $testimonial['rating'] * 20)) ?>%"></span>
-                  </span>
-                  <span class="visually-hidden">Оценка <?= e((string) $testimonial['rating']) ?> из 5</span>
+            <div class="single-testimonial swiper-slide">
+              <img class="quote" src="/assets/images/icon/quote.png" alt="">
+              <p><?= e($testimonial['text']) ?></p>
+              <img class="author-thumb" src="<?= e($testimonial['photo_path']) ?>" alt="<?= e($testimonial['name']) ?>">
+              <h6 class="name"><?= e($testimonial['name']) ?></h6>
+              <span class="designation">
+                <span class="review-list__stars" aria-hidden="true">
+                  <span class="review-list__stars-fill"
+                    style="width: <?= e((string) ((int) $testimonial['rating'] * 20)) ?>%"></span>
                 </span>
-              </div>
+                <span class="visually-hidden">Оценка <?= e((string) $testimonial['rating']) ?> из 5</span>
+              </span>
+            </div>
             <?php endforeach; ?>
           </div>
           <div class="swiper-pagination"></div>
