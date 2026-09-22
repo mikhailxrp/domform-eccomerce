@@ -1,163 +1,128 @@
 # Current Task
 
 ## Фаза
-Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 3 из 8.
-
-**Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной
-БД (`php -S` + `curl`), реальными предложениями от Claude через
-OpenRouter. Ролевой доступ на `/admin/ai/specs/{id}` и на форме Товара:
-`admin` → 200, видит бейдж статуса и ссылку «Разбор ИИ»; временный
-`manager` (создан и удалён после проверки) → редирект `/admin` на
-экране ревью, на форме Товара видит бейдж, но без ссылки; Гость →
-`/login`; несуществующий Товар → 404. Полный цикл на реальном Товаре
-(6 предложений от реального разбора): принятие `variant_material` со
-статусом `needs_decision` без правки значения → отклонено, в БД ничего
-не изменилось, страница отрендерена повторно с ошибкой (не редирект);
-подмена чужого `variant_id` (999) → отклонено тем же путём; принятие
-того же предложения с правкой значения + Вариантом → применено ровно к
-выбранному Варианту, второй Вариант Товара не тронут, `specs_status`
-→ `confirmed`, все предложения Товара удалены. Повторное применение
-`spec`-характеристики с тем же названием, но другим значением →
-заменило старую строку `product_specs`, не задвоило (`SELECT`
-до/после, было/стало 5 строк, не 6). «Подтвердить вручную» на Товаре
-без единого предложения → `specs_status='confirmed'`. Новая
-характеристика подтверждена видна на витрине (`/product/{slug}`) без
-единой правки `ProductController`/`product/show.php`, как и
-предполагалось на этапе планирования. POST `apply`/`confirm` без CSRF
-→ 419 на обоих. `composer test` — 464/464 (+10 `AiSpecsTest` на
-`validateSpecReviewInput()`). Все временные данные (описание/статус/
-материал тестового Товара, тестовый Менеджер, тестовые предложения)
-возвращены в исходное состояние после проверки — сверено `SELECT`.
-
-**Найдено по ходу проверки (не исправлено — вне scope этого таска):**
-при разборе одного Товара через `run()` (Таск 2) реальный вызов
-OpenRouter один раз подошёл близко к `AI_TIMEOUT_SECONDS` (15 c), и
-общего бюджета `set_time_limit(1 × (15 + 5) = 20 c)` не хватило —
-`Fatal: Maximum execution time of 20 seconds exceeded` в
-`replaceSpecSuggestions()` (запись предложений на удалённую БД Beget
-добавляет сетевую задержку, которой формула не закладывает запас).
-Стоит расширить буфер в `AdminAiSpecController::run()` отдельным
-изменением — не входит в файлы Таска 3.
+Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 4 из 8.
 
 ## Задача
-Экран ревью предложений (`FR-AI-001` правила 3–5): на
-`/admin/ai/specs/{id}` Администратор видит предложения конкретного
-Товара, принимает/правит/отклоняет каждое. Принятые пишутся в
-`product_specs` (цель `spec`) и в выбранный Вариант (цели
-`variant_material`/`variant_mechanism`); `color` — только подсказка,
-никогда не применяется автоматически (решение зафиксировано в Таске 1
-«Решения фазы» — цвет остаётся атрибутом фото Варианта, `ADR-006`).
-После обработки — `specs_status='confirmed'`, это и есть допуск в
-подбор Товара диалогом (`FR-AI-004`). Тот же статус можно поставить
-вручную, без единого предложения (ИИ выключен или ничего не
-предложено).
+`FR-AI-002`: на форме редактирования Товара Администратор вводит краткие
+данные (категория, материал, размер, механизм) и нажимает
+«Сгенерировать черновик» — черновик приходит через JSON-эндпоинт,
+показывается в отдельном поле и сохраняется в
+`products.description_draft`; опубликованное `description` не меняется,
+пока Администратор не нажмёт «Применить к описанию» и не сохранит форму
+штатным сабмитом. Провайдер недоступен → кнопки нет, алерт вместо неё;
+создание и сохранение Товара не блокируются. Кнопка не показывается на
+`/admin/products/create` — только на форме уже сохранённого Товара (id
+нужен для эндпоинта).
 
 ## Что проверено в коде перед планом
-- `src/Controllers/AdminAiSpecController.php` (Таск 2) уже содержит
-  `index()`/`run()` — `review()`/`apply()`/`confirmManually()`
-  добавляются рядом, тем же классом.
-- `src/Models/AiSpec.php` (Таск 2) уже содержит `getKnownSpecValues()`,
-  `replaceSpecSuggestions()`, `findProductForSpecsRun()` — для ревью
-  нужна новая выборка одного Товара с его предложениями и Вариантами.
-- `src/Models/Product.php::findProductForAdmin()` **не выбирает
-  `specs_status`**, при этом именно её результат
-  `AdminProductController::edit()` передаёт во view как `$product` без
-  изменений (`renderForm()`). Без этой колонки бейдж на форме Товара
-  показать нечем — добавляем `specs_status` в существующий `SELECT`
-  (1 колонка, по образцу уже там присутствующих `is_active`/
-  `is_featured`); сам `AdminProductController.php` трогать не нужно —
-  он передаёт `$product` как есть.
-- `src/Models/Product.php::getAllProductVariants()` — готовая выборка
-  Вариантов Товара (`id`, `sku`, `material`, `mechanism_type`...) для
-  выпадающего списка «применить к какому Варианту».
-- `src/Views/product/show.php` + `ProductController.php::show()` уже
-  читают `getProductSpecs()` и рендерят вкладку «Характеристики» —
-  новые строки `product_specs` появятся на витрине без единой правки
-  этих файлов.
-- `src/Core/Router.php::matchRoute()` — первое совпадение по порядку
-  объявления, регэксп разной длины сегментов не пересекается:
-  `/admin/ai/specs/{id}` (GET) и `/admin/ai/specs/{id}/apply`,
-  `/admin/ai/specs/{id}/confirm` (POST) не конфликтуют друг с другом и
-  с уже существующим `/admin/ai/specs/run`.
-- `src/Views/admin/products/form.php` — карточка «Характеристики»
-  (строка ~113) и заголовок `<h4>` (строка ~30) — готовые точки
-  вставки бейджа/ссылки; `$isEdit`/`$product['id']` уже доступны в
-  шаблоне.
-- `AI_SPEC_TARGET_LABELS`/`AI_SPEC_TARGETS` (`Core/AiSpecs.php`,
-  Таск 2) переиспользуются для подписи целей в экране ревью.
+- `src/Models/Product.php::findProductForAdmin()` (строка 843) выбирает
+  `id, name, slug, description, is_active, is_featured, specs_status` —
+  `description_draft` нужно добавить в этот же `SELECT`, иначе
+  сохранённый черновик не переживёт перезагрузку страницы.
+- `AdminProductController::renderForm()` — приватный метод, вызывается
+  из `create()/store()/edit()/update()`; в `create()`/`store()`
+  `$product === null`, поэтому кнопка генерации там не рендерится сама
+  собой без явной проверки `$isEdit` во view.
+- `src/Controllers/SearchController.php::suggest()` — образец JSON-
+  эндпоинта: `Content-Type: application/json`, `tooManyAttempts()` +
+  `hitRateLimit()`, `http_response_code(429)`, `JSON_UNESCAPED_UNICODE`.
+- `src/Controllers/AdminAiSpecController.php::run()` — образец вызова
+  модели: `aiComplete('description', $messages)` возвращает
+  `['text','tokens_in','tokens_out']` или `null`; `null` уже покрывает
+  недоступность класса, сетевую ошибку и таймаут — `aiComplete()`
+  сам пишет `ai_requests`/`logError()`, контроллеру повторно логировать
+  не нужно.
+- Отдельного meta-тега с CSRF-токеном в `layout/header.php` нет — форма
+  `#product-form` уже содержит скрытый `_csrf` через `csrfField()`; JS
+  читает токен оттуда же (`document.querySelector('#product-form
+  input[name="_csrf"]')`), `layout/header.php` трогать не нужно.
+- `src/Views/admin/ai/specs/index.php` (Таск 2) — образец UI-приёма при
+  недоступном классе: кнопка не рендерится вовсе (алерт вместо неё), не
+  просто `disabled` — тот же приём переносится сюда.
+- `database/install.php` (строки 711–726) — готовый идемпотентный
+  паттерн добавления колонки через `information_schema` (на примере
+  `products.specs_status`); `description_draft` добавляется тем же
+  способом.
+- `public/assets/js/admin.js` — уже содержит несколько независимых IIFE
+  на `admin`-специфичные блоки формы Товара (variant-row, spec-row) —
+  новый блок генерации описания добавляется рядом, отдельным IIFE, без
+  своих глобальных переменных.
 
 ## Scope — что трогаем
-- [ ] `src/Models/Product.php` — изменить: `specs_status` добавлен в
-      `SELECT` внутри `findProductForAdmin()` (1 колонка, без прочих
-      изменений)
-- [ ] `src/Core/AiSpecs.php` — изменить: `validateSpecReviewInput(array
-      $suggestions, array $input): array` — `needs_decision` без
-      правки значения не проходит; цель `variant_*` требует
-      выбранного `variant_id`, принадлежащего этому Товару; `color` не
-      принимает форму «применить» вовсе (только показ); пустое
-      значение отклоняется
-- [ ] `src/Models/AiSpec.php` — изменить:
-      `getSpecSuggestionsForProduct(int $productId): array`,
-      `findProductForSpecsReview(int $id): ?array` (продукт +
-      предложения + Варианты); `applySpecSuggestions(int $productId,
-      array $accepted): void` (одна транзакция: dedup-`INSERT`/
-      `UPDATE` в `product_specs` по `name`, `UPDATE product_variants`
-      только для `variant_id`, принадлежащего Товару, `UPDATE products
-      SET specs_status='confirmed'`, `DELETE` всех предложений Товара
-      после обработки); `setProductSpecsStatus(int $productId, string
-      $status): void`
-- [ ] `src/Controllers/AdminAiSpecController.php` — изменить:
-      `review(string $id)` (`requireRole(['admin'])`), `apply(string
-      $id)` (POST, `requireCsrf()` → ошибка — прямой рендер `review` с
-      `$old`/`$errors`, успех — `redirect()` + flash),
-      `confirmManually(string $id)` (POST, `requireCsrf()`)
-- [ ] `src/Views/admin/ai/specs/review.php` — создать: таблица
-      предложений (цель, название, значение — редактируемое поле,
-      бейдж «требует решения», выбор Варианта для `variant_*`, `color`
-      — только текст), кнопки «Применить»/«Подтвердить вручную»
-- [ ] `src/Views/admin/products/form.php` — изменить: бейдж статуса
-      характеристик у заголовка + ссылка на `/admin/ai/specs/{id}` в
-      карточке «Характеристики», видна только `admin`
-      (`currentUser()['role']`)
-- [ ] `config/routes.php` — изменить: `GET /admin/ai/specs/{id}`,
-      `POST /admin/ai/specs/{id}/apply`,
-      `POST /admin/ai/specs/{id}/confirm`
-- [ ] `tests/Unit/AiSpecsTest.php` — изменить: тесты на
-      `validateSpecReviewInput()`
+- [ ] `database/install.php` — изменить: `products.description_draft
+      TEXT NULL`, идемпотентно через `information_schema` (по образцу
+      `specs_status`)
+- [ ] `.docs/database.md` — изменить: колонка `description_draft` в
+      разделе таблицы `products`
+- [ ] `src/Core/AiDescription.php` — создать, чистые функции:
+      `validateDescriptionBrief(array $input): array` (категория/
+      материал/размер/механизм — `trim`, лимит длины, пустые поля
+      отбрасываются, не подставляются), `buildDescriptionPrompt(array
+      $brief): array`, `normalizeDraft(string $text): string` (обрезка
+      длины, снятие markdown-обрамления, `trim`)
+- [ ] `src/Models/Product.php` — изменить: `description_draft`
+      добавлен в `SELECT` внутри `findProductForAdmin()`;
+      `saveDescriptionDraft(int $productId, string $draft): void` —
+      новая функция
+- [ ] `src/Controllers/AdminProductController.php` — изменить:
+      подключить `Core/Ai.php`, `Core/AiDescription.php`,
+      `Services/Ai/ai.php`; `generateDescription(string $id)` —
+      `requireRole(['admin'])`, `requireCsrf()`,
+      `tooManyAttempts('ai_description', 10, 60)`/`hitRateLimit()`,
+      JSON-ответ `{draft}` / `{unavailable: true}` / `{error}`;
+      `renderForm()` — передаёт `aiDescriptionAvailable`
+      (`aiClassAvailable(aiClassForAssistant('description'))`) во view
+- [ ] `src/Views/admin/products/form.php` — изменить: блок «Краткие
+      данные для описания» (категория/материал/размер/механизм),
+      кнопка «Сгенерировать черновик», поле черновика, кнопка
+      «Применить к описанию» — видны только когда `$isEdit &&
+      $aiDescriptionAvailable`; при `$isEdit` и недоступном классе —
+      алерт вместо кнопки; на create ничего из этого не рендерится
+- [ ] `public/assets/js/admin.js` — изменить: новый IIFE — `fetch` на
+      `/admin/products/{id}/ai-description` с `_csrf` из формы,
+      состояние «генерируется», рендер черновика, «Применить» копирует
+      текст в `#product-description`, обработка `unavailable`/429/сети
+- [ ] `config/routes.php` — изменить: `POST
+      /admin/products/{id}/ai-description`
+- [ ] `tests/Unit/AiDescriptionTest.php` — создать: тесты на
+      `validateDescriptionBrief()` (пустые поля отбрасываются, лишнее
+      не подставляется) и `normalizeDraft()` (обрезка длины, снятие
+      markdown, пустая строка)
+- [ ] `tests/bootstrap.php` — изменить: подключить
+      `src/Core/AiDescription.php`
 
 ## Out of scope — не трогаем
-- Генератор описания, консультант, подбор товара, бюджет/лимит —
-  Таски 4–8
-- `src/Controllers/AdminProductController.php` — не меняется, уже
-  передаёт `$product` из `findProductForAdmin()` как есть
-- `src/Views/product/show.php`, `ProductController.php` — не меняются,
-  уже рендерят `product_specs`
-- Автоматическая запись `color` куда-либо — остаётся информационной по
-  решению Таска 1
-- Список очереди `/admin/ai/specs` и пакетный запуск (`index()`/
-  `run()`) — не рефакторятся, используются как есть
+- Консультант в чате, подбор товара диалогом, бюджет/лимит — Таски 5–8
+- Кнопка/эндпоинт генерации на `/admin/products/create` — не делаем,
+  показывается только на уже сохранённом Товаре
+- `product_specs`, `specs_status`, экран `/admin/ai/specs/*` — из
+  Тасков 2–3, не трогаются
+- Основной сабмит формы Товара (`store()`/`update()`,
+  `collectRawInput()`, `updateProductWithVariants()`) — черновик не
+  идёт через обычное сохранение формы, применяется отдельной
+  JS-кнопкой, которая лишь копирует текст в поле «Описание»
+- Автогенерация черновика при смене полей без явного нажатия кнопки
+- `src/Views/layout/header.php` — CSRF уже доступен через `#product-form`
 
 ## Definition of Done
-- [ ] Принято 2 предложения из 3 на реальном Товаре → в `product_specs`
-      ровно 2 новые/обновлённые строки без дублей по `name`,
-      отклонённого предложения нет нигде, `specs_status='confirmed'`
-      (`SELECT`)
-- [ ] Предложение `variant_material` применено к выбранному Варианту →
-      изменился именно он, другие Варианты того же Товара не тронуты
-- [ ] `needs_decision` без правки значения принять нельзя — поле
-      подсвечено, в БД ничего не записано
-- [ ] Попытка применить `variant_id`, не принадлежащий этому Товару
-      (подделанный POST) → отклонено, ничего не изменено
-- [ ] Повторное применение уже обработанного набора не создаёт дублей
-      в `product_specs`
-- [ ] «Подтвердить вручную» без единого предложения (ИИ выключен) →
-      `specs_status='confirmed'`, Товар уходит из очереди «требует
-      разбора»
-- [ ] Карточка Товара на витрине показывает новые характеристики без
-      правок `ProductController`/`product/show.php` — только за счёт
-      `product_specs`
-- [ ] POST без CSRF → 419; `manager` на `/admin/ai/specs/{id}` →
-      редирект `/admin`
+- [ ] Краткие данные → черновик появляется в отдельном поле;
+      `products.description` в БД не изменился (`SELECT` до и после)
+- [ ] `products.description_draft` в БД после генерации соответствует
+      показанному тексту (`SELECT`)
+- [ ] «Применить к описанию» + сохранение формы → `products.description`
+      обновился, изменение видно на витрине (`/product/{slug}`)
+- [ ] Три генерации подряд на разных кратких данных: в черновике нет
+      характеристик, которых не было во введённых данных (ручная
+      проверка, правило 3 `FR-AI-002`)
+- [ ] Провайдер выключен (ключ снят) → кнопки и блока «Краткие данные»
+      нет, алерт вместо них; создание и сохранение Товара проходят как
+      обычно, описание вводится вручную
+- [ ] `manager` не видит блок «Краткие данные»/кнопку на форме Товара;
+      прямой POST от `manager` на
+      `/admin/products/{id}/ai-description` → отказ, `description_draft`
+      не создан
+- [ ] POST без CSRF → 419; частые повторные нажатия → 429 после лимита
 - [ ] `composer test` зелёный
 - [ ] Проверить `.docs/dod-global.md`
 

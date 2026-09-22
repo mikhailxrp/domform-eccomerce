@@ -119,6 +119,7 @@ return [
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}'          => ['AdminProductController', 'updateImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}/remove'   => ['AdminProductController', 'deleteImage'],
         '/admin/products/{productId}/variants/{variantId}/images/{imageId}/main'     => ['AdminProductController', 'setMainImage'],
+        '/admin/products/{id}/ai-description' => ['AdminProductController', 'generateDescription'],
         '/admin/sales-channels'         => ['AdminSalesChannelController', 'update'],
         '/admin/integrations'           => ['AdminIntegrationController', 'update'],
         '/admin/ai/specs/run'           => ['AdminAiSpecController', 'run'],

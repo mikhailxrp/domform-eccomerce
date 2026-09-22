@@ -725,6 +725,17 @@ if ((int) $indexExists->fetchColumn() === 0) {
     $pdo->exec('ALTER TABLE products ADD INDEX idx_products_specs_status (specs_status);');
 }
 
+// `products.description_draft` — черновик описания от ИИ (`FR-AI-002`,
+// Таск 4 Фазы 9): пока Администратор не нажмёт «Применить к описанию»,
+// `description` не меняется. Без индекса — читается только по одному
+// `id` на форме Товара, в выборках каталога/поиска не участвует. Та же
+// идемпотентная проверка через information_schema, что и `specs_status`.
+$columnExists->execute(['table' => 'products', 'column' => 'description_draft']);
+
+if ((int) $columnExists->fetchColumn() === 0) {
+    $pdo->exec('ALTER TABLE products ADD COLUMN description_draft TEXT NULL AFTER description;');
+}
+
 // Предложения разбора характеристик (`FR-AI-001`, `ADR-049`, Таск 2
 // Фазы 9) — до подтверждения Администратором (Таск 3) ничего не попадает
 // в `product_specs`/`product_variants`; строки этой таблицы одноразовые,

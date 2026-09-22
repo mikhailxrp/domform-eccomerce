@@ -10,7 +10,10 @@ require_once ROOT_PATH . '/src/Core/Pagination.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 require_once ROOT_PATH . '/src/Core/ProductForm.php';
 require_once ROOT_PATH . '/src/Core/Upload.php';
+require_once ROOT_PATH . '/src/Core/Ai.php';
+require_once ROOT_PATH . '/src/Core/AiDescription.php';
 require_once ROOT_PATH . '/src/Services/FileUpload.php';
+require_once ROOT_PATH . '/src/Services/Ai/ai.php';
 
 class AdminProductController
 {
@@ -284,6 +287,65 @@ class AdminProductController
         redirect('/admin/products/' . $productId . '/edit');
     }
 
+    /**
+     * Черновик описания от ИИ (`FR-AI-002`, Таск 4 Фазы 9) — только
+     * `admin`, как остальные ИИ-действия Панели (`phase-9.md`, «Решения
+     * фазы»). В промпт уходят только краткие данные из этого запроса —
+     * ни `name`, ни существующий `description` Товара не читаются.
+     */
+    public function generateDescription(string $id): void
+    {
+        requireRole(['admin']);
+        requireCsrf();
+
+        header('Content-Type: application/json; charset=utf-8');
+
+        $productId = (int) $id;
+        if (findProductForToggle($productId) === null) {
+            abort404();
+        }
+
+        if (tooManyAttempts('ai_description', 10, 60)) {
+            http_response_code(429);
+            echo json_encode(['error' => 'Слишком много запросов — попробуйте через минуту.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        hitRateLimit('ai_description');
+
+        $validated = validateDescriptionBrief([
+            'category'  => input('category', ''),
+            'material'  => input('material', ''),
+            'size'      => input('size', ''),
+            'mechanism' => input('mechanism', ''),
+        ]);
+
+        if ($validated['error'] !== null) {
+            echo json_encode(['error' => $validated['error']], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (!aiClassAvailable(aiClassForAssistant('description'))) {
+            echo json_encode(['unavailable' => true], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $result = aiComplete('description', buildDescriptionPrompt($validated['brief']));
+        if ($result === null) {
+            echo json_encode(['unavailable' => true], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $draft = normalizeDraft($result['text']);
+        if ($draft === '') {
+            echo json_encode(['error' => 'Не удалось получить черновик — попробуйте ещё раз.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        saveDescriptionDraft($productId, $draft);
+
+        echo json_encode(['draft' => $draft], JSON_UNESCAPED_UNICODE);
+    }
+
     private function collectRawInput(): array
     {
         return [
@@ -334,13 +396,14 @@ class AdminProductController
         $specRows    = max(PRODUCT_FORM_DEFAULT_SPEC_ROWS, count($old['specs'] ?? []));
 
         render('admin/products/form', [
-            'title'       => $product === null ? 'Новый товар' : 'Редактирование товара',
-            'product'     => $product,
-            'categories'  => getCategoriesFlat(),
-            'old'         => $old,
-            'errors'      => $errors,
-            'variantRows' => $variantRows,
-            'specRows'    => $specRows,
+            'title'                   => $product === null ? 'Новый товар' : 'Редактирование товара',
+            'product'                 => $product,
+            'categories'              => getCategoriesFlat(),
+            'old'                     => $old,
+            'errors'                  => $errors,
+            'variantRows'             => $variantRows,
+            'specRows'                => $specRows,
+            'aiDescriptionAvailable'  => aiClassAvailable(aiClassForAssistant('description')),
         ]);
     }
 }

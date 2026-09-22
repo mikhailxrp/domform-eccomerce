@@ -843,7 +843,7 @@ function getProductCategoryIds(int $productId): array
 function findProductForAdmin(int $id): ?array
 {
     $stmt = getPdo()->prepare(
-        'SELECT id, name, slug, description, is_active, is_featured, specs_status FROM products WHERE id = :id LIMIT 1'
+        'SELECT id, name, slug, description, description_draft, is_active, is_featured, specs_status FROM products WHERE id = :id LIMIT 1'
     );
     $stmt->execute(['id' => $id]);
     $product = $stmt->fetch();
@@ -872,6 +872,17 @@ function findProductForAdmin(int $id): ?array
     $product['primary_category_id'] = $primaryRow !== null ? (int) $primaryRow['category_id'] : 0;
 
     return $product;
+}
+
+/**
+ * Черновик описания от ИИ (`FR-AI-002`, Таск 4 Фазы 9) — отдельная
+ * колонка, не трогает `description`: публикуется только через ручное
+ * «Применить к описанию» + обычное сохранение формы Товара.
+ */
+function saveDescriptionDraft(int $productId, string $draft): void
+{
+    $stmt = getPdo()->prepare('UPDATE products SET description_draft = :draft WHERE id = :id');
+    $stmt->execute(['draft' => $draft, 'id' => $productId]);
 }
 
 /**
