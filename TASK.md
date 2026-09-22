@@ -1,199 +1,149 @@
 # Current Task
 
 ## Фаза
-Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 5 из 8.
+Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 7 из 8
+(переиспользован под новый скоуп — исходный «Подбор Товара диалогом»
+как отдельная фича отменён, объединён с Консультантом, `ADR-051` в
+`planning-log.md`).
 
-**Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной БД
-(`php -S` + `curl`), реальными ответами YandexGPT. Вопрос по тексту
-`delivery-payment` («способы оплаты и размер предоплаты») → точный
-ответ по документу; вопрос о сроках доставки, которых в тексте нет, →
-модель не стала придумывать срок, предложила позвонить Менеджеру —
-правильное поведение, не баг. Вопрос про ремонт «своего» дивана,
-купленного в марте, → предложение позвонить Менеджеру с телефоном и
-WhatsApp из `settings`, без попытки определить статус по описанию.
-Правка `/admin/content/delivery-payment/edit` (добавлена строка про
-рассрочку через тестовый банк) → следующий ответ консультанта сразу
-процитировал новую строку; текст страницы возвращён в исходное
-состояние после проверки (`SELECT`, длина/содержимое совпали побайтово).
-Временным `error_log()` payload перед `aiComplete()` (сразу удалён
-после проверки) подтверждено: в теле запроса — только системный
-промпт, история сессии и текст вопроса, ни имени/телефона Покупателя,
-ни данных Заказа. Вопрос в 800 символов обрезан до `AI_MAX_QUESTION_LENGTH`
-(500) — проверено тем же временным логом. Класс `consultant` недоступен
-(временно опустошён `AI_YANDEX_KEY`, сразу восстановлен) → JSON
-`{"unavailable":true,"phone":...,"whatsapp":...}`, код 200, ровно один
-`WARNING` в `app.log`. `ai_chat_logs`: строка старше 90 дней (вставлена
-вручную) удалена `deleteOldAiChatLogs()`, 50 свежих тестовых строк
-остались нетронуты этим вызовом — тестовые строки затем очищены
-(`TRUNCATE`, реальных данных в таблице ещё не было). POST без CSRF →
-419. Rate-limit: код 429 в контроллере сработал верно на 16-м быстром
-запросе при лимите 15/60с (проверено пустыми вопросами — короткое
-замыкание до вызова ИИ, иначе реальные вызовы медленнее декей-окна).
+**Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной
+БД (`php -S` + `curl`), реальными ответами YandexGPT. «Компактный
+кухонный гарнитур небольшого размера» → карточка `Компакт кухонный
+гарнитур 2.4м` с реальными ценой/описанием/ссылкой, собранная сервером
+из БД. Товар со `specs_status='pending'` (Милан 3-местный угловой) —
+его нет в снимке каталога, модель сама ответила «такого нет»; отдельно
+`findConfirmedProductForAi()` напрямую на pending-slug и на
+несуществующем slug — оба вернули `null` (сервер не доверяет модели).
+Заказ 51 + верный email → «Заказ №51 от 18.09.2026: статус
+«Подтверждён», сумма 331 000 ₽, способ получения — Доставка»; тот же
+заказ + неверный email → общий отказ без утечки факта существования
+заказа. `ai_requests` до/после lookup-тестов — 75/75: подтверждено,
+что ветка инфо о заказе не делает ни одного вызова к провайдеру.
+Вопрос про шоурум → реальный адрес/режим работы из `settings` +
+текста страницы `showroom`. `app.log` — без новых ошибок; тестовые
+строки `ai_chat_logs` очищены. `composer test` — 503/503 (+13
+`AiChatTest`, включая новую сигнатуру `buildConsultantPrompt()`).
 
-**Найден и исправлен по ходу проверки (в рамках Scope этого таска):**
-`AiChatController.php` вызывал `setting()`, но не подключал
-`src/Models/Setting.php` (только `Core/Settings.php`) — `setting()`
-внутри дёргает `getAllSettings()` из Model, которую обычно загружает
-`layout/header.php` при рендере страницы; у чистого JSON-эндпоинта
-никакого layout нет, поэтому без явного `require_once` падал
-`Fatal: Call to undefined function getAllSettings()`. Добавлен
-недостающий `require_once` в `AiChatController.php`, подтверждено
-успешным вызовом `setting('shop_phone')` вручную.
-
-**Подтверждён (тем же способом, что в Таске 4) и усилен вывод по уже
-известному багу `hitRateLimit()`/`tooManyAttempts()`
-(`src/Core/functions.php`, вне scope): при первой попытке проверки
-rate-limit'а с реальными вопросами (17 запросов подряд к настоящему
-провайдеру) 429 не сработал вообще, хотя счётчик дошёл до 17 при
-лимите 15 — 17 реальных вызовов заняли 135 секунд, что больше
-`decaySeconds=60`, и `tooManyAttempts()` из-за незаменяемого
-`first_at` посчитал окно уже истёкшим до проверки счётчика. Для
-`/ai/consultant` это не гипотетический край случая, а реальный сценарий
-— обычный медленный трафик реальных вопросов может полностью обходить
-лимит. Не исправлено — файл вне Scope Таска 5, но теперь есть
-конкретное воспроизведение на публичном эндпоинте, не только на
-админском.
-
-**Дополнение 22.09.2026 (отдельный запрос, не часть ТЗ/`FR-AI-003`):**
-демо-лимит вопросов Консультанта — `LIMIT_REQUESTS=true` в `.env`
-включает предел `AI_CHAT_DEMO_LIMIT = 7` вопросов на один диалог
-(`chatLimitReached()`, `chatLimitReachedPayload()` в `AiChat.php`);
-первый ответ диалога, пока лимит включён, начинается с приветствия
-про демо-версию и модель (`buildDemoGreeting()`, реальное имя модели
-из `env('AI_YANDEX_MODEL')`). Проверено живым HTTP: диалог из 9
-вопросов при включённом лимите — 1–7 отвечены (первый с приветствием),
-8–9 получили заглушку `{"limit_reached":true,...}` без обращения к
-провайдеру; `ai_chat_logs` — ровно 14 строк (7 пар), 8-й/9-й ничего не
-пишут. При `LIMIT_REQUESTS=false` — поведение как было, без лимита и
-приветствия. `composer test` — 490/490 (+6 `AiChatTest`). Подробности
-— `.docs/dev-log.md` 22.09.2026 (вторая запись за день). Виджету
-чата (Таск 6) нужно будет обработать формат `limit_reached` наравне с
-уже существующими `answer`/`unavailable`.
+Документация: `.docs/planning-log.md` (`ADR-051`), `.docs/modules/ai.md`
+(раздел «Консультант в чате» переписан под объединённую схему + правка
+в шапке файла), `.docs/phases/phase-9.md` (Таск 7 переопределён,
+статус ✅; Таск 5 получил сноску-указатель на это дополнение).
 
 ## Задача
-`FR-AI-003` (только сервер, без виджета — он в Таске 6): `POST
-/ai/consultant` принимает текст вопроса Покупателя/Гостя, собирает
-системный промпт из тел страниц `content_pages` (`delivery-payment`,
-`return-warranty`) и реквизитов `settings` (`shop_phone`,
-`shop_whatsapp_url`), вызывает провайдера класса `user_input`
-(YandexGPT) и возвращает JSON с ответом либо признаком недоступности +
-контакты. В запросе к провайдеру нет имени/телефона/данных Заказа
-Покупателя — только текст вопроса, история диалога текущей сессии и
-системный промпт. Каждое сообщение (вопрос и ответ) пишется в
-`ai_chat_logs`; записи старше 90 дней чистятся вероятностно при каждой
-записи (как GC сессий). Диалог живёт в `$_SESSION`, не в личном
-кабинете (`FR-AI-003` правило 7).
+Расширяем Консультанта (`AiChatController::consultant()`, Таск 5) тремя
+новыми возможностями без создания отдельного помощника:
+
+1. **Подбор товара** — покупатель описывает желаемый Товар свободным
+   текстом, консультант находит один наиболее подходящий среди
+   опубликованных Товаров с подтверждёнными характеристиками
+   (`specs_status='confirmed'`) и присылает в чат ссылку + краткое
+   описание из карточки. Модель только предлагает `product_slug` в
+   строгом JSON, сервер проверяет его по БД и сам собирает карточку из
+   реальных данных — модель не может подделать название/цену/описание.
+2. **Информация о заказе** — покупатель называет номер заказа и
+   телефон/email. Сервер детектирует это до вызова ИИ, сверяет ОБА
+   значения с БД и отвечает готовым шаблоном (статус/сумма/дата/способ
+   получения) — **без единого обращения к провайдеру** в этой ветке.
+   Несовпадение — общий отказ без утечки факта существования заказа.
+3. **Шоурум и контакты** — тело страницы `content_pages` (`showroom`)
+   и реквизиты `settings` добавляются в системный промпт рядом с
+   доставкой/оплатой/возвратом/гарантией.
 
 ## Что проверено в коде перед планом
-- `AI_ASSISTANTS['consultant'] = AI_CLASS_USER_INPUT` (`src/Core/Ai.php`)
-  — маршрутизация на YandexGPT уже настроена, `aiComplete('consultant',
-  $messages)` готов к использованию как есть.
-- `findContentPageBySlug(string $slug): ?array`
-  (`src/Models/ContentPage.php`) отдаёт `body` сырым текстом
-  (мини-разметка `## `/`- `, не HTML) — в промпт идёт `body` напрямую,
-  без `renderContentBody()` (та функция только для витрины).
-- `setting('shop_phone')` / `setting('shop_whatsapp_url')`
-  (`src/Core/Settings.php`) — готовые геттеры реквизитов с кэшем на
-  один запрос.
-- Образец JSON-эндпоинта — `SearchController::suggest()`:
-  `Content-Type: application/json`, `tooManyAttempts()`/
-  `hitRateLimit()`, `JSON_UNESCAPED_UNICODE`.
-- Образец вызова модели — `AdminAiSpecController::run()`/
-  `aiComplete()` (`src/Services/Ai/ai.php`): `aiComplete()` сам логирует
-  `ERROR` и пишет `ai_requests` при сбое вызова; когда класс просто не
-  настроен (`aiClassAvailable() === false`), `aiComplete()` возвращает
-  `null` **без** лога — значит `WARNING` при недоступности (пункт DoD)
-  пишет сам контроллер, проверив `aiClassAvailable()` заранее, а не
-  полагаясь на `aiComplete()`.
-- `ai_requests`/`ai_spec_suggestions` в `database/install.php` —
-  образец идемпотентного `CREATE TABLE IF NOT EXISTS` без FK (для
-  лога, где нет строгой связи с одной сущностью) — `ai_chat_logs`
-  создаётся тем же способом.
-- `tests/bootstrap.php` уже подключает `Core/Ai.php`, `Core/AiSpecs.php`,
-  `Core/AiDescription.php` — `Core/AiChat.php` добавляется туда же.
-- Публичный CSRF-эндпоинт без `requireRole()` — образец
-  `CheckoutController`/`ReviewController` (`tooManyAttempts()` с более
-  жёсткими лимитами, чем у Панели, т.к. эндпоинт открыт анонимам).
+- `findOrderForAdmin()` (`src/Models/Order.php:756`) — образец
+  резолвинга контакта заказа и для гостя, и для авторизованного
+  (`LEFT JOIN users`); `findOrderForChatLookup()` строится по тому же
+  join, но с проверкой совпадения контакта, а не для админского
+  контекста.
+- `orderStatusLabel()` (`src/Core/OrderStatus.php:44`) — готовая
+  подпись статуса на русском, переиспользуется в
+  `buildOrderLookupReply()`.
+- `discountedPriceSql()`/`formatPrice()` (`src/Core/Price.php`,
+  `src/Core/functions.php:157`) — готовые для снимка каталога и
+  карточки товара в чате.
+- `getConfirmedProductsForAi()`/`getProductsBySlugs()` из исходного
+  плана Таска 7 **не существовали в коде** — проектируются с нуля под
+  новую схему (одна карточка, не список 2–3).
+- `findProductBySlug()` (`src/Models/Product.php:1080`) не отдаёт цену
+  — для карточки в чате нужна отдельная функция с ценой одним запросом
+  (`findConfirmedProductForAi()`).
+- `showroom()` (`PageController.php:87`) уже читает `setting('workshop_address')`/
+  `work_hours`/`map_embed_url` и `findContentPageBySlug('showroom')` —
+  те же источники переиспользуются в промпте, без нового кода на
+  чтение.
+- `decodeAiJson()` (`src/Core/Ai.php`) — снимает markdown-обрамление
+  перед `json_decode()`, уже используется `AiSpecs`/`AiPicker`-подобной
+  логикой; `decodeConsultantReply()` строится поверх него.
 
 ## Scope — что трогаем
-- [ ] `database/install.php` — изменить: таблица `ai_chat_logs` (`id`,
-      `conversation_id CHAR(32)`, `assistant ENUM('consultant','picker')`,
-      `role ENUM('user','assistant')`, `message TEXT`, `created_at`,
-      `INDEX(conversation_id)`, `INDEX(created_at)`), без FK — по
-      образцу `ai_requests`
-- [ ] `.docs/database.md` — изменить: раздел таблицы `ai_chat_logs`
-- [ ] `.docs/planning-log.md` — изменить: `ADR-050` (правка `ADR-019` —
-      правила берутся из `content_pages` при каждом запросе вместо
-      переноса вручную в промпт один раз; retrieval/база знаний
-      по-прежнему не реализуются)
-- [ ] `src/Core/AiChat.php` — создать, чистые функции:
-      `buildConsultantPrompt(array $pages, array $contacts): string` —
-      системный промпт: круг тем (доставка/оплата/возврат/гарантия),
-      запрет придумывать статус конкретного Заказа/отвечать по общим
-      знаниям, инструкция предлагать звонок Менеджеру с
-      `$contacts['phone']`/`$contacts['whatsapp']` вне круга тем;
-      `normalizeChatQuestion(string $question): string` — `trim`,
-      обрезка до `AI_MAX_QUESTION_LENGTH`; `trimChatHistory(array
-      $history): array` — последние `AI_CHAT_HISTORY_LIMIT` сообщений;
-      `chatFallbackPayload(array $contacts): array` — `['unavailable'
-      => true, 'phone' => ..., 'whatsapp' => ...]`
-- [ ] `src/Models/AiChatLog.php` — создать: `logAiChatMessage(string
-      $conversationId, string $assistant, string $role, string
-      $message): void`, `deleteOldAiChatLogs(int $days): int`,
-      `maybeCleanupAiChatLogs(): void` (вероятностный вызов чистки,
-      `1 / AI_CHAT_LOG_GC_DIVISOR`, по образцу GC сессий)
-- [ ] `src/Controllers/AiChatController.php` — создать: `consultant()`
-      — JSON, `requireCsrf()`, `tooManyAttempts('ai_chat', 15, 60)`/
-      `hitRateLimit()`, `conversation_id` в `$_SESSION` (генерируется
-      один раз на сессию), история в
-      `$_SESSION['ai_consultant_history']`, недоступный класс →
-      `logWarning()` + `chatFallbackPayload()` с кодом 200, успех →
-      `logAiChatMessage()` дважды (`user`/`assistant`) +
-      `maybeCleanupAiChatLogs()`
-- [ ] `config/routes.php` — изменить: `POST /ai/consultant` (без
-      `requireRole` — доступно Гостю и Покупателю)
-- [ ] `config/config.php` — изменить: `AI_MAX_QUESTION_LENGTH`,
-      `AI_CHAT_HISTORY_LIMIT`, `AI_CHAT_LOG_RETENTION_DAYS` (90),
-      `AI_CHAT_LOG_GC_DIVISOR`
-- [ ] `tests/Unit/AiChatTest.php` — создать: тесты на
-      `normalizeChatQuestion()` (обрезка, `trim`), `trimChatHistory()`
-      (оставляет последние N), `buildConsultantPrompt()` (промпт
-      содержит переданные контакты и тексты страниц),
-      `chatFallbackPayload()` (форма ответа)
-- [ ] `tests/bootstrap.php` — изменить: подключить `src/Core/AiChat.php`
+- [ ] `src/Core/AiChat.php` — изменить: `buildConsultantPrompt(array
+      $pages, array $contacts, array $catalog): string` (новая
+      сигнатура — добавлены `showroom`, снимок каталога, JSON-контракт
+      `{"reply","product_slug"}`); создать:
+      `extractOrderLookupQuery(string $question): ?array`,
+      `buildOrderLookupReply(array $order): string`,
+      `buildCatalogSnapshotText(array $products): string`,
+      `decodeConsultantReply(?array $decoded, string $rawText): array`
+- [ ] `src/Models/Product.php` — изменить: добавить
+      `getConfirmedCatalogSnapshotForAi(int $limit): array` (slug/
+      название/категория/цена, только `is_active=1 AND
+      specs_status='confirmed'`), `findConfirmedProductForAi(string
+      $slug): ?array` (валидация + данные для карточки)
+- [ ] `src/Models/Order.php` — изменить: добавить
+      `findOrderForChatLookup(int $orderId, string $contact): ?array`
+- [ ] `src/Controllers/AiChatController.php` — изменить: ветка
+      перехвата lookup-заказа до `aiComplete()`/до проверки
+      `aiClassAvailable` (не зависит от провайдера); снимок каталога +
+      новый промпт; разбор JSON-ответа, валидация `product_slug`,
+      расширенный ответ `{"answer", "product"?}`
+- [ ] `config/config.php` — изменить: `AI_CATALOG_SNAPSHOT_LIMIT` (150)
+- [ ] `public/assets/js/app.js` — изменить (блок Таска 6): рендер
+      карточки товара в чате (`<a href>`, текстовые поля через
+      `.text()`), обработка поля `product` в ответе
+- [ ] `public/assets/css/app.css` — изменить: `.ai-chat__product-card`
+      и подклассы
+- [ ] `tests/Unit/AiChatTest.php` — изменить: обновить вызов
+      `buildConsultantPrompt()` под новую сигнатуру; тесты на
+      `extractOrderLookupQuery()`, `buildOrderLookupReply()`,
+      `buildCatalogSnapshotText()`, `decodeConsultantReply()`
+- [ ] `.docs/planning-log.md` — изменить: новый ADR (отход от ТЗ по
+      явному запросу владельца продукта — `FR-AI-003`/`FR-AI-004`
+      объединены)
+- [ ] `.docs/modules/ai.md` — изменить: описание связи `FR-AI-003`/
+      `FR-AI-004`
+- [ ] `.docs/tz-coverage.md` — изменить: `FR-AI-004` → «реализовано
+      через объединение с Консультантом», не отменено
+- [ ] `.docs/phases/phase-9.md` — изменить: Таск 7 переопределён под
+      этот скоуп (Цель/Scope/DoD), Таск 5 получает сноску-ссылку
 
 ## Out of scope — не трогаем
-- Виджет чата на витрине, CSS/JS, предупреждение о личных данных —
-  Таск 6
-- Подбор Товара диалогом (`POST /ai/picker`) — Таск 7
-- Бюджет/лимит, тумблеры включения помощников, `/admin/ai` — Таск 8
-- CRUD `content_pages`, `/admin/content/*` — уже сделаны в Фазе 8, не
-  трогаются
-- Отображение истории диалога в личном кабинете — по правилу
-  `FR-AI-003`/`FR-AI-004` история никогда туда не попадает
+- Список из 2–3 товаров как в исходном `FR-AI-004` — подбирается один,
+  наиболее релевантный
+- Многошаговый диалог-опросник для сбора номера заказа/телефона —
+  если данных не хватает в одном сообщении, вопрос уходит модели как
+  обычно (она попросит уточнить текстом), отдельного стейта нет
+- CSRF/рейт-лимит/демо-лимит-механика `AiChatController` — не
+  меняются, только новые ветки внутри уже существующего метода
+- Виджет чата как таковой (открытие/закрытие/история) — Таск 6, не
+  трогается, кроме добавления рендера карточки товара
 
 ## Definition of Done
-- [ ] `curl` с вопросом про сроки доставки → ответ по тексту страницы
-      `delivery-payment`, без даты/номера конкретного Заказа
-- [ ] Вопрос про гарантийный ремонт купленного дивана → ответ
-      предлагает позвонить Менеджеру, содержит телефон и ссылку
-      WhatsApp из `settings`, не пытается определить статус по
-      номеру/имени
-- [ ] Правка текста страницы `/admin/content/delivery-payment/edit`
-      меняет следующий ответ консультанта без правки кода
-- [ ] В теле запроса к провайдеру — только системный промпт, история
-      текущей сессии и текст вопроса: ни имени, ни телефона
-      Покупателя, ни данных Заказа (проверено временным логированием
-      payload, лог удалён после проверки)
-- [ ] Вопрос длиннее `AI_MAX_QUESTION_LENGTH` обрезается до отправки
-      провайдеру
-- [ ] Класс `consultant` недоступен (ключ снят) → JSON `{"unavailable":
-      true, "phone": ..., "whatsapp": ...}`, код 200, ровно один
-      `WARNING` в `app.log`
-- [ ] Строки пишутся в `ai_chat_logs` (по одной на вопрос и на ответ,
-      общий `conversation_id`); строка с `created_at` старше 90 дней
-      (вставлена вручную) удаляется чисткой, свежие остаются
-- [ ] POST без CSRF → 419; превышение частоты → 429
+- [ ] «Нужна кухня в стиле лофт» (или похожий свободный запрос) →
+      ссылка на реально существующий подтверждённый Товар + краткое
+      описание из карточки в чате; название/цена/описание — из БД
+- [ ] Подменённый/несуществующий `product_slug` от модели (временно
+      подмененный ответ) → отброшен, показывается только текст, без
+      битой ссылки
+- [ ] Товар со `specs_status='pending'` не предлагается (переключение
+      статуса одного Товара меняет выдачу на реальной БД)
+- [ ] Реальный Заказ + верный телефон/email → статус/сумма/дата/способ
+      получения; тот же номер + неверный контакт → общий отказ без
+      утечки факта существования заказа
+- [ ] В ветке lookup заказа не происходит ни одного вызова к
+      ИИ-провайдеру (сверено по `ai_requests` до/после)
+- [ ] Вопрос про адрес шоурума/контакты → ответ по тексту `showroom`
+      + `settings`, без правки кода
+- [ ] Демо-лимит (если включён) считает lookup-ветку как один вопрос
 - [ ] `composer test` зелёный
 - [ ] Проверить `.docs/dod-global.md`
 

@@ -121,6 +121,13 @@ define('AI_SPECS_BATCH_OVERHEAD_SECONDS', 20);
 define('AI_CHAT_LOG_RETENTION_DAYS', 90);
 define('AI_CHAT_LOG_GC_DIVISOR', 100);
 
+// Подбор товара внутри Консультанта (объединено с исходным `FR-AI-004`
+// — `planning-log.md`) — сколько подтверждённых Товаров попадает в
+// снимок каталога для промпта. Используется только в
+// `AiChatController` (Model-запрос), поэтому здесь, а не в
+// `Core/AiChat.php`. 150 — с запасом на весь текущий каталог.
+define('AI_CATALOG_SNAPSHOT_LIMIT', 150);
+
 // Демо-лимит вопросов на один диалог Консультанта (не часть ТЗ —
 // ограничение показа для демо/портфолио-стенда, запрошено отдельно).
 // `AI_CHAT_LIMIT_ENABLED` — единственное, что нужно `AiChatController`

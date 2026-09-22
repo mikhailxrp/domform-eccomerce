@@ -778,3 +778,40 @@ function findOrderForAdmin(int $id): ?array
 
     return $order;
 }
+
+/**
+ * Информация о заказе для Консультанта в чате (`FR-AI-003`, подбор
+ * товара + инфо о заказе внутри чата — объединено с исходным
+ * `FR-AI-004`, `planning-log.md`) — номер заказа обязан совпасть
+ * ВМЕСТЕ с контактом (телефон или email), иначе кто угодно, зная или
+ * подобрав номер заказа (обычный `AUTO_INCREMENT`), мог бы увидеть
+ * чужой заказ через чат (`dod-global.md`: «нельзя увидеть чужой заказ,
+ * даже подставив чужой id»). Тот же `LEFT JOIN users`, что
+ * `findOrderForAdmin()`, но результат отдаётся только при совпадении
+ * контакта — не для админского контекста.
+ */
+function findOrderForChatLookup(int $orderId, string $contact): ?array
+{
+    $stmt = getPdo()->prepare('
+        SELECT o.id, o.status, o.total, o.created_at, o.fulfillment_method,
+               o.guest_phone, o.guest_email, u.phone AS user_phone, u.email AS user_email
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        WHERE o.id = :id
+        LIMIT 1
+    ');
+    $stmt->execute(['id' => $orderId]);
+    $order = $stmt->fetch();
+
+    if ($order === false) {
+        return null;
+    }
+
+    $phone = (string) ($order['user_phone'] ?? $order['guest_phone'] ?? '');
+    $email = (string) ($order['user_email'] ?? $order['guest_email'] ?? '');
+
+    $contactMatches = ($phone !== '' && normalizePhone($contact) === normalizePhone($phone))
+        || ($email !== '' && strcasecmp(trim($contact), $email) === 0);
+
+    return $contactMatches ? $order : null;
+}

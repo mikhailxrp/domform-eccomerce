@@ -10,12 +10,16 @@ require_once ROOT_PATH . '/src/Core/Settings.php';
 require_once ROOT_PATH . '/src/Models/Setting.php';
 require_once ROOT_PATH . '/src/Models/ContentPage.php';
 require_once ROOT_PATH . '/src/Models/AiChatLog.php';
+require_once ROOT_PATH . '/src/Models/Product.php';
+require_once ROOT_PATH . '/src/Models/Order.php';
 require_once ROOT_PATH . '/src/Services/Ai/ai.php';
 
 /**
  * Консультант в чате (`FR-AI-003`) — доступен Гостю и Покупателю без
- * входа, поэтому без `requireRole()`. Виджет ещё не построен (Таск 6)
- * — эндпоинт проверяется напрямую (`curl`/будущий `fetch`).
+ * входа, поэтому без `requireRole()`. Подбор товара и инфо о заказе
+ * объединены сюда из исходного `FR-AI-004` (`planning-log.md`, ADR
+ * по явному запросу владельца продукта) — отдельного помощника-
+ * «Подбора диалогом» больше нет.
  *
  * `AI_CHAT_LIMIT_ENABLED` (`LIMIT_REQUESTS` в `.env`) — демо-лимит на
  * число вопросов в одном диалоге, не часть `FR-AI-003`: ограничение
@@ -49,9 +53,28 @@ class AiChatController
             return;
         }
 
+        // Инфо о заказе — детект и ответ ДО вызова модели, без единого
+        // обращения к провайдеру (`FR-AI-003`, объединено с `FR-AI-004`):
+        // номер Заказа и телефон/email должны совпасть в БД, иначе
+        // ответ не отдаётся вовсе (`findOrderForChatLookup()`).
+        $orderLookup = extractOrderLookupQuery($question);
+        if ($orderLookup !== null) {
+            $contact = $orderLookup['phone'] ?? $orderLookup['email'] ?? '';
+            $order   = $contact !== '' ? findOrderForChatLookup($orderLookup['order_id'], $contact) : null;
+
+            $answer = $order !== null
+                ? buildOrderLookupReply($order)
+                : 'Не нашли заказ с такими данными — проверьте номер и телефон/email, указанные при оформлении, или позвоните менеджеру.';
+
+            $this->respond($question, $questionCount, $answer);
+            return;
+        }
+
         $contacts = [
-            'phone'    => setting('shop_phone'),
-            'whatsapp' => setting('shop_whatsapp_url'),
+            'phone'      => setting('shop_phone'),
+            'whatsapp'   => setting('shop_whatsapp_url'),
+            'address'    => setting('workshop_address'),
+            'work_hours' => setting('work_hours'),
         ];
 
         if (!aiClassAvailable(aiClassForAssistant('consultant'))) {
@@ -60,15 +83,16 @@ class AiChatController
             return;
         }
 
-        $conversationId = $this->conversationId();
-        $history        = trimChatHistory((array) ($_SESSION['ai_consultant_history'] ?? []));
+        $history = trimChatHistory((array) ($_SESSION['ai_consultant_history'] ?? []));
 
         $pages = [
             'delivery-payment' => (string) (findContentPageBySlug('delivery-payment')['body'] ?? ''),
             'return-warranty'  => (string) (findContentPageBySlug('return-warranty')['body'] ?? ''),
+            'showroom'         => (string) (findContentPageBySlug('showroom')['body'] ?? ''),
         ];
+        $catalog = getConfirmedCatalogSnapshotForAi(AI_CATALOG_SNAPSHOT_LIMIT);
 
-        $messages   = [['role' => 'system', 'content' => buildConsultantPrompt($pages, $contacts)]];
+        $messages   = [['role' => 'system', 'content' => buildConsultantPrompt($pages, $contacts, $catalog)]];
         $messages   = array_merge($messages, $history);
         $messages[] = ['role' => 'user', 'content' => $question];
 
@@ -78,22 +102,55 @@ class AiChatController
             return;
         }
 
-        $answer = trim($result['text']);
+        $parsed = decodeConsultantReply(decodeAiJson($result['text']), $result['text']);
 
+        $product = null;
+        if ($parsed['product_slug'] !== null) {
+            $found = findConfirmedProductForAi($parsed['product_slug']);
+            if ($found !== null) {
+                $description = trim((string) $found['description']);
+                $product = [
+                    'name'    => $found['name'],
+                    'url'     => '/product/' . $found['slug'],
+                    'excerpt' => mb_substr($description, 0, 160) . (mb_strlen($description) > 160 ? '…' : ''),
+                    'price'   => formatPrice((string) $found['min_price']),
+                ];
+            }
+        }
+
+        $this->respond($question, $questionCount, $parsed['reply'], $product);
+    }
+
+    /**
+     * Общая бухгалтерия ответа — приветствие демо-режима на первом
+     * сообщении, лог переписки, история сессии, счётчик вопросов.
+     * Общая для ветки инфо о заказе и обычного ответа модели, чтобы не
+     * дублировать её в трёх местах.
+     */
+    private function respond(string $question, int $questionCount, string $answer, ?array $product = null): void
+    {
         if ($questionCount === 0 && AI_CHAT_LIMIT_ENABLED) {
             $answer = buildDemoGreeting(env('AI_YANDEX_MODEL', '')) . "\n\n" . $answer;
         }
+
+        $conversationId = $this->conversationId();
 
         logAiChatMessage($conversationId, 'consultant', 'user', $question);
         logAiChatMessage($conversationId, 'consultant', 'assistant', $answer);
         maybeCleanupAiChatLogs();
 
+        $history   = trimChatHistory((array) ($_SESSION['ai_consultant_history'] ?? []));
         $history[] = ['role' => 'user', 'content' => $question];
         $history[] = ['role' => 'assistant', 'content' => $answer];
         $_SESSION['ai_consultant_history']        = trimChatHistory($history);
         $_SESSION['ai_consultant_question_count'] = $questionCount + 1;
 
-        echo json_encode(['answer' => $answer], JSON_UNESCAPED_UNICODE);
+        $response = ['answer' => $answer];
+        if ($product !== null) {
+            $response['product'] = $product;
+        }
+
+        echo json_encode($response, JSON_UNESCAPED_UNICODE);
     }
 
     /**
