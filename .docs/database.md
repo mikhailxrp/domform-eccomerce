@@ -138,8 +138,10 @@ shared-хостинге разлогинивает раньше, чем ожид
 | name | VARCHAR(200) NOT NULL | |
 | slug | VARCHAR(220) NOT NULL UNIQUE | |
 | description | TEXT NULL | |
+| description_draft | TEXT NULL | черновик описания от ИИ (`FR-AI-002`, Таск 4 Фазы 9) — заполняется генератором, не публикуется автоматически: `description` меняется только когда Администратор нажал «Применить к описанию» и сохранил форму |
 | is_active | TINYINT(1) NOT NULL DEFAULT 1 | товар не удаляют физически, а деактивируют |
 | is_featured | TINYINT(1) NOT NULL DEFAULT 0 | ручная отметка «хит продаж» Менеджером/Администратором для блока Главной (`FR-HOME-004`) — не расчёт по продажам (ТЗ прямо: отдельного справочника продаж нет, раздел 10.1); по аналогии с `product_variants.is_showroom_sample`. Колонки не было в схеме, найдено ревью перед `phase-init` (`ADR-024`, `Q-DEV-010`) |
+| specs_status | ENUM('pending','confirmed') NOT NULL DEFAULT 'pending' | очередь разбора характеристик ИИ (`FR-AI-001` правило 4, `ADR-049`, Таск 2 Фазы 9) — `pending` до подтверждения Администратором хотя бы одного предложения (или ручного подтверждения без ИИ), `confirmed` — допуск в подбор Товара диалогом (`FR-AI-004` правило 1) |
 | created_at | TIMESTAMP DEFAULT NOW | |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
@@ -152,6 +154,9 @@ shared-хостинге разлогинивает раньше, чем ожид
   идёт через join с `product_categories`, см. ниже)
 - `INDEX(is_featured)` — отбор блока «Хиты продаж» Главной (`FR-HOME-004`),
   тот же паттерн, что `INDEX(is_showroom_sample)` у `product_variants`
+- `INDEX(specs_status)` — очередь «требует разбора» в Панели управления
+  (`/admin/ai/specs`, Таск 2 Фазы 9) и фильтр допуска в подбор диалогом
+  (`FR-AI-004`)
 - `FULLTEXT(name, description)` — поиск; `LIKE '%...%'` не использует индекс
 
 ---
@@ -650,7 +655,7 @@ URL встраиваемой карты — то, что раньше лежал
 | Колонка | Тип | Назначение |
 |---------|-----|------------|
 | id | INT PK AUTO_INCREMENT | |
-| key | VARCHAR(60) NOT NULL UNIQUE | ключ настройки — whitelist задан `SETTING_KEYS` в `Core/Settings.php`, `updateSettings()` не пишет ключи вне списка |
+| key | VARCHAR(60) NOT NULL UNIQUE | ключ настройки — таблица общая для нескольких форм, каждая пишет в свой whitelist: `SETTING_KEYS` (`Core/Settings.php`, форма «Настройки») или `AI_SETTING_KEYS` (`Core/Ai.php`, форма «ИИ», Таск 8 Фазы 9); `updateSettings(array $values, array $allowed = SETTING_KEYS)` не пишет ключи вне переданного `$allowed` |
 | value | TEXT NOT NULL | значение; `map_embed_url` может быть пустой строкой — карта на `/showroom` (Таск 3) тогда не выводится |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
@@ -659,6 +664,19 @@ URL встраиваемой карты — то, что раньше лежал
 > Строки сидятся один раз значениями бывших констант `SHOP_*`
 > (`INSERT IGNORE` в `database/install.php`) — повторный запуск не
 > перетирает значение, отредактированное в Панели управления.
+
+> ИИ-ключи (`BR-AI-001` правило 5, `ADR-048`/`ADR-052`): `ai_monthly_limit_rub`,
+> `ai_usd_rate`, `ai_yandex_price_per_1k` — лимит и курсы для перевода
+> стоимости вызова в рубли (`Core/Ai.php::costRubFromUsd()`/
+> `costRubFromTokens()`); `ai_specs_enabled`/`ai_description_enabled`/
+> `ai_consultant_enabled` — тумблеры помощников (`aiAssistantEnabled()`,
+> `Services/Ai/ai.php`), гасят помощника так же, как отсутствие ключа
+> провайдера в `.env`; отдельного `ai_picker_enabled` нет — подбор
+> товара с Таска 7 работает внутри `consultant` (`ADR-051`), включённого
+> и выключенного тем же тумблером. `ai_limit_notified_month` — служебная
+> метка (текущий `YYYY-MM` или пусто), не показывается в форме «ИИ»:
+> не даёт письму о превышении лимита дублироваться в одном месяце
+> (`Q-027`).
 
 ---
 
@@ -707,6 +725,91 @@ URL встраиваемой карты — то, что раньше лежал
 
 **Индексы:** `INDEX(status)` — фильтр списка заявок по умолчанию
 (`new`) в Панели управления
+
+---
+
+### `ai_requests` _(новая — `ADR-048`)_
+
+Журнал каждого вызова ИИ (`BR-AI-001` правило 5, Таск 1 Фазы 9) —
+без него не посчитать месячный расход по классам задач/помощникам
+(`/admin/ai`, Таск 8). Без FK на `products`/`orders` — расход
+считается по помощнику/классу в целом, не по конкретной сущности,
+к которой относился вызов.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| provider | VARCHAR(30) NOT NULL | `openrouter` / `yandexgpt` — кто фактически ответил на этот вызов |
+| task_class | VARCHAR(20) NOT NULL | `anonymous` / `user_input` — класс задачи по `BR-AI-001`, не помощник |
+| assistant | VARCHAR(30) NOT NULL | `specs` / `description` / `consultant` / `picker` — какой помощник вызвал `aiComplete()` |
+| tokens_in | INT NOT NULL DEFAULT 0 | токены запроса, как отдал провайдер |
+| tokens_out | INT NOT NULL DEFAULT 0 | токены ответа |
+| cost_rub | DECIMAL(10,4) NOT NULL DEFAULT 0 | уже переведённая в рубли стоимость — `Models/AiUsage.php::logAiRequest()` считает её из `usage.cost` (OpenRouter, USD × курс) или из токенов (YandexGPT × цена за 1000); провайдеры сами стоимость в рублях не знают |
+| status | ENUM('ok','error') NOT NULL | `error` — таймаут, сетевой сбой, невалидный ключ или пустой ответ; помощник в этом случае отключается, покупка не блокируется (`AC-06`) |
+| error | VARCHAR(255) NULL | текст ошибки (обрезан), только при `status='error'` |
+| duration_ms | INT NOT NULL DEFAULT 0 | время вызова провайдера — для проверки `NFR-AI-*` (≤10 секунд на ответ консультанта) |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(created_at)` — расход считается за календарный
+месяц (`getAiSpendForMonth()`)
+
+> Модель никогда не пишет в эту (и любую другую) таблицу напрямую —
+> `AiProvider::complete()` (`src/Services/Ai/*`) не получает `PDO`/
+> DB-credentials, только текст переписки. Строку журнала формирует и
+> вставляет `Models/AiUsage.php` на основе сырых токенов/стоимости,
+> которые вернул провайдер (`phase-9.md`, «Решения фазы»).
+
+---
+
+### `ai_spec_suggestions` _(новая — `ADR-049`)_
+
+Предложения разбора характеристик (`FR-AI-001`, Таск 2 Фазы 9) — до
+подтверждения Администратором (Таск 3) ничего не попадает в
+`product_specs`/`product_variants`. Каждый новый разбор Товара
+полностью заменяет прежний набор (`replaceSpecSuggestions()`), поэтому
+`updated_at` не нужен — строка либо свежая, либо уже удалена.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| product_id | INT NOT NULL, FK → products.id, ON DELETE CASCADE | |
+| target | ENUM('spec','variant_material','variant_mechanism','color') NOT NULL | куда попадёт значение при подтверждении: `spec` — строка `product_specs` (размер, форма и подобное, свободное название в `name`); `variant_material`/`variant_mechanism` — поле выбранного Администратором Варианта (`ADR-004`: материал/механизм принадлежат Варианту, не Товару); `color` — только подсказка, автоматически никуда не пишется (цвет — атрибут фото Варианта, `ADR-006`) |
+| name | VARCHAR(100) NOT NULL | для `target='spec'` — название характеристики, как показать Покупателю («Ширина»); для остальных целей — фиксированная подпись («Материал», «Механизм раскладки», «Цвет»), не то, что прислала модель — единообразие в экране ревью (Таск 3) |
+| value | VARCHAR(255) NOT NULL | предложенное значение |
+| status | ENUM('ok','needs_decision') NOT NULL | `needs_decision` — значение вне списка, уже встречавшегося в каталоге в тех же Категориях (`FR-AI-001` правило 3); применяется только к `variant_material`/`variant_mechanism`/`color` — у `target='spec'` закрытого словаря по Категории нет (размер и подобное не перечислимы), поэтому он всегда `ok` (`ADR-049`) |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(product_id)` — все предложения одного Товара для
+экрана ревью
+
+---
+
+### `ai_chat_logs` _(новая — `ADR-050`)_
+
+Лог переписки Консультанта (`FR-AI-003`, Таск 5 Фазы 9) и будущего
+Подбора диалогом (`FR-AI-004`, Таск 7) — без FK на `users`/`orders`:
+Покупатель может быть гостем, `conversation_id` группирует сообщения
+одной сессии, а не ссылается на учётную запись (диалог не связывается
+с личным кабинетом, `FR-AI-003` правило 7). Хранение — 3 месяца
+(`NFR-AI-*`, `Q-028`), чистка вероятностная при каждой записи (как GC
+сессий) — на shared-хостинге отдельного cron может не быть.
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| conversation_id | CHAR(32) NOT NULL | `bin2hex(random_bytes(16))`, генерируется один раз на сессию — тот же приём, что токен корзины (`Core/Cart.php`) |
+| assistant | ENUM('consultant','picker') NOT NULL | какой из двух диалоговых помощников |
+| role | ENUM('user','assistant') NOT NULL | чья реплика — вопрос Покупателя или ответ модели |
+| message | TEXT NOT NULL | текст реплики как есть, без фильтрации ПДн (`NFR-AI-*`, `Q-026`) |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+**Индексы:** `INDEX(conversation_id)` — все реплики одного диалога;
+`INDEX(created_at)` — вероятностная чистка старше 90 дней
+(`deleteOldAiChatLogs()`)
+
+> Модель не пишет в эту таблицу напрямую — как и `ai_requests`, строку
+> вставляет наш контроллер (`AiChatController`) после ответа
+> `aiComplete()`, а не сам провайдер.
 
 ---
 

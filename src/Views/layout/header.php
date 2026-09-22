@@ -26,6 +26,7 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
     <title><?= e($pageTitle) ?></title>
     <meta name="description" content="ДомФорм — мебель на заказ в Краснодаре и крае.">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
 
     <link rel="shortcut icon" type="image/x-icon" href="/assets/images/favicon.png">
 

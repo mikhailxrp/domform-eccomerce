@@ -281,6 +281,8 @@
             }],
         },
         options: {
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 y: { beginAtZero: true },
             },
@@ -303,5 +305,64 @@
         }
 
         toggle.closest('form')?.requestSubmit();
+    });
+})();
+
+// Генератор черновика описания Товара (Таск 4 Фазы 9) — CSRF-токен
+// берётся из скрытого поля формы Товара, отдельного meta-тега в layout
+// нет. «Применить» только копирует текст в поле «Описание» — публикует
+// его обычное сохранение формы, не этот запрос.
+(() => {
+    const block = document.querySelector('[data-ai-description]');
+    if (!block) {
+        return;
+    }
+
+    const generateButton = block.querySelector('[data-ai-description-generate]');
+    const messageBox     = block.querySelector('[data-ai-description-message]');
+    const resultBox      = block.querySelector('[data-ai-description-result]');
+    const draftField     = block.querySelector('[data-ai-description-draft]');
+    const applyButton    = block.querySelector('[data-ai-description-apply]');
+    const csrfInput      = document.querySelector('#product-form input[name="_csrf"]');
+
+    generateButton.addEventListener('click', async () => {
+        messageBox.textContent = '';
+        generateButton.disabled = true;
+        generateButton.textContent = 'Генерируется…';
+
+        const formData = new FormData();
+        formData.set('_csrf', csrfInput ? csrfInput.value : '');
+        block.querySelectorAll('[data-ai-description-field]').forEach((field) => {
+            formData.set(field.dataset.aiDescriptionField, field.value.trim());
+        });
+
+        try {
+            const response = await fetch(`/admin/products/${block.dataset.productId}/ai-description`, {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await response.json();
+
+            if (data.draft) {
+                draftField.value = data.draft;
+                resultBox.hidden = false;
+                messageBox.textContent = '';
+            } else if (data.unavailable) {
+                messageBox.textContent = 'ИИ-провайдер сейчас недоступен, попробуйте позже.';
+            } else if (response.status === 429) {
+                messageBox.textContent = 'Слишком много запросов — подождите минуту.';
+            } else {
+                messageBox.textContent = data.error || 'Не удалось сгенерировать черновик.';
+            }
+        } catch {
+            messageBox.textContent = 'Не удалось связаться с сервером.';
+        } finally {
+            generateButton.disabled = false;
+            generateButton.textContent = 'Сгенерировать черновик';
+        }
+    });
+
+    applyButton.addEventListener('click', () => {
+        document.getElementById('product-description').value = draftField.value;
     });
 })();

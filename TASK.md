@@ -1,119 +1,157 @@
 # Current Task
 
 ## Фаза
-Phase 8 — Админ-панель (контент и доступ) и статические страницы
-(`.docs/phases/phase-8.md`), Таск 8 из 8 (последний таск фазы).
+Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 8 из 8
+(последний по коду).
 
-**Статус:** ✅ Завершён 22.09.2026 — проверено на реальной БД живым
-HTTP (`php -S` + `curl`), тремя временными пользователями ролей
-`admin`/`manager`/`customer` (удалены после проверки, включая их
-`remember_tokens`): `admin` → 200 на `/admin/users` со списком и
-формой; `manager` → редирект на `/admin`, в сайдбаре нет пунктов
-«Сотрудники»/«Настройки»; `customer` → редирект `/account`; Гость →
-`/login`; POST без CSRF → 419. Создание Менеджера через форму →
-строка появилась в списке; дубликат email / пароль короче 8 / роль вне
-`STAFF_ROLES` — поля подсвечены, в БД лишних строк нет (проверено
-отдельным запросом). Блокировка собственной учётки → flash-отказ,
-`is_blocked` не изменился. Блокировка другого Менеджера →
-`is_blocked=1`, его `remember_tokens` удалены: новый вход с тем же
-паролем → общий `AUTH_ERROR` (причина не раскрывается); чистая сессия
-с одним только старым `remember_token`-cookie (после удаления токена
-из БД) → редирект на `/login`, не авто-вход; уже открытая до блокировки
-сессия не обрывается принудительно — осознанно вне скоупа (правило 3
-`FR-ADM-007` про «следующую попытку входа»). «Заблокировать»
-несуществующего id и id Покупателя (`role='customer'`, не
-`manager`/`admin`) → одинаковый flash «не найден» — `setUserBlocked()`
-ограничена `role IN ('manager','admin')` прямо в SQL, Покупателя через
-этот маршрут заблокировать нельзя, даже подставив его id. Разблокировка
-возвращает доступ (подтверждено повторным логином). `storage/logs/
-app.log` — без новых ошибок (только ожидаемый `WARNING` о неудачной
-попытке входа заблокированного тестового Менеджера). `composer test`
-— 408/408 (+13 `StaffFormTest`). Реализовано по плану ниже без
-отклонений.
+**Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной
+БД, подробности в `.docs/dev-log.md`. Таск 6 подтверждён пользователем
+23.09.2026 (визуальная часть DoD) — Фаза 9 закрыта целиком, это была
+последняя фаза MVP.
 
 ## Задача
-`FR-ADM-007` п. 1–3 — `/admin/users` только для `admin`: список
-пользователей с ролями `manager`/`admin` (имя, email, телефон, роль,
-дата, бейдж «Заблокирован»); форма создания (имя, email, пароль ≥ 8,
-роль, телефон необязателен); «Заблокировать» / «Разблокировать». Себя
-заблокировать нельзя. Менеджер раздел не видит и не открывает.
+`/admin/ai` (только `admin`) показывает расход за текущий месяц из
+`ai_requests` — всего, по классам и по помощникам, — месячный лимит и
+настройки (лимит, курс USD, цена за 1000 токенов YandexGPT, тумблеры
+включения трёх помощников: `specs`, `description`, `consultant`). При
+превышении лимита Владелец получает предупреждение (баннер в Панели +
+`logWarning()` + письмо один раз за месяц), а помощники **продолжают
+работать** до ручного отключения (`Q-027`). Финальная сквозная приёмка
+фазы и закрытие `Q-DEV-005`.
 
 ## Что проверено в коде перед планом
-- `src/Models/User.php` — уже есть `findUserByEmail()`,
-  `findUserById()`, `createUser()` (паттерн перехвата дубликата email
-  через `errorInfo[1] === 1062` → `null`), `updateUserPasswordHash()` —
-  новые функции добавлены рядом по тому же стилю.
-- `src/Core/functions.php:231` — `requireRole(array $roles)` готов.
-- `src/Core/Validation.php` — `normalizePhone()`, `validatePassword()`
-  готовы, переиспользованы как есть.
-- `src/Models/RememberToken.php:50` — `deleteRememberTokens(int
-  $userId)` готов.
-- `src/Views/layout/admin-header.php` — `$adminNavItems` уже
-  поддерживает необязательный ключ `roles` (фильтрация по
-  `currentUser()['role']`), пункт «Настройки» — готовый образец
-  `roles => ['admin']`.
-- `config/routes.php` — секции GET/POST уже содержат
-  `/admin/content*`, `/admin/settings` как образец для новых
-  `/admin/users*` маршрутов.
-- `src/Controllers/AdminSettingController.php` — образец
-  admin-only контроллера (`requireRole(['admin'])` во всех методах).
+- `AI_ASSISTANTS` (`src/Core/Ai.php`) всё ещё содержит ключ `picker`,
+  но с Таска 7 (`ADR-051`) подбор товара объединён с `consultant` —
+  `aiComplete('picker', ...)` нигде не вызывается,
+  `ai_chat_logs.assistant` пишется только как `'consultant'`. По
+  решению пользователя тумблер `ai_picker_enabled` **не заводится** —
+  в этом таске три тумблера (`specs`/`description`/`consultant`), не
+  четыре.
+- Тумблеры сейчас некому проверять: `AiChatController::consultant()`,
+  `AdminAiSpecController::index()`/`run()` и
+  `AdminProductController::generateDescription()` проверяют только
+  `aiClassAvailable()` (есть ли ключ в `.env`) — про будущий
+  `aiAssistantEnabled()` там ничего нет. Без правки этих трёх файлов
+  тумблер в БД ни на что не влияет и DoD «выключенный помощник отвечает
+  недоступно» не выполняется — файлы добавлены в Scope.
+- `updateSettings(array $values): void` (`src/Models/Setting.php:32`)
+  сейчас жёстко перебирает `array_keys(SETTING_KEYS)` — нужна
+  сигнатура `updateSettings(array $values, array $allowed =
+SETTING_KEYS)`, чтобы форма «Настройки» и форма «ИИ» писали каждая в
+  свой whitelist ключей и не могли задеть чужие.
+- `getAiRequestStats(string $month)` (`src/Models/AiUsage.php`) уже
+  группирует по `assistant`/`task_class`/`provider` и считает
+  `errors_count`/`spend` за месяц — вероятно, Model менять не придётся,
+  разбивка по каждому измерению досчитывается в контроллере/View из уже
+  возвращаемых строк.
+- `aiComplete()` (`src/Services/Ai/ai.php`) после `logAiRequest()`
+  сейчас не делает ничего — ни проверки лимита, ни уведомления, это
+  весь функционал таска, а не правка существующей проверки.
+- Пункт меню «ИИ-помощники» уже есть в `admin-header.php:32` и ведёт на
+  `/admin/ai/specs` — второй пункт не заводится, `/admin/ai` вешается
+  на тот же пункт (подсветка активности по префиксу `/admin/ai` уже
+  работает через `str_starts_with()` в шаблоне).
+- Все нужные таблицы/колонки (`ai_requests`, `settings`) уже есть в
+  `database/install.php` — миграций схемы в этом таске нет.
 
-## Scope — что трогали
-- [x] `src/Core/StaffForm.php` — создан: `STAFF_ROLES`,
-      `validateStaffInput(array): array`
-- [x] `tests/Unit/StaffFormTest.php` — создан (13 тестов)
-- [x] `tests/bootstrap.php` — подключён `Core/StaffForm.php`
-- [x] `src/Models/User.php` — добавлены `getStaffUsers()`,
-      `createStaffUser()`, `setUserBlocked()` (ограничена
-      `role IN ('manager','admin')` в SQL — сверх исходного плана,
-      защита от блокировки Покупателя по id)
-- [x] `src/Controllers/AdminUserController.php` — создан: `index()`,
-      `store()`, `block()`, `unblock()`
-- [x] `src/Views/admin/users/index.php` — создан: таблица сотрудников
-      + форма создания на одной странице
-- [x] `src/Views/layout/admin-header.php` — пункт «Сотрудники» с
-      `roles => ['admin']`
-- [x] `config/routes.php` — маршруты `/admin/users*`
-- [x] `.docs/dev-log.md`, `.docs/phases/phase-8.md` — запись по итогам
-      таска
+## Scope — что трогаем
+- [ ] `src/Core/Ai.php` — изменить: `AI_SETTING_KEYS`
+      (`ai_monthly_limit_rub`, `ai_usd_rate`, `ai_yandex_price_per_1k`,
+      `ai_specs_enabled`, `ai_description_enabled`,
+      `ai_consultant_enabled`), `validateAiSettingsInput(array):
+array`, `aiAssistantEnabled(string $assistant): bool` (тумблер гасит
+      помощника так же, как отсутствие ключа), `isAiLimitExceeded(string
+$spend, string $limit): bool`
+- [ ] `src/Models/Setting.php` — изменить: `updateSettings(array
+$values, array $allowed = SETTING_KEYS): void` — существующий вызов из
+      `AdminSettingController::update()` не трогаем (дефолт сохраняет
+      старое поведение), `/admin/ai` передаёт `AI_SETTING_KEYS`
+- [ ] `src/Models/AiUsage.php` — проверить, при необходимости изменить:
+      данные для `/admin/ai` (расход по классам/помощникам/ошибкам за
+      месяц) уже даёт `getAiRequestStats()`
+- [ ] `src/Services/Ai/ai.php` — изменить: в `aiComplete()` после
+      `logAiRequest()` — проверка `isAiLimitExceeded()` по расходу
+      текущего месяца, `logWarning()` и `sendMail()` Владельцу, если ещё
+      не отправлено в этом месяце (метка `ai_limit_notified_month` в
+      `settings`)
+- [ ] `src/Controllers/AiChatController.php` — изменить: рядом с
+      `aiClassAvailable(aiClassForAssistant('consultant'))` добавить
+      `aiAssistantEnabled('consultant')` — при `false` тот же fallback,
+      что при недоступном классе
+- [ ] `src/Controllers/AdminAiSpecController.php` — изменить: в
+      `index()`/`run()` добавить проверку `aiAssistantEnabled('specs')`
+      — при `false` кнопка «Разобрать» неактивна, как при недоступном
+      классе
+- [ ] `src/Controllers/AdminProductController.php` — изменить: в
+      `generateDescription()` добавить проверку
+      `aiAssistantEnabled('description')` перед `aiComplete()`
+- [ ] `src/Controllers/AdminAiController.php` — создать: `index()`
+      (расход/лимит/настройки, `requireRole(['admin'])`), `update()`
+      (POST, `requireRole(['admin'])`, `requireCsrf()`, валидация →
+      `updateSettings($input, AI_SETTING_KEYS)` → flash → redirect)
+- [ ] `src/Views/admin/ai/index.php` — создать: расход за месяц (всего,
+      по классам, по трём помощникам, число ошибок), форма лимита/курса/
+      цены, тумблеры трёх помощников
+- [ ] `src/Views/emails/ai-limit-exceeded.php` — создать: письмо
+      Владельцу о превышении месячного лимита
+- [ ] `src/Views/layout/admin-header.php` — изменить: баннер превышения
+      лимита (виден `admin`); второй пункт меню не добавляется
+- [ ] `config/routes.php` — изменить: `GET /admin/ai`, `POST /admin/ai`
+- [ ] `tests/Unit/AiTest.php` — изменить: тесты на
+      `validateAiSettingsInput()`, `aiAssistantEnabled()`,
+      `isAiLimitExceeded()`
+- [ ] `.docs/phases/_status.md` — изменить: Фаза 9 → ✅ Завершена
+- [ ] `.docs/tz-coverage.md` — изменить: `FR-AI-001…004`, `BR-AI-001` →
+      Реализовано; `Q-DEV-005` → закрыт
+- [ ] `.docs/modules/ai.md` — изменить: правка `ADR-019` (тексты из
+      `content_pages`), фиксация решения не заводить `ai_picker_enabled`
+- [ ] `.docs/planning-log.md` — изменить: ADR о трёх тумблерах вместо
+      четырёх (снятие `picker` как отдельного управляемого помощника)
+- [ ] `.docs/dev-log.md` — изменить: запись по итогам таска
+- [ ] `.docs/database.md` — изменить (если понадобится): сверка с
+      `database/install.php`, изменений схемы не ожидается
 
-## Out of scope — не трогали
-- Смена роли/пароля другого сотрудника Администратором
-- Принудительное завершение активной сессии при блокировке (только
-  `deleteRememberTokens()`)
-- Редактирование профиля Покупателей — не входит в список
-  `/admin/users`
-- `editprofile.html` из макетов — не использован, только
-  `userlist.html` (список + создание)
-- Закрытие фазы (`_status.md`, `tz-coverage.md`, `planning-log.md`,
-  `admin-assembly.md`) — не тронуты, это Таск 8 и был последним в
-  Фазе 8, но её формальное закрытие — отдельный шаг
+## Out of scope — не трогаем
+- Тумблер `ai_picker_enabled` — по решению пользователя не заводится,
+  подбор товара управляется тумблером `consultant`
+- Автоматическое отключение помощников при исчерпании лимита — решение
+  принимает Владелец вручную (`Q-027`), не автоматика
+- Новая таблица/схема БД — все нужные поля уже есть
+- Правки самого чат-виджета (Таск 6) кроме уже сделанного в Таске 7
+- Отдельный read-only MySQL-пользователь для ИИ — не в рамках проекта
+  (см. «Решения фазы» `phase-9.md`)
 
 ## Definition of Done
-- [x] Созданный Менеджер входит по выданным email/паролю и видит
-      Панель без пунктов «Сотрудники»/«Настройки»; `/admin/users` и
-      `/admin/settings` под ним → редирект на `/admin`
-- [x] Заблокированный Менеджер: вход → общее сообщение ошибки; remember-
-      cookie не восстанавливает сессию, его строки `remember_tokens`
-      удалены при блокировке; «Разблокировать» возвращает доступ
-- [x] Блокировка собственной учётки → flash-отказ, `is_blocked` не
-      изменился
-- [x] Дубликат email / пароль < 8 / роль вне `STAFF_ROLES` —
-      подсветка полей, строки в БД нет; телефон пустой — допускается
-- [x] `manager`/`customer` на `/admin/users` → редирект; Гость →
-      `/login`; POST без CSRF → 419
-- [x] Покупатели (`role='customer'`) в списке `/admin/users` не
-      показываются
-- [x] `composer test` зелёный (408/408, новые тесты
-      `validateStaffInput()`)
-- [x] Проверить `.docs/dod-global.md`
-- [x] Все тестовые учётные записи, созданные при ручной проверке,
-      удалены после проверки
+- [ ] Расход за месяц на `/admin/ai` совпадает с `SUM(cost_rub)` из
+      `ai_requests` за тот же период (сверено `SELECT`), разбивка по
+      классам и по трём помощникам сходится в сумме
+- [ ] Имитация исчерпания (лимит снижен ниже текущего расхода) →
+      баннер в Панели, `WARNING` в `app.log`, письмо Владельцу; **все
+      три помощника продолжают работать**; второе превышение в том же
+      месяце письмо не дублирует (`Q-027`)
+- [ ] Тумблер «выключить» у каждого из трёх помощников по отдельности:
+      `consultant` выключен → чат отвечает «недоступно» с контактами;
+      `specs` выключен → кнопка «Разобрать» неактивна в очереди; 
+      `description` выключен → кнопка генератора черновика скрыта/
+      неактивна в форме Товара; в каждом случае остальные два продолжают
+      работать
+- [ ] Сквозная приёмка `AC-06` при полностью выключенном ИИ (все три
+      тумблера выключены + ключи сняты): Главная, Каталог, карточка,
+      поиск, корзина, `/checkout` до «Спасибо», личный кабинет, Панель —
+      без ошибок; `app.log` без `ERROR`
+- [ ] `NFR-AI-*` зафиксировано в `dev-log.md`: замер 10 ответов
+      консультанта, время разбора пакета Товаров, проверка чистки лога
+      переписки
+- [ ] Секретов в БД нет — ключи провайдеров остались в `.env`
+      (`Q-032`, `CLAUDE.md`)
+- [ ] `manager` раздела «ИИ» не видит (пункт меню и прямой URL
+      `/admin/ai` — редирект)
+- [ ] POST `/admin/ai` без CSRF → 419
+- [ ] `composer test` зелёный
+- [ ] Проверить `.docs/dod-global.md`
 
 ## Важные правила
 - Следовать `CLAUDE.md`
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
-- Каждый шаг проверялся тем, что указано в DoD: доступ/блокировка/
-  CSRF — живым HTTP на реальной БД, чистая логика — `composer test`

@@ -929,3 +929,268 @@
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
 }
+
+/* Виджет чата консультанта (`FR-AI-003`, Таск 6 Фазы 9) — свой набор
+   custom properties, не завязан на переменные темы/Bootstrap. Мобильный
+   вид — база (`.ai-chat__panel` шириной в вьюпорт минус отступы),
+   `min-width: 576px` возвращает фиксированную ширину панели. Кнопка
+   открытия стоит выше `.back-to-top` (`style.css`, bottom:20px,
+   z-index:99), чтобы не перекрываться с ней на узких экранах. */
+:root {
+    --ai-chat-accent: #f2a100;
+    --ai-chat-dark: #252c51;
+    --ai-chat-radius: 12px;
+    --ai-chat-gap: 12px;
+    --ai-chat-panel-width: 420px;
+    --ai-chat-panel-height: 520px;
+}
+
+.ai-chat {
+    position: fixed;
+    right: 12px;
+    bottom: 80px;
+    z-index: 1010;
+}
+
+.ai-chat__toggle {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--ai-chat-accent);
+    color: #fff;
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+/* Подсказка при наведении/фокусе — своя, не браузерный `title`
+   (мгновенная, стиль в тон панели чата, не системный тултип). */
+.ai-chat__toggle::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px 12px;
+    border-radius: 6px;
+    background-color: var(--ai-chat-dark);
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+}
+
+.ai-chat__toggle:hover::after,
+.ai-chat__toggle:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+.ai-chat__panel {
+    position: absolute;
+    right: -8px;
+    bottom: 76px;
+    width: calc(100vw - 24px);
+    height: var(--ai-chat-panel-height);
+    max-height: calc(100vh - 160px);
+    background-color: #fff;
+    border-radius: var(--ai-chat-radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ai-chat__panel[hidden] {
+    display: none;
+}
+
+.ai-chat__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--ai-chat-gap);
+    background-color: var(--ai-chat-dark);
+    color: #fff;
+}
+
+.ai-chat__title {
+    margin: 0;
+    font-weight: 600;
+}
+
+.ai-chat__close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ai-chat__warning {
+    margin: 0;
+    padding: 8px var(--ai-chat-gap);
+    font-size: 12px;
+    color: #6c757d;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #eee;
+}
+
+.ai-chat__messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--ai-chat-gap);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-chat__message {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: var(--ai-chat-radius);
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.ai-chat__message--user {
+    align-self: flex-end;
+    background-color: var(--ai-chat-accent);
+    color: #fff;
+}
+
+.ai-chat__message--assistant {
+    align-self: flex-start;
+    background-color: #f1f1f1;
+    color: var(--ai-chat-dark);
+}
+
+.ai-chat__message--pending {
+    align-self: flex-start;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.ai-chat__form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: var(--ai-chat-gap);
+    border-top: 1px solid #eee;
+}
+
+/* `rows="3"` в разметке задаёт стартовую высоту (плейсхолдер
+   помещается без скролла); `max-height` — потолок роста, `resize:
+   none` не даёт растянуть вручную. Скролл появляется сам, только
+   когда текст пользователя превысил `max-height` — стандартное
+   поведение textarea, ничего дополнительно включать не нужно. */
+.ai-chat__input {
+    flex: 1;
+    resize: none;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.4;
+    min-height: 64px;
+    max-height: 120px;
+}
+
+/* Кнопка-иконка (не текстовая) — тот же квадрат, что кнопка открытия
+   виджета, только меньше и без скругления в круг: рядом с полем ввода
+   круглая кнопка визуально не сочеталась с прямоугольным textarea. */
+.ai-chat__send {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--ai-chat-accent);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.ai-chat__send:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.ai-chat__contacts {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px var(--ai-chat-gap);
+    border-top: 1px solid #eee;
+    font-size: 13px;
+}
+
+.ai-chat__contact {
+    color: var(--ai-chat-dark);
+}
+
+/* Карточка подобранного товара внутри переписки (подбор товара
+   объединён в Консультанта — `planning-log.md`) — не бабл сообщения
+   (`.ai-chat__message`), отдельный кликабельный блок со своей
+   структурой (название/цена/описание). */
+.ai-chat__product-card {
+    align-self: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 85%;
+    padding: 10px 12px;
+    border: 1px solid #eee;
+    border-radius: var(--ai-chat-radius);
+    background-color: #fff;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.ai-chat__product-card:hover {
+    border-color: var(--ai-chat-accent);
+}
+
+.ai-chat__product-card-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ai-chat-dark);
+}
+
+.ai-chat__product-card-price {
+    font-size: 13px;
+    color: var(--ai-chat-accent);
+    font-weight: 600;
+}
+
+.ai-chat__product-card-excerpt {
+    font-size: 12px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+@media only screen and (min-width: 576px) {
+    .ai-chat {
+        right: 20px;
+        bottom: 90px;
+    }
+
+    .ai-chat__panel {
+        right: 0;
+        width: var(--ai-chat-panel-width);
+        bottom: 82px;
+    }
+}

@@ -800,6 +800,163 @@
         });
     }
 
+    // ─── Виджет чата консультанта (FR-AI-003, Таск 6 Фазы 9) ────────────
+    // CSRF — из мета-тега `layout/header.php` (форма logout с
+    // `csrfField()` рендерится только авторизованным, виджету нужен
+    // источник токена независимо от роли). Ответ модели выводится через
+    // `.text()`, не `.html()` — иначе разметка/скрипт из текста ответа
+    // исполнились бы в браузере.
+    var aiChatLimitReached = false;
+
+    function aiChatCsrfToken() {
+        return jQuery('meta[name="csrf-token"]').attr('content') || '';
+    }
+
+    function appendAiChatMessage($messages, role, text) {
+        var $bubble = jQuery('<p></p>')
+            .addClass('ai-chat__message ai-chat__message--' + role)
+            .text(text)
+            .appendTo($messages);
+        $messages.scrollTop($messages.prop('scrollHeight'));
+        return $bubble;
+    }
+
+    /**
+     * Карточка подобранного товара (FR-AI-003, подбор товара внутри
+     * консультанта — объединено с исходным FR-AI-004) — реальная
+     * ссылка `<a href>`, все текстовые поля через `.text()`: сервер уже
+     * проверил `product_slug` по БД (`AiChatController::consultant()`),
+     * но название/описание товара всё равно не должно трактоваться как
+     * HTML при выводе.
+     */
+    function appendAiChatProductCard($messages, product) {
+        var $card = jQuery('<a></a>')
+            .addClass('ai-chat__product-card')
+            .attr('href', product.url);
+
+        jQuery('<span></span>').addClass('ai-chat__product-card-name').text(product.name).appendTo($card);
+        jQuery('<span></span>').addClass('ai-chat__product-card-price').text(product.price).appendTo($card);
+        jQuery('<span></span>').addClass('ai-chat__product-card-excerpt').text(product.excerpt).appendTo($card);
+
+        $card.appendTo($messages);
+        $messages.scrollTop($messages.prop('scrollHeight'));
+    }
+
+    function sendAiChatQuestion($messages, $send, question) {
+        var formData = new FormData();
+        formData.set('question', question);
+        formData.set('_csrf', aiChatCsrfToken());
+
+        var $pending = appendAiChatMessage($messages, 'pending', 'Печатает…');
+
+        fetch('/ai/consultant', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                $pending.remove();
+
+                if (response.status === 419) {
+                    appendAiChatMessage($messages, 'assistant', 'Сессия устарела — обновите страницу и попробуйте снова.');
+                    return null;
+                }
+                if (response.status === 429) {
+                    appendAiChatMessage($messages, 'assistant', 'Слишком много сообщений — подождите минуту.');
+                    return null;
+                }
+
+                return response.json();
+            })
+            .then(function (data) {
+                if (!data) {
+                    return;
+                }
+
+                if (data.answer) {
+                    appendAiChatMessage($messages, 'assistant', data.answer);
+                    if (data.product) {
+                        appendAiChatProductCard($messages, data.product);
+                    }
+                } else if (data.unavailable) {
+                    appendAiChatMessage($messages, 'assistant', 'Консультант временно недоступен. Позвоните: ' + data.phone + ' или напишите в WhatsApp: ' + data.whatsapp + '.');
+                } else if (data.limit_reached) {
+                    aiChatLimitReached = true;
+                    appendAiChatMessage($messages, 'assistant', data.message);
+                } else if (data.error) {
+                    appendAiChatMessage($messages, 'assistant', data.error);
+                } else {
+                    appendAiChatMessage($messages, 'assistant', 'Не удалось получить ответ — попробуйте ещё раз.');
+                }
+            })
+            .catch(function () {
+                $pending.remove();
+                appendAiChatMessage($messages, 'assistant', 'Не удалось связаться с сервером — проверьте соединение.');
+            })
+            .finally(function () {
+                $send.prop('disabled', aiChatLimitReached);
+            });
+    }
+
+    function initAiChat() {
+        var $widget = jQuery('#ai-chat');
+        if (!$widget.length) {
+            return;
+        }
+
+        var $toggle   = jQuery('#ai-chat-toggle');
+        var $panel    = jQuery('#ai-chat-panel');
+        var $close    = jQuery('#ai-chat-close');
+        var $form     = jQuery('#ai-chat-form');
+        var $input    = jQuery('#ai-chat-input');
+        var $send     = jQuery('#ai-chat-send');
+        var $messages = jQuery('#ai-chat-messages');
+
+        function setAiChatOpen(open) {
+            $panel.prop('hidden', !open);
+            $toggle.attr('aria-expanded', open ? 'true' : 'false');
+            if (open) {
+                $input.trigger('focus');
+            }
+        }
+
+        $toggle.on('click', function () {
+            setAiChatOpen($panel.prop('hidden'));
+        });
+
+        $close.on('click', function () {
+            setAiChatOpen(false);
+        });
+
+        jQuery(document).on('click', function (event) {
+            if (!$panel.prop('hidden') && !jQuery(event.target).closest('#ai-chat').length) {
+                setAiChatOpen(false);
+            }
+        });
+
+        $input.on('keydown', function (event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                $form.trigger('submit');
+            }
+        });
+
+        $form.on('submit', function (event) {
+            event.preventDefault();
+
+            var question = $input.val().trim();
+            if (question === '' || aiChatLimitReached) {
+                return;
+            }
+
+            appendAiChatMessage($messages, 'user', question);
+            $input.val('');
+            $send.prop('disabled', true);
+
+            sendAiChatQuestion($messages, $send, question);
+        });
+    }
+
     jQuery(function () {
         syncHeaderSticky();
         applyContentOffset();
@@ -817,6 +974,7 @@
         initCheckoutSavedAddressAutofill();
         initHomeProductsTabs();
         initPageLoader();
+        initAiChat();
         jQuery(window).on('load resize', applyContentOffset);
         jQuery(window).on('load', syncHeaderSticky);
         jQuery(document).on('close.bs.alert', '.alert', function () {

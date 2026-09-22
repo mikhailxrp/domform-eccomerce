@@ -87,5 +87,53 @@ define('ABOUT_GALLERY_MAX', 4);
 // «Добавить отзыв о магазине» Панели управления.
 define('UPLOAD_REVIEWS_DIR', ROOT_PATH . '/public/uploads/reviews');
 
+// ИИ-помощники (`.docs/phases/phase-9.md`, Таск 1) — таймаут одного
+// HTTP-вызова к провайдеру. Ответ консультанта нужен Покупателю за
+// ≤10 секунд (`NFR-AI-*`) — 15 секунд оставляют запас на сеть, не
+// превращая зависший провайдер в долгое ожидание для пользователя.
+define('AI_TIMEOUT_SECONDS', 15);
+
+// Панель управления — очередь разбора характеристик (`.docs/phases/phase-9.md`,
+// Таск 2). `AI_SPECS_BATCH_MAX` — небольшой пакет: несколько
+// последовательных блокирующих вызовов провайдера в одном POST-запросе
+// рискуют упереться в `max_execution_time` shared-хостинга при большем
+// числе Товаров. `AI_SPECS_BATCH_OVERHEAD_SECONDS` — запас сверх
+// `AI_TIMEOUT_SECONDS` на один Товар пакета (запросы к БД —
+// `getKnownSpecValues()`, `replaceSpecSuggestions()` — и сборка
+// промпта); был 5 секунд, не хватило на живом прогоне (Таск 3,
+// `dev-log.md` 22.09.2026) — реальный вызов провайдера подошёл близко
+// к `AI_TIMEOUT_SECONDS`, а БД проекта на shared-хостинге (Beget) не
+// локальная, каждый запрос добавляет сетевую задержку.
+define('ADMIN_AI_SPECS_PER_PAGE', 20);
+define('AI_SPECS_BATCH_MAX', 5);
+define('AI_SPECS_BATCH_OVERHEAD_SECONDS', 20);
+
+// Консультант в чате (`.docs/phases/phase-9.md`, Таск 5) —
+// `AI_MAX_QUESTION_LENGTH`/`AI_CHAT_HISTORY_LIMIT` живут в
+// `src/Core/AiChat.php`, не здесь: их использует чистая логика
+// (`normalizeChatQuestion()`/`trimChatHistory()`), которую подключает
+// `tests/bootstrap.php`, а он не подключает `config.php` (по образцу
+// констант `AiSpecs.php`/`AiDescription.php`). `AI_CHAT_LOG_RETENTION_DAYS`/
+// `AI_CHAT_LOG_GC_DIVISOR` нужны только `Models/AiChatLog.php` (работа
+// с БД, юнит-тестами не покрывается) — хранение лога переписки 3
+// месяца (`NFR-AI-*`, `Q-028`) и вероятностная чистка при записи, как
+// GC сессий.
+define('AI_CHAT_LOG_RETENTION_DAYS', 90);
+define('AI_CHAT_LOG_GC_DIVISOR', 100);
+
+// Подбор товара внутри Консультанта (объединено с исходным `FR-AI-004`
+// — `planning-log.md`) — сколько подтверждённых Товаров попадает в
+// снимок каталога для промпта. Используется только в
+// `AiChatController` (Model-запрос), поэтому здесь, а не в
+// `Core/AiChat.php`. 150 — с запасом на весь текущий каталог.
+define('AI_CATALOG_SNAPSHOT_LIMIT', 150);
+
+// Демо-лимит вопросов на один диалог Консультанта (не часть ТЗ —
+// ограничение показа для демо/портфолио-стенда, запрошено отдельно).
+// `AI_CHAT_LIMIT_ENABLED` — единственное, что нужно `AiChatController`
+// из `.env`; сам предел (`AI_CHAT_DEMO_LIMIT`) — в `src/Core/AiChat.php`,
+// рядом с проверяющей его чистой функцией `chatLimitReached()`.
+define('AI_CHAT_LIMIT_ENABLED', env('LIMIT_REQUESTS', 'false') === 'true');
+
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

@@ -76,7 +76,7 @@ $presetLabels = [
             <?php if ($byDay === []): ?>
                 <p class="text-muted text-center py-5 mb-0">За выбранный период Заказов нет.</p>
             <?php else: ?>
-                <div class="mb-4">
+                <div class="report-chart mb-4">
                     <canvas
                         id="report-chart"
                         data-labels="<?= e(json_encode(array_column($byDay, 'day'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>"

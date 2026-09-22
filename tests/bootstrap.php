@@ -32,3 +32,7 @@ require_once ROOT_PATH . '/src/Core/Settings.php';
 require_once ROOT_PATH . '/src/Core/Callback.php';
 require_once ROOT_PATH . '/src/Core/BannerForm.php';
 require_once ROOT_PATH . '/src/Core/StaffForm.php';
+require_once ROOT_PATH . '/src/Core/Ai.php';
+require_once ROOT_PATH . '/src/Core/AiSpecs.php';
+require_once ROOT_PATH . '/src/Core/AiDescription.php';
+require_once ROOT_PATH . '/src/Core/AiChat.php';

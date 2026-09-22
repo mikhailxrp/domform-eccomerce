@@ -19,6 +19,9 @@ include ROOT_PATH . '/src/Views/layout/admin-header.php';
         <h4 class="mb-0">Заказы</h4>
         <p class="mb-0 text-muted">Все заказы независимо от источника — сайт или звонок/WhatsApp</p>
     </div>
+    <div>
+        <a href="/admin/orders/create" class="btn btn-primary">Новый заказ</a>
+    </div>
 </div>
 
 <div class="card custom-card">

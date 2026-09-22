@@ -9,6 +9,7 @@ declare(strict_types=1);
 /** @var array<string, mixed> $errors */
 /** @var int $variantRows */
 /** @var int $specRows */
+/** @var bool $aiDescriptionAvailable */
 
 include ROOT_PATH . '/src/Views/layout/admin-header.php';
 
@@ -60,6 +61,37 @@ $specErrors    = $errors['specs'] ?? [];
                     <label for="product-description" class="form-label">Описание</label>
                     <textarea id="product-description" name="description" class="form-control" rows="4"><?= e($description) ?></textarea>
                 </div>
+                <?php if ($isEdit && (string) (currentUser()['role'] ?? '') === 'admin'): ?>
+                    <div class="col-12">
+                        <?php if ($aiDescriptionAvailable): ?>
+                            <div class="border rounded p-3" data-ai-description data-product-id="<?= e((string) $product['id']) ?>">
+                                <p class="fw-semibold mb-2">Черновик описания от ИИ</p>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Категория" data-ai-description-field="category">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Материал" data-ai-description-field="material">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Размер" data-ai-description-field="size">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Механизм" data-ai-description-field="mechanism">
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-ai-description-generate>Сгенерировать черновик</button>
+                                <div class="mt-2" data-ai-description-message></div>
+                                <div class="mt-2" data-ai-description-result <?= ((string) ($product['description_draft'] ?? '')) === '' ? 'hidden' : '' ?>>
+                                    <textarea class="form-control form-control-sm" rows="3" readonly data-ai-description-draft><?= e((string) ($product['description_draft'] ?? '')) ?></textarea>
+                                    <button type="button" class="btn btn-outline-success btn-sm mt-2" data-ai-description-apply>Применить к описанию</button>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <div class="alert alert-secondary mb-0">Генератор черновика описания недоступен — провайдер ИИ не настроен или помощник выключен в разделе «ИИ».</div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
                 <div class="col-md-6">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="is_featured" value="1" id="product-featured" <?= $isFeatured ? 'checked' : '' ?>>
@@ -110,8 +142,17 @@ $specErrors    = $errors['specs'] ?? [];
     </div>
 
     <div class="card custom-card">
-        <div class="card-header">
-            <div class="card-title">Характеристики</div>
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="card-title mb-0">Характеристики</div>
+            <?php if ($isEdit): ?>
+                <?php $specsStatus = (string) ($product['specs_status'] ?? 'pending'); ?>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge <?= $specsStatus === 'confirmed' ? 'bg-success' : 'bg-warning' ?>"><?= $specsStatus === 'confirmed' ? 'Подтверждены' : 'Требует разбора' ?></span>
+                    <?php if ((string) (currentUser()['role'] ?? '') === 'admin'): ?>
+                        <a href="/admin/ai/specs/<?= e((string) $product['id']) ?>" class="btn btn-outline-primary btn-sm">Разбор ИИ</a>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <?php if ($isEdit && ($old['specs'] ?? []) !== []): ?>

@@ -843,7 +843,7 @@ function getProductCategoryIds(int $productId): array
 function findProductForAdmin(int $id): ?array
 {
     $stmt = getPdo()->prepare(
-        'SELECT id, name, slug, description, is_active, is_featured FROM products WHERE id = :id LIMIT 1'
+        'SELECT id, name, slug, description, description_draft, is_active, is_featured, specs_status FROM products WHERE id = :id LIMIT 1'
     );
     $stmt->execute(['id' => $id]);
     $product = $stmt->fetch();
@@ -872,6 +872,17 @@ function findProductForAdmin(int $id): ?array
     $product['primary_category_id'] = $primaryRow !== null ? (int) $primaryRow['category_id'] : 0;
 
     return $product;
+}
+
+/**
+ * Черновик описания от ИИ (`FR-AI-002`, Таск 4 Фазы 9) — отдельная
+ * колонка, не трогает `description`: публикуется только через ручное
+ * «Применить к описанию» + обычное сохранение формы Товара.
+ */
+function saveDescriptionDraft(int $productId, string $draft): void
+{
+    $stmt = getPdo()->prepare('UPDATE products SET description_draft = :draft WHERE id = :id');
+    $stmt->execute(['draft' => $draft, 'id' => $productId]);
 }
 
 /**
@@ -1079,6 +1090,59 @@ function findProductBySlug(string $slug): ?array
         WHERE p.slug = :slug AND p.is_active = 1
         LIMIT 1
     ');
+    $stmt->execute(['slug' => $slug]);
+    $product = $stmt->fetch();
+
+    return $product !== false ? $product : null;
+}
+
+/**
+ * Снимок каталога для Консультанта в чате (`FR-AI-003`, подбор товара
+ * внутри чата — объединено с исходным `FR-AI-004`, `planning-log.md`)
+ * — только Товары, которые реально можно показать: опубликованные и с
+ * подтверждёнными характеристиками (`specs_status='confirmed'`), иначе
+ * модель могла бы предложить Товар с ещё не проверенными
+ * Администратором данными.
+ */
+function getConfirmedCatalogSnapshotForAi(int $limit): array
+{
+    $priceSql = discountedPriceSql('pv');
+
+    $stmt = getPdo()->prepare("
+        SELECT p.slug, p.name, c.name AS category_name, MIN({$priceSql}) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        INNER JOIN product_categories pc ON pc.product_id = p.id AND pc.is_primary = 1
+        INNER JOIN categories c ON c.id = pc.category_id
+        WHERE p.is_active = 1 AND p.specs_status = 'confirmed'
+        GROUP BY p.id, p.name, p.slug, c.name
+        ORDER BY p.id DESC
+        LIMIT :limit
+    ");
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Проверка `product_slug`, предложенного моделью — сервер не доверяет
+ * тексту модели: карточка в чате строится только из того, что вернул
+ * этот запрос (название/описание/цена), включая случай, когда модель
+ * подделала или выдумала slug. Тот же критерий, что снимок каталога.
+ */
+function findConfirmedProductForAi(string $slug): ?array
+{
+    $priceSql = discountedPriceSql('pv');
+
+    $stmt = getPdo()->prepare("
+        SELECT p.slug, p.name, p.description, MIN({$priceSql}) AS min_price
+        FROM products p
+        INNER JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+        WHERE p.slug = :slug AND p.is_active = 1 AND p.specs_status = 'confirmed'
+        GROUP BY p.id, p.name, p.slug, p.description
+        LIMIT 1
+    ");
     $stmt->execute(['slug' => $slug]);
     $product = $stmt->fetch();
 
