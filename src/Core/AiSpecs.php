@@ -195,3 +195,70 @@ function valueInKnownList(string $value, array $knownList): bool
 
     return false;
 }
+
+/**
+ * Ревью предложений (`FR-AI-001` правила 3–5, Таск 3 Фазы 9) — чистая
+ * функция, БД не трогает. `$suggestions` — строки `ai_spec_suggestions`
+ * Товара (`id`, `target`, `name`, `value`, `status`);
+ * `$validVariantIds` — id Вариантов **этого же** Товара
+ * (`getAllProductVariants()`), подмена чужого `variant_id` отклоняется
+ * здесь же, до записи в БД; `$input` — сырой POST:
+ * `accepted[id]`, `value[id]`, `variant_id[id]`.
+ *
+ * `color` никогда не попадает в `$accepted` — только подсказка
+ * («Решения фазы» Таска 1: цвет остаётся атрибутом фото Варианта,
+ * `ADR-006`). Непомеченный чекбоксом пункт — молча отклонён, не
+ * ошибка. `needs_decision` требует, чтобы отправленное значение
+ * отличалось от предложенного моделью — иначе продолжает считаться
+ * неразобранным (правило 3: подтверждение не может быть слепым для
+ * значения, помеченного как «требует решения»).
+ */
+function validateSpecReviewInput(array $suggestions, array $validVariantIds, array $input): array
+{
+    $acceptedFlags = (array) ($input['accepted'] ?? []);
+    $values        = (array) ($input['value'] ?? []);
+    $variantIds    = (array) ($input['variant_id'] ?? []);
+
+    $accepted = [];
+    $errors   = [];
+
+    foreach ($suggestions as $suggestion) {
+        $id = (int) $suggestion['id'];
+
+        if ($suggestion['target'] === 'color') {
+            continue;
+        }
+
+        if (empty($acceptedFlags[$id])) {
+            continue;
+        }
+
+        $value = is_string($values[$id] ?? null) ? trim($values[$id]) : '';
+        if ($value === '') {
+            $errors[$id] = 'Значение не может быть пустым.';
+            continue;
+        }
+        $value = mb_substr($value, 0, AI_SPEC_VALUE_MAX_LENGTH);
+
+        if ($suggestion['target'] === 'spec') {
+            $accepted[] = ['target' => 'spec', 'name' => $suggestion['name'], 'value' => $value];
+            continue;
+        }
+
+        $variantId = (int) ($variantIds[$id] ?? 0);
+        if (!in_array($variantId, $validVariantIds, true)) {
+            $errors[$id] = 'Выберите Вариант из списка.';
+            continue;
+        }
+
+        $isEdited = mb_strtolower($value) !== mb_strtolower(trim((string) $suggestion['value']));
+        if ($suggestion['status'] === 'needs_decision' && !$isEdited) {
+            $errors[$id] = 'Значение требует решения — поправьте его перед принятием.';
+            continue;
+        }
+
+        $accepted[] = ['target' => $suggestion['target'], 'value' => $value, 'variant_id' => $variantId];
+    }
+
+    return ['accepted' => $accepted, 'errors' => $errors];
+}

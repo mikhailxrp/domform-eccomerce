@@ -843,7 +843,7 @@ function getProductCategoryIds(int $productId): array
 function findProductForAdmin(int $id): ?array
 {
     $stmt = getPdo()->prepare(
-        'SELECT id, name, slug, description, is_active, is_featured FROM products WHERE id = :id LIMIT 1'
+        'SELECT id, name, slug, description, is_active, is_featured, specs_status FROM products WHERE id = :id LIMIT 1'
     );
     $stmt->execute(['id' => $id]);
     $product = $stmt->fetch();

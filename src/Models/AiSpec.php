@@ -176,3 +176,124 @@ function replaceSpecSuggestions(int $productId, array $rows): void
         throw $e;
     }
 }
+
+function getSpecSuggestionsForProduct(int $productId): array
+{
+    $stmt = getPdo()->prepare(
+        'SELECT id, target, name, value, status FROM ai_spec_suggestions WHERE product_id = :product_id ORDER BY id ASC'
+    );
+    $stmt->execute(['product_id' => $productId]);
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Экран ревью (Таск 3) — Товар (переиспользует `findProductForSpecsRun()`,
+ * не дублирует запрос), его предложения и Варианты (`getAllProductVariants()`
+ * — уже существующая функция `Product.php`, нужна для выбора, к какому
+ * Варианту применить `variant_material`/`variant_mechanism`).
+ */
+function findProductForSpecsReview(int $id): ?array
+{
+    $product = findProductForSpecsRun($id);
+    if ($product === null) {
+        return null;
+    }
+
+    $product['suggestions'] = getSpecSuggestionsForProduct($id);
+    $product['variants']    = getAllProductVariants($id);
+
+    return $product;
+}
+
+/**
+ * Применяет уже проверенный набор
+ * (`Core/AiSpecs.php::validateSpecReviewInput()`) и завершает ревью —
+ * одна транзакция: характеристики Товара/Варианта либо применяются и
+ * статус переходит в `confirmed` целиком, либо не применяется ничего.
+ * `target='spec'` — dedup по `name` (`DELETE` + `INSERT`, тот же
+ * приём, что `syncProductSpecs()`); `variant_material`/
+ * `variant_mechanism` — `UPDATE` с `product_id` в `WHERE` (защита от
+ * чужого `variant_id` на случай подделанного POST — `dod-global.md`,
+ * хотя `validateSpecReviewInput()` уже отсеивает такие значения
+ * раньше). Предложения Товара удаляются целиком после обработки —
+ * ревью считается законченным, даже если что-то из них было
+ * отклонено (не отмечено чекбоксом).
+ */
+function applySpecSuggestions(int $productId, array $accepted): void
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $maxSortOrderStmt = $pdo->prepare('SELECT COALESCE(MAX(sort_order), -1) FROM product_specs WHERE product_id = :product_id');
+        $maxSortOrderStmt->execute(['product_id' => $productId]);
+        $nextSortOrder = ((int) $maxSortOrderStmt->fetchColumn()) + 1;
+
+        $deleteSpecByName = $pdo->prepare('DELETE FROM product_specs WHERE product_id = :product_id AND name = :name');
+        $insertSpec       = $pdo->prepare(
+            'INSERT INTO product_specs (product_id, name, value, sort_order) VALUES (:product_id, :name, :value, :sort_order)'
+        );
+        $updateMaterial  = $pdo->prepare('UPDATE product_variants SET material = :value WHERE id = :variant_id AND product_id = :product_id');
+        $updateMechanism = $pdo->prepare('UPDATE product_variants SET mechanism_type = :value WHERE id = :variant_id AND product_id = :product_id');
+
+        foreach ($accepted as $item) {
+            if ($item['target'] === 'spec') {
+                $deleteSpecByName->execute(['product_id' => $productId, 'name' => $item['name']]);
+                $insertSpec->execute([
+                    'product_id' => $productId,
+                    'name'       => $item['name'],
+                    'value'      => $item['value'],
+                    'sort_order' => $nextSortOrder,
+                ]);
+                $nextSortOrder++;
+                continue;
+            }
+
+            $stmt = $item['target'] === 'variant_material' ? $updateMaterial : $updateMechanism;
+            $stmt->execute([
+                'value'      => $item['value'],
+                'variant_id' => $item['variant_id'],
+                'product_id' => $productId,
+            ]);
+        }
+
+        $pdo->prepare('DELETE FROM ai_spec_suggestions WHERE product_id = :product_id')
+            ->execute(['product_id' => $productId]);
+
+        $pdo->prepare("UPDATE products SET specs_status = 'confirmed' WHERE id = :product_id")
+            ->execute(['product_id' => $productId]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * «Подтвердить вручную» (Таск 3) — Товар допускается в подбор
+ * (`FR-AI-004`) без единого предложения ИИ. Очищает предложения только
+ * при переходе в `confirmed` — уборка очереди имеет смысл именно как
+ * «ревью закончено», не при других статусах.
+ */
+function setProductSpecsStatus(int $productId, string $status): void
+{
+    $pdo = getPdo();
+    $pdo->beginTransaction();
+
+    try {
+        $pdo->prepare('UPDATE products SET specs_status = :status WHERE id = :product_id')
+            ->execute(['status' => $status, 'product_id' => $productId]);
+
+        if ($status === 'confirmed') {
+            $pdo->prepare('DELETE FROM ai_spec_suggestions WHERE product_id = :product_id')
+                ->execute(['product_id' => $productId]);
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}

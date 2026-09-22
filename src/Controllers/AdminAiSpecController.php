@@ -80,9 +80,10 @@ class AdminAiSpecController
         }
 
         // Общий таймаут пакета — по числу Товаров и таймауту одного
-        // вызова провайдера, с запасом; молча игнорируется, если
+        // вызова провайдера плюс запас на БД/сборку промпта на Товар
+        // (`AI_SPECS_BATCH_OVERHEAD_SECONDS`); молча игнорируется, если
         // `set_time_limit()` запрещён на хостинге (`disable_functions`).
-        @set_time_limit(count($ids) * (AI_TIMEOUT_SECONDS + 5));
+        @set_time_limit(count($ids) * (AI_TIMEOUT_SECONDS + AI_SPECS_BATCH_OVERHEAD_SECONDS));
 
         $succeeded = 0;
 
@@ -112,5 +113,89 @@ class AdminAiSpecController
         );
 
         redirect('/admin/ai/specs');
+    }
+
+    public function review(string $id): void
+    {
+        requireRole(['admin']);
+
+        $product = findProductForSpecsReview((int) $id);
+        if ($product === null) {
+            abort404();
+        }
+
+        $this->renderReview($product, [], []);
+    }
+
+    /**
+     * Ошибка валидации → прямой рендер той же страницы с `$old`/
+     * `$errors` (не редирект — как форма Товара, `dod-global.md`).
+     * Ничего не отмечено и ошибок нет → это не ошибка формата, а
+     * отсутствие выбора: flash + редирект обратно на ревью, чтобы
+     * попробовать снова («Подтвердить вручную» — для случая «нечего
+     * применять»).
+     */
+    public function apply(string $id): void
+    {
+        requireRole(['admin']);
+        requireCsrf();
+
+        $productId = (int) $id;
+        $product   = findProductForSpecsReview($productId);
+        if ($product === null) {
+            abort404();
+        }
+
+        $validVariantIds = array_map(static fn (array $v): int => (int) $v['id'], $product['variants']);
+        $result = validateSpecReviewInput($product['suggestions'], $validVariantIds, [
+            'accepted'   => input('accepted', []),
+            'value'      => input('value', []),
+            'variant_id' => input('variant_id', []),
+        ]);
+
+        if ($result['errors'] !== []) {
+            $this->renderReview($product, (array) input('value', []), $result['errors']);
+            return;
+        }
+
+        if ($result['accepted'] === []) {
+            setFlash('error', 'Отметьте хотя бы одно предложение — или используйте «Подтвердить вручную».');
+            redirect('/admin/ai/specs/' . $productId);
+        }
+
+        applySpecSuggestions($productId, $result['accepted']);
+        setFlash('success', 'Характеристики применены, Товар подтверждён.');
+        redirect('/admin/ai/specs');
+    }
+
+    /**
+     * Допускает Товар в подбор диалогом (`FR-AI-004`) без единого
+     * предложения ИИ — для случая, когда провайдер выключен или
+     * Администратор ввёл характеристики руками в форме Товара.
+     */
+    public function confirmManually(string $id): void
+    {
+        requireRole(['admin']);
+        requireCsrf();
+
+        $productId = (int) $id;
+        if (findProductForSpecsRun($productId) === null) {
+            abort404();
+        }
+
+        setProductSpecsStatus($productId, 'confirmed');
+        setFlash('success', 'Товар подтверждён без ИИ.');
+        redirect('/admin/ai/specs');
+    }
+
+    private function renderReview(array $product, array $old, array $errors): void
+    {
+        render('admin/ai/specs/review', [
+            'title'        => 'ИИ — Ревью характеристик',
+            'product'      => $product,
+            'old'          => $old,
+            'errors'       => $errors,
+            'targetLabels' => AI_SPEC_TARGET_LABELS,
+        ]);
     }
 }

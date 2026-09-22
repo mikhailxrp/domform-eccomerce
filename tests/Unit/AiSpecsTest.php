@@ -237,4 +237,143 @@ final class AiSpecsTest extends TestCase
         $this->assertStringContainsString('Диван Милан', $messages[1]['content']);
         $this->assertStringContainsString('еврокнижка', $messages[1]['content']);
     }
+
+    // ─── validateSpecReviewInput() ─────────────────────────────────────
+
+    private const SUGGESTIONS = [
+        ['id' => 1, 'target' => 'variant_material', 'name' => 'Материал', 'value' => 'Вельвет', 'status' => 'needs_decision'],
+        ['id' => 2, 'target' => 'variant_mechanism', 'name' => 'Механизм раскладки', 'value' => 'Еврокнижка', 'status' => 'ok'],
+        ['id' => 3, 'target' => 'color', 'name' => 'Цвет', 'value' => 'Тёмно-синий', 'status' => 'needs_decision'],
+        ['id' => 4, 'target' => 'spec', 'name' => 'Ширина', 'value' => '320 см', 'status' => 'ok'],
+    ];
+
+    private const VALID_VARIANT_IDS = [23, 24];
+
+    public function testUncheckedSuggestionIsSkipped(): void
+    {
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, []);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertSame([], $result['errors']);
+    }
+
+    public function testColorIsNeverAcceptedEvenIfMarked(): void
+    {
+        $input = [
+            'accepted' => [3 => '1'],
+            'value'    => [3 => 'Тёмно-синий'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertArrayNotHasKey(3, $result['errors']);
+    }
+
+    public function testAcceptedSpecIsAppliedAsIs(): void
+    {
+        $input = [
+            'accepted' => [4 => '1'],
+            'value'    => [4 => '320 см'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([
+            ['target' => 'spec', 'name' => 'Ширина', 'value' => '320 см'],
+        ], $result['accepted']);
+    }
+
+    public function testAcceptedSpecWithEmptyValueIsError(): void
+    {
+        $input = [
+            'accepted' => [4 => '1'],
+            'value'    => [4 => '   '],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertArrayHasKey(4, $result['errors']);
+    }
+
+    public function testVariantMaterialWithoutVariantIdIsError(): void
+    {
+        $input = [
+            'accepted' => [1 => '1'],
+            'value'    => [1 => 'Букле'],
+            'variant_id' => [],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertArrayHasKey(1, $result['errors']);
+    }
+
+    public function testVariantMaterialWithForeignVariantIdIsError(): void
+    {
+        $input = [
+            'accepted'   => [1 => '1'],
+            'value'      => [1 => 'Букле'],
+            'variant_id' => [1 => '999'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertArrayHasKey(1, $result['errors']);
+    }
+
+    public function testNeedsDecisionWithoutEditIsRejected(): void
+    {
+        // Значение совпадает с предложенным моделью дословно (с учётом
+        // регистра) — не считается правкой.
+        $input = [
+            'accepted'   => [1 => '1'],
+            'value'      => [1 => 'вельвет'],
+            'variant_id' => [1 => '23'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([], $result['accepted']);
+        $this->assertArrayHasKey(1, $result['errors']);
+    }
+
+    public function testNeedsDecisionWithEditIsAccepted(): void
+    {
+        $input = [
+            'accepted'   => [1 => '1'],
+            'value'      => [1 => 'Букле'],
+            'variant_id' => [1 => '23'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([
+            ['target' => 'variant_material', 'value' => 'Букле', 'variant_id' => 23],
+        ], $result['accepted']);
+    }
+
+    public function testOkStatusAcceptedWithoutRequiringEdit(): void
+    {
+        $input = [
+            'accepted'   => [2 => '1'],
+            'value'      => [2 => 'Еврокнижка'],
+            'variant_id' => [2 => '24'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        $this->assertSame([
+            ['target' => 'variant_mechanism', 'value' => 'Еврокнижка', 'variant_id' => 24],
+        ], $result['accepted']);
+    }
+
+    public function testMultipleSuggestionsProcessedIndependently(): void
+    {
+        $input = [
+            'accepted'   => [1 => '1', 2 => '1', 4 => '1'],
+            'value'      => [1 => '', 2 => 'Еврокнижка', 4 => '320 см'],
+            'variant_id' => [2 => '24'],
+        ];
+        $result = validateSpecReviewInput(self::SUGGESTIONS, self::VALID_VARIANT_IDS, $input);
+
+        // 1 — пустое значение → ошибка; 2 — принято; 4 — принято.
+        $this->assertArrayHasKey(1, $result['errors']);
+        $this->assertCount(2, $result['accepted']);
+    }
 }

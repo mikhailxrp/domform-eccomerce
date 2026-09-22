@@ -1,159 +1,163 @@
 # Current Task
 
 ## Фаза
-Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 2 из 8.
+Phase 9 — ИИ-помощники (MVP) (`.docs/phases/phase-9.md`), Таск 3 из 8.
 
 **Статус:** ✅ Завершён 22.09.2026 — проверено живым HTTP на реальной
-БД (`php -S` + `curl`), реальным вызовом Claude через OpenRouter (не
-моком). Ролевой доступ: `admin` → 200 на `/admin/ai/specs`; временный
-`manager` (создан и удалён после проверки, включая `remember_tokens`)
-→ редирект `/admin`, пункта «ИИ-помощники» в сайдбаре нет; Гость →
-`/login`. Реальный разбор на живом Товаре (описание временно
-проставлено на существующий Товар и возвращено в `NULL` после
-проверки): «Угловой диван раскладной, механизм еврокнижка. Обивка —
-вельвет тёмно-синий. Ширина 320 см, глубина 180 см.» → 6 предложений
-(`variant_material`/`variant_mechanism`/`color` — все `needs_decision`,
-верно: этих значений не было в каталоге категории; 3× `spec` — `Форма`/
-`Ширина`/`Глубина` — все `ok`, спецификация без словаря по конструкции
-`ADR-049`). Второй такой же товар без упоминания размера в описании →
-предложение только по материалу (совпало со словарём → `ok`) и одна
-`spec`-характеристика из текста; поля «размер» нет вовсе — не пустое
-значение (правило 2). Повторный запуск того же Товара — новые 5 строк
-вместо старых 6 (замена, не накопление, `SELECT` до/после). На
-протяжении обеих проверок `products.description`, `product_specs`
-(4 предпосуществующие строки Товара) и `product_variants` не
-изменились ни на байт (`SELECT` до/после). Ключ класса `specs`
-временно затёрт в `.env` (после — восстановлен, сверено `diff`):
-кнопка «Разобрать» пропала из HTML, алерт «недоступно» показан, прямой
-POST на `/admin/ai/specs/run` в обход UI не создал ни одной строки в
-`ai_spec_suggestions` (проверка на уровне сервера, не только UI). POST
-без CSRF → 419. `php database/install.php` дважды подряд —
-`products.specs_status`/её индекс/таблица `ai_spec_suggestions` без
-дублей; 34 существующих Товара получили `specs_status='pending'`.
-`composer test` — 454/454 (+25 `AiSpecsTest`). Все временные данные
-(описания тестовых Товаров, тестовые предложения, тестовый Менеджер)
-удалены после проверки. Реализовано по плану ниже без отклонений в
-scope; уточнены детали `normalizeSpecSuggestions()` (словарная проверка
-`needs_decision` только для `variant_material`/`variant_mechanism`/
-`color`, не для `spec`) — см. `ADR-049`.
+БД (`php -S` + `curl`), реальными предложениями от Claude через
+OpenRouter. Ролевой доступ на `/admin/ai/specs/{id}` и на форме Товара:
+`admin` → 200, видит бейдж статуса и ссылку «Разбор ИИ»; временный
+`manager` (создан и удалён после проверки) → редирект `/admin` на
+экране ревью, на форме Товара видит бейдж, но без ссылки; Гость →
+`/login`; несуществующий Товар → 404. Полный цикл на реальном Товаре
+(6 предложений от реального разбора): принятие `variant_material` со
+статусом `needs_decision` без правки значения → отклонено, в БД ничего
+не изменилось, страница отрендерена повторно с ошибкой (не редирект);
+подмена чужого `variant_id` (999) → отклонено тем же путём; принятие
+того же предложения с правкой значения + Вариантом → применено ровно к
+выбранному Варианту, второй Вариант Товара не тронут, `specs_status`
+→ `confirmed`, все предложения Товара удалены. Повторное применение
+`spec`-характеристики с тем же названием, но другим значением →
+заменило старую строку `product_specs`, не задвоило (`SELECT`
+до/после, было/стало 5 строк, не 6). «Подтвердить вручную» на Товаре
+без единого предложения → `specs_status='confirmed'`. Новая
+характеристика подтверждена видна на витрине (`/product/{slug}`) без
+единой правки `ProductController`/`product/show.php`, как и
+предполагалось на этапе планирования. POST `apply`/`confirm` без CSRF
+→ 419 на обоих. `composer test` — 464/464 (+10 `AiSpecsTest` на
+`validateSpecReviewInput()`). Все временные данные (описание/статус/
+материал тестового Товара, тестовый Менеджер, тестовые предложения)
+возвращены в исходное состояние после проверки — сверено `SELECT`.
+
+**Найдено по ходу проверки (не исправлено — вне scope этого таска):**
+при разборе одного Товара через `run()` (Таск 2) реальный вызов
+OpenRouter один раз подошёл близко к `AI_TIMEOUT_SECONDS` (15 c), и
+общего бюджета `set_time_limit(1 × (15 + 5) = 20 c)` не хватило —
+`Fatal: Maximum execution time of 20 seconds exceeded` в
+`replaceSpecSuggestions()` (запись предложений на удалённую БД Beget
+добавляет сетевую задержку, которой формула не закладывает запас).
+Стоит расширить буфер в `AdminAiSpecController::run()` отдельным
+изменением — не входит в файлы Таска 3.
 
 ## Задача
-Разбор характеристик Товара (`FR-AI-001` правила 1, 2, 5, 6):
-`/admin/ai/specs` показывает очередь Товаров со `specs_status='pending'`,
-Администратор отмечает несколько чекбоксами и запускает разбор
-**пакетом**. Предложения (материал/механизм/цвет/произвольная
-характеристика) сохраняются в новую таблицу `ai_spec_suggestions` со
-статусом `ok`/`needs_decision` (значение вне известных в каталоге).
-Ничего не пишется в карточку Товара — `product_specs`/
-`product_variants`/`description` не меняются. Экран подтверждения —
-следующий таск.
+Экран ревью предложений (`FR-AI-001` правила 3–5): на
+`/admin/ai/specs/{id}` Администратор видит предложения конкретного
+Товара, принимает/правит/отклоняет каждое. Принятые пишутся в
+`product_specs` (цель `spec`) и в выбранный Вариант (цели
+`variant_material`/`variant_mechanism`); `color` — только подсказка,
+никогда не применяется автоматически (решение зафиксировано в Таске 1
+«Решения фазы» — цвет остаётся атрибутом фото Варианта, `ADR-006`).
+После обработки — `specs_status='confirmed'`, это и есть допуск в
+подбор Товара диалогом (`FR-AI-004`). Тот же статус можно поставить
+вручную, без единого предложения (ИИ выключен или ничего не
+предложено).
 
 ## Что проверено в коде перед планом
-- `src/Models/Product.php::findProductForAdmin()` уже отдаёт Товар с
-  `description`, `category_ids`, Вариантами, `specs` — переиспользуется
-  для сборки промпта и подсчёта известных значений, отдельную
-  fetch-функцию под это не заводим.
-- `src/Models/Product.php::syncProductSpecs()`/`getProductSpecs()` —
-  образец «удалить все строки Товара → вставить заново», тот же приём
-  для `replaceSpecSuggestions()`.
-- `database/install.php` — идемпотентные `$columnExists`/`$indexExists`
-  (`information_schema.COLUMNS`/`STATISTICS`) уже объявлены один раз и
-  переиспользуются по всему файлу (`ADR-031`/`ADR-037`) — для
-  `products.specs_status` и её индекса используем те же переменные, не
-  заводим новые `->prepare()`.
-- `src/Models/Product.php::getAdminProducts()`/`countAdminProducts()` —
-  образец пагинированного списка с фильтром для
-  `getProductsForSpecsQueue()`/`countProductsForSpecsQueue()`.
-- `src/Views/layout/admin-header.php` — `$adminNavItems` с ключом
-  `roles => ['admin']` (готовый образец — «Сотрудники», «Настройки»);
-  новый пункт «ИИ-помощники» добавляется тем же способом.
-- `config/routes.php` — секции GET/POST плоские, без вложенности;
-  `/admin/ai/specs` и `/admin/ai/specs/run` встают рядом с
-  `/admin/reviews`-подобными маршрутами.
-- `src/Services/Ai/ai.php::aiComplete('specs', $messages)` (Таск 1) —
-  уже возвращает `null` при недоступном классе без исключений, ядро
-  не дорабатывается.
-- `src/Controllers/AdminReviewController::index()` — образец
-  `requireRole()` + пагинация + `render()` с `paginationLinks`.
-- `config/config.php` пока не содержит `ADMIN_AI_SPECS_PER_PAGE`/
-  `AI_SPECS_BATCH_MAX` — добавляются этим таском.
+- `src/Controllers/AdminAiSpecController.php` (Таск 2) уже содержит
+  `index()`/`run()` — `review()`/`apply()`/`confirmManually()`
+  добавляются рядом, тем же классом.
+- `src/Models/AiSpec.php` (Таск 2) уже содержит `getKnownSpecValues()`,
+  `replaceSpecSuggestions()`, `findProductForSpecsRun()` — для ревью
+  нужна новая выборка одного Товара с его предложениями и Вариантами.
+- `src/Models/Product.php::findProductForAdmin()` **не выбирает
+  `specs_status`**, при этом именно её результат
+  `AdminProductController::edit()` передаёт во view как `$product` без
+  изменений (`renderForm()`). Без этой колонки бейдж на форме Товара
+  показать нечем — добавляем `specs_status` в существующий `SELECT`
+  (1 колонка, по образцу уже там присутствующих `is_active`/
+  `is_featured`); сам `AdminProductController.php` трогать не нужно —
+  он передаёт `$product` как есть.
+- `src/Models/Product.php::getAllProductVariants()` — готовая выборка
+  Вариантов Товара (`id`, `sku`, `material`, `mechanism_type`...) для
+  выпадающего списка «применить к какому Варианту».
+- `src/Views/product/show.php` + `ProductController.php::show()` уже
+  читают `getProductSpecs()` и рендерят вкладку «Характеристики» —
+  новые строки `product_specs` появятся на витрине без единой правки
+  этих файлов.
+- `src/Core/Router.php::matchRoute()` — первое совпадение по порядку
+  объявления, регэксп разной длины сегментов не пересекается:
+  `/admin/ai/specs/{id}` (GET) и `/admin/ai/specs/{id}/apply`,
+  `/admin/ai/specs/{id}/confirm` (POST) не конфликтуют друг с другом и
+  с уже существующим `/admin/ai/specs/run`.
+- `src/Views/admin/products/form.php` — карточка «Характеристики»
+  (строка ~113) и заголовок `<h4>` (строка ~30) — готовые точки
+  вставки бейджа/ссылки; `$isEdit`/`$product['id']` уже доступны в
+  шаблоне.
+- `AI_SPEC_TARGET_LABELS`/`AI_SPEC_TARGETS` (`Core/AiSpecs.php`,
+  Таск 2) переиспользуются для подписи целей в экране ревью.
 
 ## Scope — что трогаем
-- [ ] `database/install.php` — изменить: `products.specs_status
-      ENUM('pending','confirmed') NOT NULL DEFAULT 'pending'` +
-      `INDEX(specs_status)` (идемпотентно, через уже существующие
-      `$columnExists`/`$indexExists`); новая таблица
-      `ai_spec_suggestions` (`product_id` FK CASCADE, `target
-      ENUM('spec','variant_material','variant_mechanism','color')`,
-      `name VARCHAR(100)`, `value VARCHAR(255)`,
-      `status ENUM('ok','needs_decision')`, `created_at`,
-      `INDEX(product_id)`)
-- [ ] `.docs/database.md` — изменить: разделы `products.specs_status` и
-      `ai_spec_suggestions`
-- [ ] `.docs/planning-log.md` — изменить: ADR-049 (справочник известных
-      значений из существующих данных каталога, цели предложений,
-      `specs_status`)
-- [ ] `src/Core/AiSpecs.php` — создать, чистые функции:
-      `buildSpecsPrompt(array $product, array $knownValues): array`,
-      `normalizeSpecSuggestions(array $decoded, array $knownValues):
-      array` (отбрасывает пустые значения, режет длину, помечает
-      `needs_decision` для значений вне известных, схлопывает дубли)
-- [ ] `src/Models/AiSpec.php` — создать:
-      `getProductsForSpecsQueue(string $status, int $page, int
-      $perPage): array`, `countProductsForSpecsQueue(string $status):
-      int`, `getKnownSpecValues(array $categoryIds): array` (`DISTINCT`
-      по `product_specs`, `product_variants.material`/
-      `mechanism_type`, `variant_images.color`),
-      `replaceSpecSuggestions(int $productId, array $rows): void`
-      (транзакция)
-- [ ] `src/Controllers/AdminAiSpecController.php` — создать: `index()`
-      (очередь + пагинация), `run()` (POST, `requireCsrf()`, до
-      `AI_SPECS_BATCH_MAX` Товаров за раз, по Товару — `aiComplete()`,
-      неответившие пропускаются с flash «разобрано N из M»), оба —
-      `requireRole(['admin'])`
-- [ ] `src/Views/admin/ai/specs/index.php` — создать: список Товаров
-      (чекбоксы, статус, число предложений), кнопка «Разобрать
-      выбранные»; при недоступном классе — алерт вместо кнопки
-- [ ] `src/Views/layout/admin-header.php` — изменить: пункт
-      «ИИ-помощники» с `roles => ['admin']`
-- [ ] `config/routes.php` — изменить: `GET /admin/ai/specs`,
-      `POST /admin/ai/specs/run`
-- [ ] `config/config.php` — изменить: `ADMIN_AI_SPECS_PER_PAGE`,
-      `AI_SPECS_BATCH_MAX`
-- [ ] `tests/Unit/AiSpecsTest.php` — создать: юнит-тесты
-      `normalizeSpecSuggestions()`; `tests/bootstrap.php` — изменить:
-      подключить `src/Core/AiSpecs.php`
+- [ ] `src/Models/Product.php` — изменить: `specs_status` добавлен в
+      `SELECT` внутри `findProductForAdmin()` (1 колонка, без прочих
+      изменений)
+- [ ] `src/Core/AiSpecs.php` — изменить: `validateSpecReviewInput(array
+      $suggestions, array $input): array` — `needs_decision` без
+      правки значения не проходит; цель `variant_*` требует
+      выбранного `variant_id`, принадлежащего этому Товару; `color` не
+      принимает форму «применить» вовсе (только показ); пустое
+      значение отклоняется
+- [ ] `src/Models/AiSpec.php` — изменить:
+      `getSpecSuggestionsForProduct(int $productId): array`,
+      `findProductForSpecsReview(int $id): ?array` (продукт +
+      предложения + Варианты); `applySpecSuggestions(int $productId,
+      array $accepted): void` (одна транзакция: dedup-`INSERT`/
+      `UPDATE` в `product_specs` по `name`, `UPDATE product_variants`
+      только для `variant_id`, принадлежащего Товару, `UPDATE products
+      SET specs_status='confirmed'`, `DELETE` всех предложений Товара
+      после обработки); `setProductSpecsStatus(int $productId, string
+      $status): void`
+- [ ] `src/Controllers/AdminAiSpecController.php` — изменить:
+      `review(string $id)` (`requireRole(['admin'])`), `apply(string
+      $id)` (POST, `requireCsrf()` → ошибка — прямой рендер `review` с
+      `$old`/`$errors`, успех — `redirect()` + flash),
+      `confirmManually(string $id)` (POST, `requireCsrf()`)
+- [ ] `src/Views/admin/ai/specs/review.php` — создать: таблица
+      предложений (цель, название, значение — редактируемое поле,
+      бейдж «требует решения», выбор Варианта для `variant_*`, `color`
+      — только текст), кнопки «Применить»/«Подтвердить вручную»
+- [ ] `src/Views/admin/products/form.php` — изменить: бейдж статуса
+      характеристик у заголовка + ссылка на `/admin/ai/specs/{id}` в
+      карточке «Характеристики», видна только `admin`
+      (`currentUser()['role']`)
+- [ ] `config/routes.php` — изменить: `GET /admin/ai/specs/{id}`,
+      `POST /admin/ai/specs/{id}/apply`,
+      `POST /admin/ai/specs/{id}/confirm`
+- [ ] `tests/Unit/AiSpecsTest.php` — изменить: тесты на
+      `validateSpecReviewInput()`
 
 ## Out of scope — не трогаем
-- Экран подтверждения предложений, запись в `product_specs`/
-  `product_variants`, установка `specs_status='confirmed'` — Таск 3
-- Бейдж/ссылка на форме Товара (`src/Views/admin/products/form.php`) —
-  Таск 3
 - Генератор описания, консультант, подбор товара, бюджет/лимит —
   Таски 4–8
-- Любые изменения в `src/Services/Ai/*` и `src/Core/Ai.php` — ядро
-  Таска 1 используется как есть, не рефакторится
+- `src/Controllers/AdminProductController.php` — не меняется, уже
+  передаёт `$product` из `findProductForAdmin()` как есть
+- `src/Views/product/show.php`, `ProductController.php` — не меняются,
+  уже рендерят `product_specs`
+- Автоматическая запись `color` куда-либо — остаётся информационной по
+  решению Таска 1
+- Список очереди `/admin/ai/specs` и пакетный запуск (`index()`/
+  `run()`) — не рефакторятся, используются как есть
 
 ## Definition of Done
-- [ ] Описание реального Товара «диван раскладной, обивка — рогожка
-      бежевая» → в `ai_spec_suggestions` появились предложения по
-      механизму и цвету (проверено `SELECT` на реальной БД)
-- [ ] Описание без размера → строки «размер» нет вовсе (не пустое
-      значение), Товар не помечен ошибочным
-- [ ] Значение вне `getKnownSpecValues()` → `status='needs_decision'`
-      (юнит-тест `normalizeSpecSuggestions()` + проверка на живом
-      разборе)
-- [ ] `products.description`, `product_specs`, `product_variants` не
-      изменились после разбора (`SELECT` до и после)
-- [ ] Повторный разбор того же Товара заменяет прежние предложения, не
-      дублирует их
-- [ ] Класс `specs` недоступен (ключ снят) → кнопка «Разобрать» не
-      активна/алерт, очередь по-прежнему открывается, характеристики
-      вводятся вручную в форме Товара
-- [ ] POST `/admin/ai/specs/run` без CSRF → 419; `manager` на
-      `/admin/ai/specs` → редирект на `/admin`, пункта в сайдбаре нет
-- [ ] `php database/install.php` дважды подряд — без дублей колонки
-      `specs_status`/индекса/таблицы `ai_spec_suggestions`
+- [ ] Принято 2 предложения из 3 на реальном Товаре → в `product_specs`
+      ровно 2 новые/обновлённые строки без дублей по `name`,
+      отклонённого предложения нет нигде, `specs_status='confirmed'`
+      (`SELECT`)
+- [ ] Предложение `variant_material` применено к выбранному Варианту →
+      изменился именно он, другие Варианты того же Товара не тронуты
+- [ ] `needs_decision` без правки значения принять нельзя — поле
+      подсвечено, в БД ничего не записано
+- [ ] Попытка применить `variant_id`, не принадлежащий этому Товару
+      (подделанный POST) → отклонено, ничего не изменено
+- [ ] Повторное применение уже обработанного набора не создаёт дублей
+      в `product_specs`
+- [ ] «Подтвердить вручную» без единого предложения (ИИ выключен) →
+      `specs_status='confirmed'`, Товар уходит из очереди «требует
+      разбора»
+- [ ] Карточка Товара на витрине показывает новые характеристики без
+      правок `ProductController`/`product/show.php` — только за счёт
+      `product_specs`
+- [ ] POST без CSRF → 419; `manager` на `/admin/ai/specs/{id}` →
+      редирект `/admin`
 - [ ] `composer test` зелёный
 - [ ] Проверить `.docs/dod-global.md`
 

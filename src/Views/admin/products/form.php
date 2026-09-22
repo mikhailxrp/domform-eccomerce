@@ -110,8 +110,17 @@ $specErrors    = $errors['specs'] ?? [];
     </div>
 
     <div class="card custom-card">
-        <div class="card-header">
-            <div class="card-title">Характеристики</div>
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="card-title mb-0">Характеристики</div>
+            <?php if ($isEdit): ?>
+                <?php $specsStatus = (string) ($product['specs_status'] ?? 'pending'); ?>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge <?= $specsStatus === 'confirmed' ? 'bg-success' : 'bg-warning' ?>"><?= $specsStatus === 'confirmed' ? 'Подтверждены' : 'Требует разбора' ?></span>
+                    <?php if ((string) (currentUser()['role'] ?? '') === 'admin'): ?>
+                        <a href="/admin/ai/specs/<?= e((string) $product['id']) ?>" class="btn btn-outline-primary btn-sm">Разбор ИИ</a>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <?php if ($isEdit && ($old['specs'] ?? []) !== []): ?>

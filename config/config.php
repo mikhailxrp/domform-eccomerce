@@ -97,9 +97,16 @@ define('AI_TIMEOUT_SECONDS', 15);
 // Таск 2). `AI_SPECS_BATCH_MAX` — небольшой пакет: несколько
 // последовательных блокирующих вызовов провайдера в одном POST-запросе
 // рискуют упереться в `max_execution_time` shared-хостинга при большем
-// числе Товаров.
+// числе Товаров. `AI_SPECS_BATCH_OVERHEAD_SECONDS` — запас сверх
+// `AI_TIMEOUT_SECONDS` на один Товар пакета (запросы к БД —
+// `getKnownSpecValues()`, `replaceSpecSuggestions()` — и сборка
+// промпта); был 5 секунд, не хватило на живом прогоне (Таск 3,
+// `dev-log.md` 22.09.2026) — реальный вызов провайдера подошёл близко
+// к `AI_TIMEOUT_SECONDS`, а БД проекта на shared-хостинге (Beget) не
+// локальная, каждый запрос добавляет сетевую задержку.
 define('ADMIN_AI_SPECS_PER_PAGE', 20);
 define('AI_SPECS_BATCH_MAX', 5);
+define('AI_SPECS_BATCH_OVERHEAD_SECONDS', 20);
 
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';
