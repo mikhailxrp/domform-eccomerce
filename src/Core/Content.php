@@ -27,9 +27,41 @@ const CONTENT_PAGE_SLUGS = [
 const CONTENT_HEADING_PREFIX = '## ';
 const CONTENT_LIST_PREFIX    = '- ';
 
+const CONTENT_TITLE_MAX_LENGTH = 200;
+
 function isContentPageSlug(string $slug): bool
 {
     return in_array($slug, CONTENT_PAGE_SLUGS, true);
+}
+
+/**
+ * Форма редактирования `/admin/content/{slug}/edit` (Таск 6, `FR-ADM-003`)
+ * — `$input`: `title`/`body` уже обрезаны `trim()` контроллером, как
+ * везде в проекте (`normalizeReviewInput()` и т.п.).
+ */
+function validateContentPageInput(array $input): array
+{
+    $titleLength = mb_strlen((string) ($input['title'] ?? ''));
+    $body        = (string) ($input['body'] ?? '');
+
+    return [
+        'title' => $titleLength < 1 || $titleLength > CONTENT_TITLE_MAX_LENGTH,
+        'body'  => trim($body) === '',
+    ];
+}
+
+/**
+ * Ссылка «Открыть на сайте» в `/admin/content` (Таск 6) — три slug из
+ * `CONTENT_PAGE_SLUGS` получили собственные маршруты (`about`/
+ * `showroom` — Таск 3, `contacts` — Таск 4 Фазы 8), у остальных
+ * четырёх адрес не изменился — общий `/pages/{slug}`.
+ */
+function publicUrlForContentSlug(string $slug): string
+{
+    return match ($slug) {
+        'about', 'showroom', 'contacts' => '/' . $slug,
+        default => '/pages/' . $slug,
+    };
 }
 
 function renderContentBody(string $body): string

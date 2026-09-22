@@ -35,3 +35,42 @@ function getAllContentPages(): array
 
     return $stmt->fetchAll();
 }
+
+/**
+ * `/admin/content/{slug}/update` (Таск 6, `FR-ADM-003`) — `$title`/`$body`
+ * уже прошли `validateContentPageInput()` в контроллере. `false` только
+ * когда `slug` не из whitelist `CONTENT_PAGE_SLUGS` — `AdminContentController::edit()`
+ * уже отдал 404 на этом же условии раньше, `rowCount() === 0` здесь
+ * означает именно отсутствие строки, а не «значение не изменилось»
+ * (заголовок/тело почти никогда не совпадают байт-в-байт с прежними).
+ */
+function updateContentPage(string $slug, string $title, string $body): bool
+{
+    $stmt = getPdo()->prepare('
+        UPDATE content_pages
+        SET title = :title, body = :body
+        WHERE slug = :slug
+    ');
+    $stmt->execute(['title' => $title, 'body' => $body, 'slug' => $slug]);
+
+    if ($stmt->rowCount() > 0) {
+        return true;
+    }
+
+    $exists = getPdo()->prepare('SELECT id FROM content_pages WHERE slug = :slug');
+    $exists->execute(['slug' => $slug]);
+
+    return $exists->fetch() !== false;
+}
+
+/**
+ * Загрузка/удаление фото страницы — отдельная функция от
+ * `updateContentPage()` (`AdminContentController::update()` вызывает
+ * оба при загрузке нового файла, `deleteImage()` — только этот).
+ * `$path === null` — «Удалить фото».
+ */
+function updateContentPageImage(string $slug, ?string $path): void
+{
+    $stmt = getPdo()->prepare('UPDATE content_pages SET image_path = :image_path WHERE slug = :slug');
+    $stmt->execute(['image_path' => $path, 'slug' => $slug]);
+}

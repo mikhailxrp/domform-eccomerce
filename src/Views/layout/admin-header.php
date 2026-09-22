@@ -21,6 +21,7 @@ $adminNavItems = [
     ['url' => '/admin/products',      'label' => 'Товары',      'icon' => 'bx bx-package'],
     ['url' => '/admin/categories',    'label' => 'Категории',   'icon' => 'bx bx-category'],
     ['url' => '/admin/customers',     'label' => 'Клиенты',     'icon' => 'bx bx-group'],
+    ['url' => '/admin/content',       'label' => 'Контент',     'icon' => 'bx bx-file'],
     ['url' => '/admin/reviews',       'label' => 'Отзывы',      'icon' => 'bx bx-star', 'badge' => $pendingReviewsCount > 0 ? $pendingReviewsCount : null],
     ['url' => '/admin/callbacks',     'label' => 'Заявки',      'icon' => 'bx bx-phone-call', 'badge' => $newCallbacksCount > 0 ? $newCallbacksCount : null],
     ['url' => '/admin/reports',       'label' => 'Отчёты',      'icon' => 'bx bx-bar-chart-alt-2'],

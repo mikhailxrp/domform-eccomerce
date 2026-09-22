@@ -117,4 +117,65 @@ final class ContentTest extends TestCase
             renderContentBody("Скажи \"привет\" & 'пока'")
         );
     }
+
+    // ─── validateContentPageInput() ────────────────────────────────────────
+
+    public function testValidInputHasNoErrors(): void
+    {
+        $errors = validateContentPageInput(['title' => 'О компании', 'body' => 'Текст страницы.']);
+
+        $this->assertFalse(in_array(true, $errors, true));
+    }
+
+    public function testEmptyTitleIsInvalid(): void
+    {
+        $errors = validateContentPageInput(['title' => '', 'body' => 'Текст.']);
+
+        $this->assertTrue($errors['title']);
+    }
+
+    public function testTitleLongerThan200CharsIsInvalid(): void
+    {
+        $errors = validateContentPageInput(['title' => str_repeat('а', 201), 'body' => 'Текст.']);
+
+        $this->assertTrue($errors['title']);
+    }
+
+    public function testTitleExactly200CharsIsValid(): void
+    {
+        $errors = validateContentPageInput(['title' => str_repeat('а', 200), 'body' => 'Текст.']);
+
+        $this->assertFalse($errors['title']);
+    }
+
+    public function testEmptyBodyIsInvalid(): void
+    {
+        $errors = validateContentPageInput(['title' => 'Заголовок', 'body' => '']);
+
+        $this->assertTrue($errors['body']);
+    }
+
+    public function testWhitespaceOnlyBodyIsInvalid(): void
+    {
+        $errors = validateContentPageInput(['title' => 'Заголовок', 'body' => "  \n  "]);
+
+        $this->assertTrue($errors['body']);
+    }
+
+    // ─── publicUrlForContentSlug() ──────────────────────────────────────────
+
+    public function testAboutShowroomContactsHaveOwnRoutes(): void
+    {
+        $this->assertSame('/about', publicUrlForContentSlug('about'));
+        $this->assertSame('/showroom', publicUrlForContentSlug('showroom'));
+        $this->assertSame('/contacts', publicUrlForContentSlug('contacts'));
+    }
+
+    public function testOtherSlugsUseGenericPagesRoute(): void
+    {
+        $this->assertSame('/pages/delivery-payment', publicUrlForContentSlug('delivery-payment'));
+        $this->assertSame('/pages/return-warranty', publicUrlForContentSlug('return-warranty'));
+        $this->assertSame('/pages/offer', publicUrlForContentSlug('offer'));
+        $this->assertSame('/pages/privacy-policy', publicUrlForContentSlug('privacy-policy'));
+    }
 }

@@ -38,11 +38,13 @@ $galleryColumnClasses = ['col-lg-8', 'col-lg-4', 'col-lg-6', 'col-lg-6'];
             <h2 class="title">Мебель на заказ для дома в Краснодаре и крае</h2>
           </div>
           <article class="information-content information-content--intro">
-            <?php if (!empty($page['image_path'])): ?>
-            <img src="<?= e('/' . ltrim((string) $page['image_path'], '/')) ?>" alt="<?= e($page['title']) ?>"
-              class="img-fluid mb-4 d-block mx-auto">
-            <?php endif; ?>
             <?php
+                        // Одиночное `content_pages.about.image_path` здесь
+                        // намеренно не выводится — у страницы «О компании»
+                        // своя галерея из 4 фото (`about_gallery_images`,
+                        // `ADR-046`) сразу под этим блоком, второе фото над
+                        // текстом дублировало бы её функцию (правка по
+                        // скриншоту пользователя, `dev-log.md` 22.09.2026).
                         // Единственный вывод без e(): каждый фрагмент уже
                         // экранирован внутри renderContentBody()
                         // (`Core/Content.php`, `ADR-044`). Первый абзац —
