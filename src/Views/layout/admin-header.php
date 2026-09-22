@@ -10,7 +10,9 @@ $userName    = (string) ($currentUser['name'] ?? '');
 $currentPath = requestPath();
 
 require_once ROOT_PATH . '/src/Models/Review.php';
+require_once ROOT_PATH . '/src/Models/CallbackRequest.php';
 $pendingReviewsCount = countPendingReviews();
+$newCallbacksCount   = countNewCallbacks();
 
 $adminNavItems = [
     ['url' => '/admin',               'label' => 'Дашборд',     'icon' => 'bx bx-home-alt'],
@@ -20,6 +22,7 @@ $adminNavItems = [
     ['url' => '/admin/categories',    'label' => 'Категории',   'icon' => 'bx bx-category'],
     ['url' => '/admin/customers',     'label' => 'Клиенты',     'icon' => 'bx bx-group'],
     ['url' => '/admin/reviews',       'label' => 'Отзывы',      'icon' => 'bx bx-star', 'badge' => $pendingReviewsCount > 0 ? $pendingReviewsCount : null],
+    ['url' => '/admin/callbacks',     'label' => 'Заявки',      'icon' => 'bx bx-phone-call', 'badge' => $newCallbacksCount > 0 ? $newCallbacksCount : null],
     ['url' => '/admin/reports',       'label' => 'Отчёты',      'icon' => 'bx bx-bar-chart-alt-2'],
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],

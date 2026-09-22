@@ -2,113 +2,85 @@
 
 ## Фаза
 Phase 8 — Админ-панель (контент и доступ) и статические страницы
-(`.docs/phases/phase-8.md`), Таск 4 из 8.
+(`.docs/phases/phase-8.md`), Таск 5 из 8.
 
 **Статус:** ✅ Завершён 22.09.2026 — проверено на реальной БД живым
-HTTP (`php -S` + `curl`): `/contacts` → 200 (реквизиты из `settings`,
-текст из `content_pages.contacts`, форма рендерится); `/pages/contacts`
-→ 301 на `/contacts` (то же решение, что в Таске 3), остальные 5
-`/pages/{slug}` и `/about`/`/showroom` — без регрессии; POST без CSRF
-→ 419; невалидный телефон — подсветка поля, строки в БД нет; валидная
-отправка — строка `status='new'`, flash «Спасибо! Мы перезвоним в
-ближайшее время»; 4-я отправка за 10 минут заблокирована
-(`tooManyAttempts('callback', 3, 600)`) — ровно 3 строки в БД, не 4;
-авторизованный тестовый Покупатель (создан/удалён вручную на время
-проверки) видит имя и телефон уже подставленными. Кириллица через
-`curl --data-urlencode` на этой машине бьётся аргументами консоли (тот
-же артефакт, что в Таске 2) — обойдено телом запроса из файла,
-приложение не при чём (подробности — `dev-log.md` 22.09.2026). Все
-тестовые заявки и временный пользователь удалены после проверки,
+HTTP (`php -S` + `curl`), тремя временными пользователями ролей
+(`admin`/`manager`/`customer`, удалены после проверки): `admin`/
+`manager` на `/admin/callbacks` → 200, `customer` → редирект на
+`/account`, гость → `/login`; POST без CSRF → 419; заявка с
+`/contacts` появляется в списке `new` с корректными данными
+(имя/телефон-ссылка/комментарий), бейдж в сайдбаре — «1»; фильтр
+`new`/`processed`/все — корректная выборка, неизвестное значение —
+откат к `new`, не 500; 25 тестовых строк → 2 страницы пагинации
+(20 + 5); несуществующий id → flash «Заявка не найдена». Найден и
+исправлен до коммита баг порядка колонок в `SET` (MySQL применяет
+присваивания слева направо — `processed_at` теперь идёт раньше
+`status`, иначе `IF(status = 'processed', ...)` видел уже новое
+значение и `processed_at` навсегда оставался `NULL`); перепроверено —
+первый вызов проставляет метку, повторный (идемпотентный) вызов её не
+трогает. Все тестовые данные удалены после проверки,
 `storage/logs/app.log` — без новых записей. `composer test` —
-375/375 (+11 `CallbackTest`). Реализовано по плану ниже без отклонений.
+375/375 (без новых тестов — таск не добавляет чистой логики без БД).
 
 ## Задача
-`FR-CNT-001` — `/contacts`: адрес цеха, телефон, email, кнопка
-WhatsApp (из `settings`), редактируемый текст из
-`content_pages.contacts`, форма «Перезвоните мне» (имя, телефон,
-комментарий). Отправка → строка в новой таблице `callback_requests`
-со статусом `new` + flash «Мы перезвоним». Rate-limit по образцу
-формы отзыва.
+`/admin/callbacks` — Менеджер и Администратор видят список заявок на
+обратный звонок с `/contacts`: фильтр по статусу (по умолчанию `new`),
+серверная пагинация, кнопка «Обработано»; в сайдбаре пункт «Заявки» с
+бейджем числа новых — тот же паттерн, что бейдж отзывов на модерации.
 
 ## Что проверено в коде перед планом
-- `PageController::show()` уже перехватывает `about`/`showroom` и
-  делает 301 на новый маршрут раньше проверки whitelist (Таск 3) —
-  `contacts` добавлена в тот же список, `show()` для остальных 5
-  slug не менялся.
-- Ссылка «Контакты» на `/pages/contacts` встречалась в трёх местах:
-  `header.php` — десктопное и мобильное меню (две копии, как и было
-  с «О компании» в Таске 1), `footer.php` — колонка «Информация».
-- Образец формы с прямым рендером той же страницы при ошибке (без
-  редиректа, `$old`/`$errors`) — `CheckoutController::renderCheckoutPage()`;
-  для `contacts()` заведён аналогичный приватный параметр `$old`/`$errors`
-  по умолчанию `[]`, вызывается из `storeCallback()` напрямую при ошибке.
-- Образец rate-limit — `ReviewController::store()`:
-  `tooManyAttempts('review', 3, 600)` / `hitRateLimit('review')`, лимит
-  не снимается успешной отправкой — для `callback` тот же принцип и
-  те же значения (3 / 600 сек).
-- `normalizePhone()`/`validatePhone()` уже были в `Core/Validation.php`
-  — переиспользованы в `validateCallbackInput()`, свой regex не писался.
-- Подстановка имени/телефона авторизованного Покупателя — как на
-  `/checkout` (`findUserById($user['id'])`, `currentUser()` не хранит
-  телефон в сессии).
+- `AdminReviewController::index()` — образец фильтра по статусу:
+  неизвестное значение откатывается к дефолту, не 500;
+  `buildPagination()`/`buildPaginationUrl()` — переиспользованы как есть.
+- `Review.php::setReviewStatus()` — образец идемпотентного `UPDATE` с
+  проверкой существования при `rowCount() === 0` — тот же приём в
+  `markCallbackProcessed()` (с поправкой на порядок колонок, см. ниже).
+- `admin/reviews/index.php` — образец разметки: форма фильтра (GET,
+  без CSRF), таблица, пустое состояние, `components/pagination.php`.
+- `admin-header.php` — пункт сайдбара с бейджем без ограничения по
+  `roles` — «Заявки» по той же схеме, видно и Менеджеру, и
+  Администратору.
 
 ## Scope — что трогали
-- [x] `database/install.php` — таблица `callback_requests`
-- [x] `.docs/database.md` — раздел `callback_requests`
-- [x] `.docs/planning-log.md` — `ADR-047`
-- [x] `src/Core/Callback.php` — создан: `CALLBACK_STATUS_NEW`,
-      `CALLBACK_STATUS_PROCESSED`, `validateCallbackInput()`,
-      `normalizeCallbackInput()`
-- [x] `tests/Unit/CallbackTest.php` — создан (11 тестов)
-- [x] `tests/bootstrap.php` — подключён `Core/Callback.php`
-- [x] `src/Models/CallbackRequest.php` — создан: `createCallbackRequest()`
-- [x] `src/Controllers/PageController.php` — `show()` — редирект для
-      `contacts`; `contacts(array $old = [], array $errors = [])`;
-      `storeCallback()`
-- [x] `src/Views/pages/contacts.php` — создан
-- [x] `config/routes.php` — `GET /contacts`, `POST /contacts/callback`
-- [x] `src/Views/layout/header.php` — обе копии меню
-- [x] `src/Views/layout/footer.php` — ссылка «Контакты»
-- [x] `.docs/dev-log.md` — запись по итогам таска
+- [x] `config/config.php` — добавлен `ADMIN_CALLBACKS_PER_PAGE`
+- [x] `src/Models/CallbackRequest.php` — добавлены
+      `getAdminCallbacks()`, `countAdminCallbacks()`,
+      `countNewCallbacks()`, `markCallbackProcessed()`
+- [x] `src/Controllers/AdminCallbackController.php` — создан:
+      `index()`, `process(string $id)`
+- [x] `src/Views/admin/callbacks/index.php` — создан
+- [x] `src/Views/layout/admin-header.php` — пункт «Заявки» с бейджем
+- [x] `config/routes.php` — `GET /admin/callbacks`,
+      `POST /admin/callbacks/{id}/process`
+- [x] `.docs/dev-log.md` — запись по итогам таска (включая найденный
+      и исправленный баг с порядком колонок в `UPDATE`)
 
 ## Out of scope — не трогали
-- `/admin/callbacks` — список заявок и бейдж в Панели — Таск 5
+- Форма `/contacts` и её валидация — сделаны в Таске 4
+- Уведомление Менеджера о новой заявке (email/SMS) — не требуется ТЗ
+- Массовая обработка/удаление заявок — не в `phase-8.md`
 - Редактирование текста/фото страниц в Панели — Таск 6
-- `settings`/`content_pages` — только читались, не менялись
-- Любой рефакторинг `pages/show.php` сверх добавления `contacts` в
-  список редиректов
 
 ## Definition of Done
-- [x] Валидная форма → строка в `callback_requests` (`status='new'`),
-      flash об успехе, форма очищена; пустая/невалидная (телефон
-      «123») — поля подсвечены, строки в БД нет
-- [x] 4-я отправка за 10 минут с одного клиента → отказ с сообщением,
-      строки нет; без CSRF → 419
-- [x] Реквизиты на странице совпадают с `settings`; кнопка WhatsApp
-      ведёт на `shop_whatsapp_url` с `rel="noopener"`
-- [x] `/pages/contacts` → 301 на `/contacts` (то же решение, что в
-      Таске 3); остальные 5 `/pages/{slug}` работают как раньше
-      (регрессия)
-- [x] Авторизованный Покупатель видит имя/телефон уже подставленными
-      в форме
-- [x] Страница проверена на 320px по коду (переиспользованы уже
-      проверенные в Тасках 1–3 адаптивные классы `single-form`,
-      `showroom-info-card`, `row g-4`/`col-lg-*`; отдельный визуальный
-      просмотр в браузере на этой машине недоступен — см. примечание
-      ниже)
-- [x] `composer test` зелёный (375/375, новые тесты `validateCallbackInput()`)
+- [x] Заявка, отправленная с `/contacts`, появляется в списке `new`;
+      «Обработано» → `status='processed'`, `processed_at` заполнен,
+      бейдж в сайдбаре уменьшился на 1; повторное «Обработано» —
+      идемпотентно (`processed_at` не меняется), несуществующий id →
+      flash «не найдена»
+- [x] Фильтр `new`/`processed`/все; неизвестное значение — откат к
+      `new`, не 500; пагинация при > `ADMIN_CALLBACKS_PER_PAGE` строк
+- [x] Бейдж совпадает с `SELECT COUNT(*) FROM callback_requests WHERE
+      status='new'`; при 0 — не показывается
+- [x] `customer` на `/admin/callbacks` → редирект; Гость → `/login`;
+      POST без CSRF → 419
+- [x] `composer test` зелёный (375/375, регрессия)
 - [x] Проверить `.docs/dod-global.md`
-
-**Примечание по проверке:** в этой сессии нет браузера — DoD по
-вёрстке/320px проверен чтением кода и переиспользованием уже
-провизуально проверенных в предыдущих тасках классов, а не
-скриншотом. Функциональность (маршруты, форма, rate-limit, CSRF,
-запись в БД, регрессия) проверена живым HTTP на реальной БД.
 
 ## Важные правила
 - Следовать `CLAUDE.md`
 - Работать только в рамках Scope
 - Не менять файлы вне Scope
 - Не рефакторить попутно
-- Каждый шаг проверялся тем, что указано в DoD: форма/редиректы/
-  rate-limit — живым HTTP на реальной БД, регрессия — `composer test`
+- Каждый шаг проверялся тем, что указано в DoD: маршруты/фильтр/
+  пагинация/бейдж — живым HTTP на реальной БД, регрессия — `composer test`

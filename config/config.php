@@ -54,6 +54,9 @@ define('ADMIN_RETURNS_PER_PAGE', 20);
 // Панель управления — Отзывы (`.docs/phases/phase-6.md`, Таск 5)
 define('ADMIN_REVIEWS_PER_PAGE', 20);
 
+// Панель управления — Заявки на звонок (`.docs/phases/phase-8.md`, Таск 5)
+define('ADMIN_CALLBACKS_PER_PAGE', 20);
+
 // Главная — размер блоков Товаров/отзывов (`.docs/phases/phase-6.md`, Таск 6)
 define('HOME_BLOCK_LIMIT', 8);
 
