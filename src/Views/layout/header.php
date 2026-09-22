@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Models/Favorite.php';
+require_once ROOT_PATH . '/src/Models/Setting.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
 $pageTitle           = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
@@ -46,12 +47,12 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
     <div class="header-area header-sticky d-none d-xl-block">
         <div class="container position-relative">
             <div class="row align-items-center">
-                <div class="col-lg-3">
+                <div class="col-lg-2">
                     <div class="header-logo">
                         <a href="/"><img src="/assets/images/logo.png" alt="ДомФорм"></a>
                     </div>
                 </div>
-                <div class="col-lg-6">
+                <div class="col-lg-8">
                     <div class="header-menu">
                         <ul class="nav-menu">
                             <li><a href="/">Главная</a></li>
@@ -74,13 +75,14 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
                                     </ul>
                                 <?php endif; ?>
                             </li>
-                            <li><a href="#">О компании</a></li>
-                            <li><a href="#">Доставка и оплата</a></li>
-                            <li><a href="#">Контакты</a></li>
+                            <li><a href="/about">О компании</a></li>
+                            <li><a href="/showroom">Шоурум</a></li>
+                            <li><a href="/pages/delivery-payment">Доставка и оплата</a></li>
+                            <li><a href="/contacts">Контакты</a></li>
                         </ul>
                     </div>
                 </div>
-                <div class="col-lg-3">
+                <div class="col-lg-2">
                     <div class="header-meta">
                         <div class="dropdown">
                             <a class="action" href="#" role="button" data-bs-toggle="dropdown"><i class="pe-7s-search"></i></a>
@@ -252,9 +254,10 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
                             </ul>
                         <?php endif; ?>
                     </li>
-                    <li><a href="#">О компании</a></li>
-                    <li><a href="#">Доставка и оплата</a></li>
-                    <li><a href="#">Контакты</a></li>
+                    <li><a href="/about">О компании</a></li>
+                    <li><a href="/showroom">Шоурум</a></li>
+                    <li><a href="/pages/delivery-payment">Доставка и оплата</a></li>
+                    <li><a href="/contacts">Контакты</a></li>
                 </ul>
             </nav>
         </div>

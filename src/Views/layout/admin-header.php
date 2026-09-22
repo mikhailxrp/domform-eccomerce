@@ -10,7 +10,9 @@ $userName    = (string) ($currentUser['name'] ?? '');
 $currentPath = requestPath();
 
 require_once ROOT_PATH . '/src/Models/Review.php';
+require_once ROOT_PATH . '/src/Models/CallbackRequest.php';
 $pendingReviewsCount = countPendingReviews();
+$newCallbacksCount   = countNewCallbacks();
 
 $adminNavItems = [
     ['url' => '/admin',               'label' => 'Дашборд',     'icon' => 'bx bx-home-alt'],
@@ -19,12 +21,27 @@ $adminNavItems = [
     ['url' => '/admin/products',      'label' => 'Товары',      'icon' => 'bx bx-package'],
     ['url' => '/admin/categories',    'label' => 'Категории',   'icon' => 'bx bx-category'],
     ['url' => '/admin/customers',     'label' => 'Клиенты',     'icon' => 'bx bx-group'],
+    ['url' => '/admin/content',       'label' => 'Контент',     'icon' => 'bx bx-file'],
+    ['url' => '/admin/banners',       'label' => 'Баннеры',     'icon' => 'bx bx-carousel'],
     ['url' => '/admin/reviews',       'label' => 'Отзывы',      'icon' => 'bx bx-star', 'badge' => $pendingReviewsCount > 0 ? $pendingReviewsCount : null],
+    ['url' => '/admin/callbacks',     'label' => 'Заявки',      'icon' => 'bx bx-phone-call', 'badge' => $newCallbacksCount > 0 ? $newCallbacksCount : null],
     ['url' => '/admin/reports',       'label' => 'Отчёты',      'icon' => 'bx bx-bar-chart-alt-2'],
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
     ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
+    ['url' => '/admin/users',         'label' => 'Сотрудники',  'icon' => 'bx bx-user-check', 'roles' => ['admin']],
+    ['url' => '/admin/settings',      'label' => 'Настройки',   'icon' => 'bx bx-cog', 'roles' => ['admin']],
+    ['url' => '/admin/about-gallery', 'label' => 'Галерея «О компании»', 'icon' => 'bx bx-images'],
 ];
+
+// `roles` — необязательный ключ; пункт без него виден и Менеджеру, и
+// Администратору (как раньше), с ключом — только перечисленным ролям
+// (первый случай, `FR-ADM-007`, `Q-DEV-001`).
+$currentRole   = (string) ($currentUser['role'] ?? '');
+$adminNavItems = array_values(array_filter(
+    $adminNavItems,
+    static fn (array $navItem): bool => !isset($navItem['roles']) || in_array($currentRole, $navItem['roles'], true)
+));
 
 $activeNavUrl    = null;
 $activeUrlLength = -1;

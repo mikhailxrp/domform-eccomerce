@@ -2,6 +2,19 @@
     font-size: 12px;
 }
 
+/* Мега-меню «Каталог» в теме рассчитано ровно на 4 колонки
+   (`.mega-sub-menu > li { width: 25% }`, `style.css`) — при 6 корневых
+   категориях (после замены каталога, `dev-log.md` 22.09.2026) 5-я и
+   6-я колонки переносятся flex-wrap на вторую строку вплотную к
+   разделителю первой (никакого отступа между строками в теме не было,
+   она не рассчитывала на перенос). `row-gap` на самом flex-контейнере
+   — стандартное свойство именно для отступа между перенесёнными
+   строками, а не `margin-top` на `<li>`, который добавил бы отступ и
+   первой строке тоже. */
+.header-menu .mega-sub-menu {
+    row-gap: 30px;
+}
+
 .single-benefit .title {
     font-size: 20px;
 }
@@ -711,69 +724,19 @@
     margin-bottom: 30px;
 }
 
-/* Отзывы о магазине на Главной (`FR-HOME-007`, Таск 6 Фазы 6) — макета
-   у карточки нет (`C-009`: «карточки готовит исполнитель доработки, не
-   отдельный дизайнер»), звёзды переиспользуют `.review-list__stars`
-   выше. Текст обрезается по высоте (`line-clamp`) — иначе длинный
-   отзыв растягивал карточку в 2-3 раза выше соседних; дата прижата
-   вниз (`margin-top: auto` на flex-колонке), чтобы у карточек с
-   короткими и длинными отзывами низ совпадал. */
-.store-review-card {
-    position: relative;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 28px 24px;
-    border-radius: 8px;
-    background-color: #fff;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, .07);
-    transition: box-shadow .3s ease, transform .3s ease;
-}
-
-.store-review-card:hover {
-    box-shadow: 0 10px 24px rgba(0, 0, 0, .1);
-    transform: translateY(-4px);
-}
-
-.store-review-card::before {
-    content: '\201C';
-    position: absolute;
-    top: 0;
-    right: 20px;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 64px;
-    line-height: 1;
-    color: var(--bs-primary);
-    opacity: .15;
-}
-
-.store-review-card__header {
+/* Отзывы о магазине на Главной (`FR-HOME-007`) — с 22.09.2026 тот же
+   слайдер `.testimonial-active`, что на `/about` (правка по скриншоту
+   пользователя, `dev-log.md`), карточки `.store-review-card` заменены
+   — своих правил под них больше нет. Заглушка вместо фото у отзыва
+   без `photo_path` — тот же размер/форма, что `.author-thumb` (ниже),
+   с нейтральной иконкой по центру вместо выдуманного фото. */
+.author-thumb--placeholder {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-    margin-bottom: 14px;
-}
-
-.store-review-card__name {
-    font-weight: 600;
-}
-
-.store-review-card__text {
-    margin-bottom: 16px;
-    color: #494949;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.store-review-card__date {
-    margin-top: auto;
-    padding-top: 14px;
-    border-top: 1px solid #ececec;
-    font-size: 13px;
-    color: #777;
+    justify-content: center;
+    background-color: #f2f2f2;
+    color: #a8a8a8;
+    font-size: 32px;
 }
 
 /* Блок «Бренды» на Главной, сразу после Call To Action — класс из
@@ -862,4 +825,107 @@
     font-size: 14px;
     color: #6d707f;
     transition: color 0.3s linear;
+}
+
+/* Цитата на «О компании» (`ADR-046`) — фото автора загружается через
+   Панель произвольного размера, у демо-фото темы (`author-1.jpg`) уже
+   был готовый квадрат 100×100, поэтому у `.author-thumb` в исходном
+   `style.css` нет ни ширины/высоты, ни `object-fit`. */
+.single-testimonial .author-thumb {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+}
+
+/* Команда на «О компании» — та же причина, что у `.author-thumb`
+   выше: реальные фото Волкова С. И./Волковой А. разного размера и
+   пропорций, а `.team-images img` в исходном `style.css` задаёт
+   только `width: 100%` (демо-фото темы были одного размера, высота
+   получалась сама собой). Без фиксированного соотношения сторон
+   карточки в ряду становятся разной высоты. */
+.single-team .team-images img {
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+}
+
+/* Вводный блок «О компании» (по образцу секции «Our History» темы,
+   `about.html`) — только первый абзац центрируется, как в оригинале;
+   подзаголовок «Как мы работаем» и список ниже — обычный читаемый
+   текст по левому краю (в оригинале темы список отсутствует вовсе,
+   центрировать реальный список пунктов было бы нечитаемо). Модификатор
+   `--intro`, а не общий `.information-content > p:first-child`, —
+   тот же класс используется и на `/pages/{slug}`/`/showroom`, где
+   центрировать первый абзац не просили. */
+.information-content--intro > p:first-child {
+    text-align: center;
+}
+
+/* Карточка реквизитов на «Шоуруме» (`FR-CNT-003`, Таск 3 Фазы 8) —
+   тот же приём «иконка в цветном круге + текст», что
+   `.account-summary-card`, но вертикальным списком строк вместо одной
+   строки в ряд; акцентный цвет — тот же токен темы `--bs-primary`. */
+.showroom-info-card {
+    padding: 28px 24px;
+    background-color: #f7f7f7;
+    border-radius: 8px;
+}
+
+.showroom-info-card__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.showroom-info-card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: #fff;
+    color: var(--bs-primary);
+    font-size: 18px;
+}
+
+.showroom-info-card__label {
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: #6d707f;
+}
+
+.showroom-info-card__value {
+    margin-bottom: 0;
+    font-weight: 600;
+    color: #252525;
+}
+
+.showroom-info-card__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    background-color: #fff;
+    border-left: 3px solid var(--bs-primary);
+    border-radius: 4px;
+    color: #494949;
+    font-size: 14px;
+}
+
+.showroom-info-card__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Карта под карточкой реквизитов — те же скруглённые углы и мягкая
+   тень, что у карточек в остальной админ-панели, чтобы `<iframe>` не
+   выглядел вставленным как есть поверх остального контента. */
+.showroom-map {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
 }

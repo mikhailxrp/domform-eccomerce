@@ -103,3 +103,70 @@ function isEmailTakenByOther(string $email, int $userId): bool
 
     return $stmt->fetchColumn() !== false;
 }
+
+/**
+ * `/admin/users` (`FR-ADM-007`, Таск 8 Фазы 8) — только `manager`/
+ * `admin`, Покупатели (`role='customer'`) в списке не участвуют.
+ */
+function getStaffUsers(): array
+{
+    $stmt = getPdo()->query(
+        "SELECT id, name, email, phone, role, is_blocked, created_at
+         FROM users WHERE role IN ('manager', 'admin') ORDER BY created_at DESC"
+    );
+
+    return $stmt->fetchAll();
+}
+
+/**
+ * Создаёт сотрудника (`role` — `manager` или `admin`, задаёт вызывающий
+ * код). Возвращает `null` при гонке на `UNIQUE(email)` — тот же
+ * приём, что `createUser()`.
+ */
+function createStaffUser(array $data): ?int
+{
+    try {
+        $stmt = getPdo()->prepare(
+            'INSERT INTO users (name, email, password_hash, phone, role)
+             VALUES (:name, :email, :password_hash, :phone, :role)'
+        );
+        $stmt->execute([
+            'name'          => $data['name'],
+            'email'         => $data['email'],
+            'password_hash' => $data['password_hash'],
+            'phone'         => $data['phone'],
+            'role'          => $data['role'],
+        ]);
+
+        return (int) getPdo()->lastInsertId();
+    } catch (PDOException $e) {
+        if (($e->errorInfo[1] ?? null) === 1062) {
+            return null;
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Ограничено `role IN ('manager','admin')`, как `getStaffUsers()` —
+ * `/admin/users/{id}/block` не может задеть учётку Покупателя, даже
+ * если в форму подставить чужой id. `rowCount() === 0` не отличить от
+ * «уже было такое значение», поэтому при нём — отдельная проверка
+ * существования, тот же приём, что `setReviewStatus()`.
+ */
+function setUserBlocked(int $id, bool $blocked): bool
+{
+    $stmt = getPdo()->prepare(
+        "UPDATE users SET is_blocked = :is_blocked WHERE id = :id AND role IN ('manager', 'admin')"
+    );
+    $stmt->execute(['is_blocked' => $blocked ? 1 : 0, 'id' => $id]);
+
+    if ($stmt->rowCount() > 0) {
+        return true;
+    }
+
+    $exists = getPdo()->prepare("SELECT id FROM users WHERE id = :id AND role IN ('manager', 'admin')");
+    $exists->execute(['id' => $id]);
+
+    return $exists->fetch() !== false;
+}

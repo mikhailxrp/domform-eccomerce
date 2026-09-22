@@ -22,7 +22,7 @@ declare(strict_types=1);
                                 </div>
                                 <div class="contact-content">
                                     <h6 class="title">Позвоните нам:</h6>
-                                    <p><a href="tel:<?= e(SHOP_PHONE_TEL) ?>"><?= e(SHOP_PHONE) ?></a></p>
+                                    <p><a href="tel:<?= e(phoneToTel(setting('shop_phone'))) ?>"><?= e(setting('shop_phone')) ?></a></p>
                                 </div>
                             </div>
                         </div>
@@ -39,10 +39,10 @@ declare(strict_types=1);
                         <div class="footer-widget">
                             <h4 class="footer-widget-title">Покупателям</h4>
                             <ul class="footer-link">
-                                <li><a href="#">Оплата</a></li>
-                                <li><a href="#">Доставка</a></li>
-                                <li><a href="#">Возврат и гарантия</a></li>
-                                <li><a href="#">Условия использования</a></li>
+                                <li><a href="/pages/delivery-payment">Доставка и оплата</a></li>
+                                <li><a href="/pages/return-warranty">Возврат и гарантия</a></li>
+                                <li><a href="/pages/offer">Публичная оферта</a></li>
+                                <li><a href="/pages/privacy-policy">Политика конфиденциальности</a></li>
                             </ul>
                         </div>
                     </div>
@@ -50,8 +50,9 @@ declare(strict_types=1);
                         <div class="footer-widget">
                             <h4 class="footer-widget-title">Информация</h4>
                             <ul class="footer-link">
-                                <li><a href="#">О компании</a></li>
-                                <li><a href="#">Контакты</a></li>
+                                <li><a href="/about">О компании</a></li>
+                                <li><a href="/showroom">Шоурум</a></li>
+                                <li><a href="/contacts">Контакты</a></li>
                             </ul>
                         </div>
                     </div>

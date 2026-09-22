@@ -36,8 +36,8 @@ $breadcrumbs = [['name' => 'Оформление заказа']];
     <div class="section section-padding">
         <div class="container">
             <div class="checkout-call">
-                <a href="tel:<?= e(SHOP_PHONE_TEL) ?>" class="btn btn-outline-dark"><i class="fa fa-phone"></i> <?= e(SHOP_PHONE) ?></a>
-                <a href="<?= e(SHOP_WHATSAPP_URL) ?>" class="btn btn-outline-dark" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Написать в WhatsApp</a>
+                <a href="tel:<?= e(phoneToTel(setting('shop_phone'))) ?>" class="btn btn-outline-dark"><i class="fa fa-phone"></i> <?= e(setting('shop_phone')) ?></a>
+                <a href="<?= e(setting('shop_whatsapp_url')) ?>" class="btn btn-outline-dark" target="_blank" rel="noopener"><i class="fa fa-whatsapp"></i> Написать в WhatsApp</a>
             </div>
 
             <div class="row">

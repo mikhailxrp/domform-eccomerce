@@ -35,13 +35,6 @@ define('SEARCH_MIN_QUERY_LENGTH', 2);
 // в config.php, который tests/bootstrap.php не подключает)
 define('CART_COOKIE_DAYS', 30);
 
-// Оформление заказа (`.docs/phases/phase-2.md`, Таск 3) — кнопка
-// «Позвонить/WhatsApp» (`FR-CHK-005`). TODO: заменить на реальный номер
-// магазина перед продакшеном.
-define('SHOP_PHONE', '+7 900 000-00-00');
-define('SHOP_PHONE_TEL', '+79000000000');
-define('SHOP_WHATSAPP_URL', 'https://wa.me/79000000000');
-
 // Панель управления — Заказы (`.docs/phases/phase-4.md`, Таск 2)
 define('ADMIN_ORDERS_PER_PAGE', 20);
 
@@ -61,6 +54,9 @@ define('ADMIN_RETURNS_PER_PAGE', 20);
 // Панель управления — Отзывы (`.docs/phases/phase-6.md`, Таск 5)
 define('ADMIN_REVIEWS_PER_PAGE', 20);
 
+// Панель управления — Заявки на звонок (`.docs/phases/phase-8.md`, Таск 5)
+define('ADMIN_CALLBACKS_PER_PAGE', 20);
+
 // Главная — размер блоков Товаров/отзывов (`.docs/phases/phase-6.md`, Таск 6)
 define('HOME_BLOCK_LIMIT', 8);
 
@@ -78,6 +74,18 @@ define('ACCOUNT_ADDRESSES_MAX', 10);
 // Только путь — сам лимит размера/MIME в Core/Upload.php (см. его
 // комментарий, tests/bootstrap.php не подключает config.php).
 define('UPLOAD_PRODUCTS_DIR', ROOT_PATH . '/public/uploads/products');
+
+// Галерея «О компании» (`ADR-046`) — загруженные фото интерьера/цеха,
+// та же схема каталогов, что у `UPLOAD_PRODUCTS_DIR`. Директория общая
+// с будущим редактированием фото статических страниц (Таск 6 Фазы 8,
+// `phase-8.md`) — то же имя константы, чтобы Таск 6 не переопределял
+// её заново.
+define('UPLOAD_CONTENT_DIR', ROOT_PATH . '/public/uploads/content');
+define('ABOUT_GALLERY_MAX', 4);
+
+// Фото к отзыву о магазине (`ADR-046`) — необязательное поле в форме
+// «Добавить отзыв о магазине» Панели управления.
+define('UPLOAD_REVIEWS_DIR', ROOT_PATH . '/public/uploads/reviews');
 
 require_once ROOT_PATH . '/src/Core/Logger.php';
 require_once ROOT_PATH . '/src/Core/Database.php';

@@ -7,6 +7,7 @@ namespace App\Controllers;
 require_once ROOT_PATH . '/src/Models/Review.php';
 require_once ROOT_PATH . '/src/Core/Review.php';
 require_once ROOT_PATH . '/src/Core/Pagination.php';
+require_once ROOT_PATH . '/src/Services/FileUpload.php';
 
 class AdminReviewController
 {
@@ -95,6 +96,10 @@ class AdminReviewController
      * тот же валидатор, что у витринной формы Товара (Таск 4);
      * `product_id` в проверке не участвует. Ошибка — прямой рендер
      * `index()` с введёнными значениями, без редиректа (см. `index()`).
+     * Фото (`ADR-046`, внеплановый редизайн `/about`) — необязательно:
+     * отсутствие файла (`UPLOAD_ERR_NO_FILE`) не ошибка, отзыв просто
+     * не подойдёт для цитаты на `/about` без фото
+     * (`findLatestApprovedStoreReviewWithPhoto()`).
      */
     public function storeShopReview(): void
     {
@@ -109,14 +114,37 @@ class AdminReviewController
         ]);
         $errors = validateReviewInput($input);
 
+        $file       = $_FILES['photo'] ?? ['error' => UPLOAD_ERR_NO_FILE];
+        $hasPhoto   = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        $photoPath  = null;
+        $photoError = null;
+
+        if ($hasPhoto) {
+            $detectedMime = detectUploadedMime((string) ($file['tmp_name'] ?? ''));
+            $photoError   = validateUploadedImage($file, $detectedMime);
+        }
+
+        if ($photoError !== null) {
+            $errors['photo'] = true;
+        }
+
         if (in_array(true, $errors, true)) {
             $this->index($input, $errors);
             return;
         }
 
-        createStoreReview($input);
+        if ($hasPhoto) {
+            $photoPath = storeReviewImage($file);
+        }
 
-        setFlash('success', 'Отзыв о магазине добавлен.');
+        createStoreReview($input + ['photo_path' => $photoPath]);
+
+        setFlash(
+            $hasPhoto && $photoPath === null ? 'error' : 'success',
+            $hasPhoto && $photoPath === null
+                ? 'Отзыв добавлен, но фото не сохранилось.'
+                : 'Отзыв о магазине добавлен.'
+        );
         redirect('/admin/reviews');
     }
 }

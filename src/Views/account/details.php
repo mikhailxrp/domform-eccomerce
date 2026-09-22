@@ -78,7 +78,7 @@ $breadcrumbs = [['name' => 'Личные данные']];
                                         <div class="single-form">
                                             <input type="tel" value="<?= e($phone ?? '') ?>" disabled>
                                             <small class="form-text text-muted">
-                                                Телефон меняет только Менеджер — позвоните по <?= e(SHOP_PHONE) ?>.
+                                                Телефон меняет только Менеджер — позвоните по <?= e(setting('shop_phone')) ?>.
                                             </small>
                                         </div>
                                     </div>

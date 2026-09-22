@@ -27,3 +27,8 @@ require_once ROOT_PATH . '/src/Core/Review.php';
 require_once ROOT_PATH . '/src/Core/Account.php';
 require_once ROOT_PATH . '/src/Core/Address.php';
 require_once ROOT_PATH . '/src/Core/Notification.php';
+require_once ROOT_PATH . '/src/Core/Content.php';
+require_once ROOT_PATH . '/src/Core/Settings.php';
+require_once ROOT_PATH . '/src/Core/Callback.php';
+require_once ROOT_PATH . '/src/Core/BannerForm.php';
+require_once ROOT_PATH . '/src/Core/StaffForm.php';
