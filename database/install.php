@@ -662,6 +662,22 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+// Заявки на обратный звонок (`FR-CNT-001`, `ADR-047`, Таск 4 Фазы 8) —
+// без FK на users: форму заполняют и гости, и авторизованные Покупатели
+// одним и тем же способом, привязка к аккаунту не нужна.
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS callback_requests (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        name         VARCHAR(150) NOT NULL,
+        phone        VARCHAR(20) NOT NULL,
+        comment      VARCHAR(500) NULL,
+        status       ENUM('new', 'processed') NOT NULL DEFAULT 'new',
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at DATETIME NULL,
+        KEY idx_callback_requests_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");
 

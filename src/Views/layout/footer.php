@@ -52,7 +52,7 @@ declare(strict_types=1);
                             <ul class="footer-link">
                                 <li><a href="/about">О компании</a></li>
                                 <li><a href="/showroom">Шоурум</a></li>
-                                <li><a href="/pages/contacts">Контакты</a></li>
+                                <li><a href="/contacts">Контакты</a></li>
                             </ul>
                         </div>
                     </div>

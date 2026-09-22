@@ -78,7 +78,7 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
                             <li><a href="/about">О компании</a></li>
                             <li><a href="/showroom">Шоурум</a></li>
                             <li><a href="/pages/delivery-payment">Доставка и оплата</a></li>
-                            <li><a href="/pages/contacts">Контакты</a></li>
+                            <li><a href="/contacts">Контакты</a></li>
                         </ul>
                     </div>
                 </div>
@@ -257,7 +257,7 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
                     <li><a href="/about">О компании</a></li>
                     <li><a href="/showroom">Шоурум</a></li>
                     <li><a href="/pages/delivery-payment">Доставка и оплата</a></li>
-                    <li><a href="/pages/contacts">Контакты</a></li>
+                    <li><a href="/contacts">Контакты</a></li>
                 </ul>
             </nav>
         </div>

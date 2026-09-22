@@ -29,3 +29,4 @@ require_once ROOT_PATH . '/src/Core/Address.php';
 require_once ROOT_PATH . '/src/Core/Notification.php';
 require_once ROOT_PATH . '/src/Core/Content.php';
 require_once ROOT_PATH . '/src/Core/Settings.php';
+require_once ROOT_PATH . '/src/Core/Callback.php';
