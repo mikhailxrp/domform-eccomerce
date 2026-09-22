@@ -655,7 +655,7 @@ URL встраиваемой карты — то, что раньше лежал
 | Колонка | Тип | Назначение |
 |---------|-----|------------|
 | id | INT PK AUTO_INCREMENT | |
-| key | VARCHAR(60) NOT NULL UNIQUE | ключ настройки — whitelist задан `SETTING_KEYS` в `Core/Settings.php`, `updateSettings()` не пишет ключи вне списка |
+| key | VARCHAR(60) NOT NULL UNIQUE | ключ настройки — таблица общая для нескольких форм, каждая пишет в свой whitelist: `SETTING_KEYS` (`Core/Settings.php`, форма «Настройки») или `AI_SETTING_KEYS` (`Core/Ai.php`, форма «ИИ», Таск 8 Фазы 9); `updateSettings(array $values, array $allowed = SETTING_KEYS)` не пишет ключи вне переданного `$allowed` |
 | value | TEXT NOT NULL | значение; `map_embed_url` может быть пустой строкой — карта на `/showroom` (Таск 3) тогда не выводится |
 | updated_at | TIMESTAMP DEFAULT NOW ON UPDATE CURRENT_TIMESTAMP | |
 
@@ -664,6 +664,19 @@ URL встраиваемой карты — то, что раньше лежал
 > Строки сидятся один раз значениями бывших констант `SHOP_*`
 > (`INSERT IGNORE` в `database/install.php`) — повторный запуск не
 > перетирает значение, отредактированное в Панели управления.
+
+> ИИ-ключи (`BR-AI-001` правило 5, `ADR-048`/`ADR-052`): `ai_monthly_limit_rub`,
+> `ai_usd_rate`, `ai_yandex_price_per_1k` — лимит и курсы для перевода
+> стоимости вызова в рубли (`Core/Ai.php::costRubFromUsd()`/
+> `costRubFromTokens()`); `ai_specs_enabled`/`ai_description_enabled`/
+> `ai_consultant_enabled` — тумблеры помощников (`aiAssistantEnabled()`,
+> `Services/Ai/ai.php`), гасят помощника так же, как отсутствие ключа
+> провайдера в `.env`; отдельного `ai_picker_enabled` нет — подбор
+> товара с Таска 7 работает внутри `consultant` (`ADR-051`), включённого
+> и выключенного тем же тумблером. `ai_limit_notified_month` — служебная
+> метка (текущий `YYYY-MM` или пусто), не показывается в форме «ИИ»:
+> не даёт письму о превышении лимита дублироваться в одном месяце
+> (`Q-027`).
 
 ---
 

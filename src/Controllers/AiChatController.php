@@ -77,8 +77,8 @@ class AiChatController
             'work_hours' => setting('work_hours'),
         ];
 
-        if (!aiClassAvailable(aiClassForAssistant('consultant'))) {
-            logWarning('Консультант ИИ недоступен — класс задачи не настроен', ['assistant' => 'consultant']);
+        if (!aiClassAvailable(aiClassForAssistant('consultant')) || !aiAssistantEnabled('consultant')) {
+            logWarning('Консультант ИИ недоступен — класс задачи не настроен или помощник выключен', ['assistant' => 'consultant']);
             echo json_encode(chatFallbackPayload($contacts), JSON_UNESCAPED_UNICODE);
             return;
         }

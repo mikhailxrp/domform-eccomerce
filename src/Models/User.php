@@ -105,6 +105,19 @@ function isEmailTakenByOther(string $email, int $userId): bool
 }
 
 /**
+ * Получатели письма о превышении месячного лимита ИИ (`BR-AI-001`
+ * правило 5, Таск 8 Фазы 9) — «Владелец» в терминах `prd.md` это
+ * `role='admin'`, отдельной роли/поля для этого в схеме нет
+ * (`.docs/prd.md`).
+ */
+function getAdminEmails(): array
+{
+    $stmt = getPdo()->query("SELECT email FROM users WHERE role = 'admin'");
+
+    return array_column($stmt->fetchAll(), 'email');
+}
+
+/**
  * `/admin/users` (`FR-ADM-007`, Таск 8 Фазы 8) — только `manager`/
  * `admin`, Покупатели (`role='customer'`) в списке не участвуют.
  */

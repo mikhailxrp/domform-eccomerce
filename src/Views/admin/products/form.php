@@ -88,7 +88,7 @@ $specErrors    = $errors['specs'] ?? [];
                                 </div>
                             </div>
                         <?php else: ?>
-                            <div class="alert alert-secondary mb-0">Генератор черновика описания недоступен — провайдер ИИ не настроен.</div>
+                            <div class="alert alert-secondary mb-0">Генератор черновика описания недоступен — провайдер ИИ не настроен или помощник выключен в разделе «ИИ».</div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>

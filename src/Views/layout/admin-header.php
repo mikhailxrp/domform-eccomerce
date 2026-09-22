@@ -14,6 +14,17 @@ require_once ROOT_PATH . '/src/Models/CallbackRequest.php';
 $pendingReviewsCount = countPendingReviews();
 $newCallbacksCount   = countNewCallbacks();
 
+// Баннер превышения месячного лимита ИИ (`BR-AI-001` правило 5, Таск 8
+// Фазы 9) — виден только `admin` («Владелец» в терминах `prd.md`),
+// запрос расхода за месяц не делается для `manager`, у кого раздела
+// «ИИ» и так нет.
+require_once ROOT_PATH . '/src/Core/Ai.php';
+require_once ROOT_PATH . '/src/Core/Settings.php';
+require_once ROOT_PATH . '/src/Models/Setting.php';
+require_once ROOT_PATH . '/src/Models/AiUsage.php';
+$aiLimitExceeded = ($currentUser['role'] ?? '') === 'admin'
+    && isAiLimitExceeded(getAiSpendForMonth(date('Y-m')), setting('ai_monthly_limit_rub'));
+
 $adminNavItems = [
     ['url' => '/admin',               'label' => 'Дашборд',     'icon' => 'bx bx-home-alt'],
     ['url' => '/admin/orders',        'label' => 'Заказы',      'icon' => 'bx bx-cart'],
@@ -29,7 +40,7 @@ $adminNavItems = [
     ['url' => '/admin/returns',       'label' => 'Возвраты',    'icon' => 'bx bx-undo'],
     ['url' => '/admin/sales-channels', 'label' => 'Каналы продаж', 'icon' => 'bx bx-chat'],
     ['url' => '/admin/integrations',  'label' => 'Интеграции',  'icon' => 'bx bx-plug'],
-    ['url' => '/admin/ai/specs',      'label' => 'ИИ-помощники', 'icon' => 'bx bx-bot', 'roles' => ['admin']],
+    ['url' => '/admin/ai',            'label' => 'ИИ-помощники', 'icon' => 'bx bx-bot', 'roles' => ['admin']],
     ['url' => '/admin/users',         'label' => 'Сотрудники',  'icon' => 'bx bx-user-check', 'roles' => ['admin']],
     ['url' => '/admin/settings',      'label' => 'Настройки',   'icon' => 'bx bx-cog', 'roles' => ['admin']],
     ['url' => '/admin/about-gallery', 'label' => 'Галерея «О компании»', 'icon' => 'bx bx-images'],
@@ -142,3 +153,10 @@ foreach ($adminNavItems as $navItem) {
         <div class="main-content app-content">
             <div class="container-fluid">
                 <?php include ROOT_PATH . '/src/Views/components/flash.php'; ?>
+                <?php if ($aiLimitExceeded): ?>
+                    <div class="alert alert-warning" role="alert">
+                        Расход на ИИ-помощников за этот месяц превысил лимит.
+                        Помощники продолжают работать — отключить вручную можно в разделе
+                        <a href="/admin/ai">«ИИ»</a>.
+                    </div>
+                <?php endif; ?>

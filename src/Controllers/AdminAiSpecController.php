@@ -51,7 +51,7 @@ class AdminAiSpecController
             'paginationLinks' => $paginationLinks,
             'prevUrl'         => $pagination['has_prev'] ? buildPaginationUrl('/admin/ai/specs', $queryParams, $pagination['prev_page']) : null,
             'nextUrl'         => $pagination['has_next'] ? buildPaginationUrl('/admin/ai/specs', $queryParams, $pagination['next_page']) : null,
-            'classAvailable'  => aiClassAvailable(aiClassForAssistant('specs')),
+            'classAvailable'  => aiClassAvailable(aiClassForAssistant('specs')) && aiAssistantEnabled('specs'),
         ]);
     }
 
@@ -68,6 +68,11 @@ class AdminAiSpecController
     {
         requireRole(['admin']);
         requireCsrf();
+
+        if (!aiClassAvailable(aiClassForAssistant('specs')) || !aiAssistantEnabled('specs')) {
+            setFlash('error', 'Разбор характеристик сейчас недоступен.');
+            redirect('/admin/ai/specs');
+        }
 
         $ids = array_slice(array_unique(array_map(
             static fn (mixed $id): int => (int) $id,

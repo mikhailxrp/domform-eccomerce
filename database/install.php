@@ -649,6 +649,13 @@ $settingsSeed = [
     ['key' => 'ai_monthly_limit_rub',   'value' => '5000'],
     ['key' => 'ai_usd_rate',            'value' => '95.00'],
     ['key' => 'ai_yandex_price_per_1k', 'value' => '1.20'],
+    // Тумблеры помощников и метка последнего письма о лимите (Таск 8
+    // Фазы 9) — включены по умолчанию, `picker` тумблера не имеет
+    // (умер как отдельный помощник в Таске 7, `ADR-051`).
+    ['key' => 'ai_specs_enabled',        'value' => '1'],
+    ['key' => 'ai_description_enabled',  'value' => '1'],
+    ['key' => 'ai_consultant_enabled',   'value' => '1'],
+    ['key' => 'ai_limit_notified_month', 'value' => ''],
 ];
 
 $insertSetting = $pdo->prepare('INSERT IGNORE INTO settings (`key`, value) VALUES (:key, :value)');

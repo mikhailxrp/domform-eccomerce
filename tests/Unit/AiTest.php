@@ -125,4 +125,115 @@ final class AiTest extends TestCase
         // (200 + 133) токена * 1.00 / 1000 = 0.333 → 0.33
         $this->assertSame('0.33', costRubFromTokens(200, 133, '1.00'));
     }
+
+    // ─── validateAiSettingsInput() ───────────────────────────────────────
+
+    private function validAiSettingsInput(): array
+    {
+        return [
+            'ai_monthly_limit_rub'   => '5000',
+            'ai_usd_rate'            => '95.00',
+            'ai_yandex_price_per_1k' => '1.20',
+        ];
+    }
+
+    public function testValidAiSettingsInputHasNoErrors(): void
+    {
+        $errors = validateAiSettingsInput($this->validAiSettingsInput());
+        $this->assertNotContains(true, $errors);
+    }
+
+    public function testAiSettingsInputRejectsZeroLimit(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_monthly_limit_rub' => '0']));
+        $this->assertTrue($errors['ai_monthly_limit_rub']);
+    }
+
+    public function testAiSettingsInputRejectsLimitAboveMax(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_monthly_limit_rub' => '1000001']));
+        $this->assertTrue($errors['ai_monthly_limit_rub']);
+    }
+
+    public function testAiSettingsInputRejectsNonNumericLimit(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_monthly_limit_rub' => 'много']));
+        $this->assertTrue($errors['ai_monthly_limit_rub']);
+    }
+
+    public function testAiSettingsInputRejectsZeroUsdRate(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_usd_rate' => '0']));
+        $this->assertTrue($errors['ai_usd_rate']);
+    }
+
+    public function testAiSettingsInputAcceptsFourDecimalUsdRate(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_usd_rate' => '95.1234']));
+        $this->assertFalse($errors['ai_usd_rate']);
+    }
+
+    public function testAiSettingsInputRejectsNegativeYandexPrice(): void
+    {
+        $errors = validateAiSettingsInput(array_merge($this->validAiSettingsInput(), ['ai_yandex_price_per_1k' => '-1']));
+        $this->assertTrue($errors['ai_yandex_price_per_1k']);
+    }
+
+    // ─── isAiLimitExceeded() ─────────────────────────────────────────────
+
+    public function testLimitNotExceededWhenSpendBelowLimit(): void
+    {
+        $this->assertFalse(isAiLimitExceeded('4999.99', '5000'));
+    }
+
+    public function testLimitExceededWhenSpendEqualsLimit(): void
+    {
+        $this->assertTrue(isAiLimitExceeded('5000.00', '5000'));
+    }
+
+    public function testLimitExceededWhenSpendAboveLimit(): void
+    {
+        $this->assertTrue(isAiLimitExceeded('5000.01', '5000'));
+    }
+
+    // ─── summarizeAiRequestStats() ───────────────────────────────────────
+
+    public function testSummarizeAiRequestStatsTotalsSpendAndCounts(): void
+    {
+        $rows = [
+            ['assistant' => 'consultant', 'task_class' => 'user_input', 'provider' => 'yandexgpt', 'requests_count' => 10, 'errors_count' => 1, 'spend' => '12.50'],
+            ['assistant' => 'specs', 'task_class' => 'anonymous', 'provider' => 'openrouter', 'requests_count' => 5, 'errors_count' => 0, 'spend' => '7.50'],
+        ];
+
+        $summary = summarizeAiRequestStats($rows);
+
+        $this->assertSame('20.00', $summary['total_spend']);
+        $this->assertSame(15, $summary['total_requests']);
+        $this->assertSame(1, $summary['total_errors']);
+        $this->assertSame('12.50', $summary['by_assistant']['consultant']['spend']);
+        $this->assertSame('7.50', $summary['by_class']['anonymous']['spend']);
+    }
+
+    public function testSummarizeAiRequestStatsMergesSameAssistantAcrossProviders(): void
+    {
+        $rows = [
+            ['assistant' => 'consultant', 'task_class' => 'user_input', 'provider' => 'yandexgpt', 'requests_count' => 3, 'errors_count' => 0, 'spend' => '5.00'],
+            ['assistant' => 'consultant', 'task_class' => 'user_input', 'provider' => 'yandexgpt', 'requests_count' => 2, 'errors_count' => 1, 'spend' => '3.00'],
+        ];
+
+        $summary = summarizeAiRequestStats($rows);
+
+        $this->assertSame('8.00', $summary['by_assistant']['consultant']['spend']);
+        $this->assertSame(5, $summary['by_assistant']['consultant']['requests_count']);
+        $this->assertSame(1, $summary['by_assistant']['consultant']['errors_count']);
+    }
+
+    public function testSummarizeAiRequestStatsEmptyRowsGivesZeroTotals(): void
+    {
+        $summary = summarizeAiRequestStats([]);
+
+        $this->assertSame('0', $summary['total_spend']);
+        $this->assertSame(0, $summary['total_requests']);
+        $this->assertSame([], $summary['by_assistant']);
+    }
 }

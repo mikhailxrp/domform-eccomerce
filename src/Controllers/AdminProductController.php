@@ -324,7 +324,7 @@ class AdminProductController
             return;
         }
 
-        if (!aiClassAvailable(aiClassForAssistant('description'))) {
+        if (!aiClassAvailable(aiClassForAssistant('description')) || !aiAssistantEnabled('description')) {
             echo json_encode(['unavailable' => true], JSON_UNESCAPED_UNICODE);
             return;
         }
@@ -403,7 +403,7 @@ class AdminProductController
             'errors'                  => $errors,
             'variantRows'             => $variantRows,
             'specRows'                => $specRows,
-            'aiDescriptionAvailable'  => aiClassAvailable(aiClassForAssistant('description')),
+            'aiDescriptionAvailable'  => aiClassAvailable(aiClassForAssistant('description')) && aiAssistantEnabled('description'),
         ]);
     }
 }

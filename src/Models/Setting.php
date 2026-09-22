@@ -23,13 +23,17 @@ function getAllSettings(): array
 }
 
 /**
- * Обновляет только ключи из `SETTING_KEYS`, присутствующие в
- * `$values` — неизвестный ключ POST-запроса молча игнорируется, не
- * попадает в БД. Один UPDATE на ключ в общей транзакции: реквизиты
- * должны обновиться все вместе или не обновиться вовсе, чтобы форма
- * не сохранилась наполовину при сбое посреди запроса.
+ * Обновляет только ключи из `$allowed` (по умолчанию `SETTING_KEYS`),
+ * присутствующие в `$values` — неизвестный ключ POST-запроса молча
+ * игнорируется, не попадает в БД. `$allowed` — отдельный whitelist на
+ * вызов: форма «Настройки» пишет `SETTING_KEYS` как раньше, форма
+ * «ИИ» (`Таск 8 Фазы 9`) передаёт `AI_SETTING_KEYS` — так одна форма
+ * не может задеть ключи другой, даже если в запрос подставить чужое
+ * имя поля. Один UPDATE на ключ в общей транзакции: реквизиты должны
+ * обновиться все вместе или не обновиться вовсе, чтобы форма не
+ * сохранилась наполовину при сбое посреди запроса.
  */
-function updateSettings(array $values): void
+function updateSettings(array $values, array $allowed = SETTING_KEYS): void
 {
     $pdo = getPdo();
     $pdo->beginTransaction();
@@ -37,7 +41,7 @@ function updateSettings(array $values): void
     try {
         $stmt = $pdo->prepare('UPDATE settings SET value = :value WHERE `key` = :key');
 
-        foreach (array_keys(SETTING_KEYS) as $key) {
+        foreach (array_keys($allowed) as $key) {
             if (!array_key_exists($key, $values)) {
                 continue;
             }
