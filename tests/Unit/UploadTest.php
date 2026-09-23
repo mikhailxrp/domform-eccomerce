@@ -63,6 +63,37 @@ final class UploadTest extends TestCase
         $this->assertNull(validateUploadedImage($file, 'image/webp'));
     }
 
+    public function testOversizedDimensionsAreRejected(): void
+    {
+        // Маленький файл (проходит UPLOAD_MAX_BYTES), но огромное
+        // разрешение — типичная decompression bomb для GD-ресайза.
+        $file = ['error' => UPLOAD_ERR_OK, 'size' => 1000];
+        $this->assertNotNull(
+            validateUploadedImage($file, 'image/jpeg', [UPLOAD_MAX_DIMENSION + 1, 100])
+        );
+        $this->assertNotNull(
+            validateUploadedImage($file, 'image/jpeg', [100, UPLOAD_MAX_DIMENSION + 1])
+        );
+    }
+
+    public function testDimensionsWithinLimitAreAccepted(): void
+    {
+        $file = ['error' => UPLOAD_ERR_OK, 'size' => 1000];
+        $this->assertNull(
+            validateUploadedImage($file, 'image/jpeg', [UPLOAD_MAX_DIMENSION, UPLOAD_MAX_DIMENSION])
+        );
+    }
+
+    public function testMissingDimensionsAreNotRejectedByDimensionCheck(): void
+    {
+        // `null` — размер не определён внешним вызовом (например,
+        // `getimagesize()` не смог его прочитать); проверка размера не
+        // должна сама по себе блокировать файл — этим занимаются
+        // остальные проверки (MIME, размер в байтах).
+        $file = ['error' => UPLOAD_ERR_OK, 'size' => 1000];
+        $this->assertNull(validateUploadedImage($file, 'image/jpeg', null));
+    }
+
     public function testExtensionForKnownMime(): void
     {
         $this->assertSame('jpg', uploadExtensionForMime('image/jpeg'));

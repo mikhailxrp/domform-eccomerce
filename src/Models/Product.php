@@ -1251,37 +1251,54 @@ function getVariantImagesForAdmin(int $variantId): array
  * не находится, `null` трактуется Controller'ом как отказ. Первое фото
  * Варианта становится главным автоматически — иначе Вариант остаётся
  * без главного фото до первого ручного переключения.
+ *
+ * `SELECT ... FOR UPDATE` на строке Варианта — не только проверка
+ * принадлежности, но и блокировка: `admin.js` теперь шлёт несколько
+ * файлов параллельно (`Promise.all`), и без лока два запроса могли по
+ * очереди прочитать «фото ещё нет» и оба вставить с `is_main = 1`.
+ * Лок на родительской строке `product_variants` сериализует такие
+ * параллельные вставки, хотя сам счётчик — по `variant_images`, где
+ * при нулевой строке `FOR UPDATE` заблокировать нечего.
  */
 function addVariantImage(int $productId, int $variantId, array $data): ?int
 {
     $pdo = getPdo();
 
-    $check = $pdo->prepare(
-        'SELECT id FROM product_variants WHERE id = :variant_id AND product_id = :product_id LIMIT 1'
-    );
-    $check->execute(['variant_id' => $variantId, 'product_id' => $productId]);
-    if ($check->fetch() === false) {
-        return null;
+    $pdo->beginTransaction();
+    try {
+        $check = $pdo->prepare(
+            'SELECT id FROM product_variants WHERE id = :variant_id AND product_id = :product_id LIMIT 1 FOR UPDATE'
+        );
+        $check->execute(['variant_id' => $variantId, 'product_id' => $productId]);
+        if ($check->fetch() === false) {
+            $pdo->rollBack();
+            return null;
+        }
+
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM variant_images WHERE product_variant_id = :variant_id');
+        $countStmt->execute(['variant_id' => $variantId]);
+        $isFirstImage = (int) $countStmt->fetchColumn() === 0;
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO variant_images (product_variant_id, color, is_swatch, path, sort_order, is_main)
+             VALUES (:variant_id, :color, :is_swatch, :path, :sort_order, :is_main)'
+        );
+        $stmt->execute([
+            'variant_id' => $variantId,
+            'color'      => $data['color'],
+            'is_swatch'  => $data['is_swatch'] ? 1 : 0,
+            'path'       => $data['path'],
+            'sort_order' => $data['sort_order'],
+            'is_main'    => $isFirstImage ? 1 : 0,
+        ]);
+
+        $imageId = (int) $pdo->lastInsertId();
+        $pdo->commit();
+        return $imageId;
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-
-    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM variant_images WHERE product_variant_id = :variant_id');
-    $countStmt->execute(['variant_id' => $variantId]);
-    $isFirstImage = (int) $countStmt->fetchColumn() === 0;
-
-    $stmt = $pdo->prepare(
-        'INSERT INTO variant_images (product_variant_id, color, is_swatch, path, sort_order, is_main)
-         VALUES (:variant_id, :color, :is_swatch, :path, :sort_order, :is_main)'
-    );
-    $stmt->execute([
-        'variant_id' => $variantId,
-        'color'      => $data['color'],
-        'is_swatch'  => $data['is_swatch'] ? 1 : 0,
-        'path'       => $data['path'],
-        'sort_order' => $data['sort_order'],
-        'is_main'    => $isFirstImage ? 1 : 0,
-    ]);
-
-    return (int) $pdo->lastInsertId();
 }
 
 /**

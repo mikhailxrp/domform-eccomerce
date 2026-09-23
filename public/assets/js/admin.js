@@ -366,3 +366,178 @@
         document.getElementById('product-description').value = draftField.value;
     });
 })();
+
+// Множественная AJAX-загрузка фото Варианта + AJAX для карточек уже
+// загруженных фото (доработка после Таска 9 Фазы 4) — прогрессивное
+// улучшение: без JS форма отправляет один файл как раньше (обычный
+// POST + redirect, Controller это по-прежнему умеет). С JS: инпут
+// получает `multiple`, выбранные/перетащенные файлы уходят отдельными
+// fetch-запросами (Controller как принимал один файл за запрос, так и
+// принимает), ответ — HTML той же сетки карточек (`variant-photo-grid.php`,
+// один и тот же partial на сервере и для обычного рендера, и для JSON —
+// разметка карточки не дублируется в JS). Делегирование на document, а
+// не прямое связывание с формами — после каждого действия сетка
+// перерисовывается (`innerHTML`), у новых форм внутри неё своих
+// слушателей ещё нет.
+(() => {
+    document.querySelectorAll('[data-photo-upload-input]').forEach((input) => {
+        input.multiple = true;
+    });
+
+    const setGridHtml = (photosBlock, html) => {
+        const grid = photosBlock.querySelector('[data-variant-photo-grid]');
+        if (grid) {
+            grid.innerHTML = html;
+        }
+    };
+
+    const showBlockError = (photosBlock, message) => {
+        const box = photosBlock.querySelector('[data-variant-photo-error]');
+        box?.classList.toggle('d-none', !message);
+        if (box) {
+            box.textContent = message;
+        }
+    };
+
+    const requestJson = async (form, formData) => {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+
+        let data = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+
+        return data;
+    };
+
+    const uploadOne = async (form, file, row) => {
+        const formData = new FormData(form);
+        formData.set('image', file);
+
+        const data = await requestJson(form, formData);
+
+        if (data && data.success) {
+            row.remove();
+        } else {
+            row.classList.replace('text-muted', 'text-danger');
+            row.textContent = `${file.name} — ${(data && data.error) || 'не удалось загрузить'}`;
+        }
+
+        return data;
+    };
+
+    const uploadFiles = async (form, files) => {
+        const photosBlock = form.closest('[data-variant-photos]');
+        const statusBox   = photosBlock ? photosBlock.querySelector('[data-photo-upload-status]') : null;
+        if (!photosBlock || !statusBox) {
+            return;
+        }
+
+        showBlockError(photosBlock, '');
+        statusBox.innerHTML = '';
+
+        // Параллельно, не по одному — каждый файл своим запросом, без
+        // ожидания предыдущего. Ответы могут прийти в любом порядке, а
+        // HTML сетки в каждом — снимок БД на момент именно этого запроса
+        // (не обязательно после вставок остальных): берём снимок с
+        // наибольшим числом карточек — он не может быть неполным
+        // относительно уже завершённых параллельных загрузок.
+        const results = await Promise.all(files.map((file) => {
+            const row = document.createElement('div');
+            row.className = 'small text-muted';
+            row.textContent = `${file.name} — загружается…`;
+            statusBox.append(row);
+
+            return uploadOne(form, file, row);
+        }));
+
+        const latest = results
+            .filter((data) => data && data.success)
+            .reduce((best, data) => {
+                const cardCount = (data.html.match(/variant-photo-card/g) || []).length;
+                return cardCount > (best?.cardCount ?? -1) ? { html: data.html, cardCount } : best;
+            }, null);
+
+        if (latest) {
+            setGridHtml(photosBlock, latest.html);
+        }
+
+        form.reset();
+    };
+
+    document.addEventListener('submit', (event) => {
+        const form = event.target.closest('[data-photo-upload-form]');
+        if (!form) {
+            return;
+        }
+
+        const input = form.querySelector('[data-photo-upload-input]');
+        if (!input || input.files.length === 0) {
+            return;
+        }
+
+        event.preventDefault();
+        uploadFiles(form, Array.from(input.files));
+    });
+
+    document.querySelectorAll('[data-photo-dropzone]').forEach((zone) => {
+        ['dragenter', 'dragover'].forEach((type) => {
+            zone.addEventListener(type, (event) => {
+                event.preventDefault();
+                zone.classList.add('variant-photo-dropzone--active');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach((type) => {
+            zone.addEventListener(type, (event) => {
+                event.preventDefault();
+                zone.classList.remove('variant-photo-dropzone--active');
+            });
+        });
+
+        zone.addEventListener('drop', (event) => {
+            const files = event.dataTransfer ? event.dataTransfer.files : null;
+            const form  = zone.closest('[data-photo-upload-form]');
+            if (!files || files.length === 0 || !form) {
+                return;
+            }
+
+            uploadFiles(form, Array.from(files));
+        });
+    });
+
+    document.addEventListener('submit', (event) => {
+        const form = event.target.closest('[data-variant-photo-form]');
+        if (!form) {
+            return;
+        }
+
+        const confirmMessage = form.dataset.variantPhotoFormConfirm;
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+            event.preventDefault();
+            return;
+        }
+
+        event.preventDefault();
+
+        const photosBlock = form.closest('[data-variant-photos]');
+        if (!photosBlock) {
+            return;
+        }
+
+        requestJson(form, new FormData(form)).then((data) => {
+            if (data && data.success) {
+                setGridHtml(photosBlock, data.html);
+                showBlockError(photosBlock, '');
+            } else {
+                showBlockError(photosBlock, (data && data.error) || 'Не удалось выполнить действие.');
+            }
+        });
+    });
+})();

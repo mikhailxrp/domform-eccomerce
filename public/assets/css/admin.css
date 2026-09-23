@@ -64,6 +64,21 @@
     width: 3.5rem;
 }
 
+/* Зона drag&drop множественной загрузки фото Варианта (доработка после
+   Таска 9) — подсветка при перетаскивании файлов поверх зоны
+   (`admin.js` переключает модификатор на dragenter/dragover/drop). */
+.variant-photo-dropzone {
+    border: 1px dashed var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    padding: .25rem;
+    transition: border-color .15s ease-in-out, background-color .15s ease-in-out;
+}
+
+.variant-photo-dropzone--active {
+    border-color: var(--bs-primary);
+    background-color: var(--bs-primary-bg-subtle);
+}
+
 /* Галерея «О компании» (`ADR-046`) — фиксированная высота миниатюры,
    как у карточек Вариантов выше, но прямоугольная (16:9 ближе к
    реальным фото интерьера, чем квадрат). */

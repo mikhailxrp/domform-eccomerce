@@ -215,17 +215,18 @@ class AdminProductController
 
         $file         = $_FILES['image'] ?? ['error' => UPLOAD_ERR_NO_FILE];
         $detectedMime = detectUploadedMime((string) ($file['tmp_name'] ?? ''));
-        $error        = validateUploadedImage($file, $detectedMime);
+        $dimensions   = detectImageDimensions((string) ($file['tmp_name'] ?? ''));
+        $error        = validateUploadedImage($file, $detectedMime, $dimensions);
 
         if ($error !== null) {
-            setFlash('error', $error);
-            redirect('/admin/products/' . $productId . '/edit');
+            $this->respondImageError($productId, $error);
+            return;
         }
 
         $path = storeProductImage($file);
         if ($path === null) {
-            setFlash('error', 'Не удалось сохранить файл.');
-            redirect('/admin/products/' . $productId . '/edit');
+            $this->respondImageError($productId, 'Не удалось сохранить файл.');
+            return;
         }
 
         $color = trim((string) input('color', ''));
@@ -242,8 +243,7 @@ class AdminProductController
             abort404();
         }
 
-        setFlash('success', 'Фото добавлено.');
-        redirect('/admin/products/' . $productId . '/edit');
+        $this->respondImageSuccess($productId, $variantId, 'Фото добавлено.');
     }
 
     public function updateImage(string $productId, string $variantId, string $imageId): void
@@ -258,8 +258,12 @@ class AdminProductController
             'sort_order' => (int) input('sort_order', 0),
         ]);
 
-        setFlash($updated ? 'success' : 'error', $updated ? 'Фото обновлено.' : 'Не удалось обновить фото.');
-        redirect('/admin/products/' . $productId . '/edit');
+        if (!$updated) {
+            $this->respondImageError($productId, 'Не удалось обновить фото.', 404);
+            return;
+        }
+
+        $this->respondImageSuccess($productId, $variantId, 'Фото обновлено.');
     }
 
     public function deleteImage(string $productId, string $variantId, string $imageId): void
@@ -268,12 +272,13 @@ class AdminProductController
         requireCsrf();
 
         $path = deleteVariantImage((int) $productId, (int) $variantId, (int) $imageId);
-        if ($path !== null) {
-            deleteStoredFile($path);
+        if ($path === null) {
+            $this->respondImageError($productId, 'Не удалось удалить фото.', 404);
+            return;
         }
 
-        setFlash($path !== null ? 'success' : 'error', $path !== null ? 'Фото удалено.' : 'Не удалось удалить фото.');
-        redirect('/admin/products/' . $productId . '/edit');
+        deleteStoredFile($path);
+        $this->respondImageSuccess($productId, $variantId, 'Фото удалено.');
     }
 
     public function setMainImage(string $productId, string $variantId, string $imageId): void
@@ -282,9 +287,54 @@ class AdminProductController
         requireCsrf();
 
         $updated = setMainVariantImage((int) $productId, (int) $variantId, (int) $imageId);
+        if (!$updated) {
+            $this->respondImageError($productId, 'Не удалось изменить главное фото.', 404);
+            return;
+        }
 
-        setFlash($updated ? 'success' : 'error', $updated ? 'Главное фото изменено.' : 'Не удалось изменить главное фото.');
+        $this->respondImageSuccess($productId, $variantId, 'Главное фото изменено.');
+    }
+
+    /**
+     * Общий выход из всех 4 действий над фото Варианта — обычной
+     * отправке формы (`redirect()`, было изначально) и fetch-запросу
+     * `admin.js` (JSON с готовым HTML сетки, чтобы её не дублировать в
+     * JS — тот же `variant-photo-grid.php`, что при обычном рендере
+     * формы Товара). `wantsJson()` различает их по заголовку
+     * `X-Requested-With`, который сам проставляет только JS.
+     */
+    private function respondImageSuccess(string $productId, string $variantId, string $message): void
+    {
+        if (wantsJson()) {
+            jsonResponse([
+                'success' => true,
+                'html'    => $this->renderVariantPhotoGrid((int) $productId, (int) $variantId),
+            ]);
+            return;
+        }
+
+        setFlash('success', $message);
         redirect('/admin/products/' . $productId . '/edit');
+    }
+
+    private function respondImageError(string $productId, string $message, int $status = 422): void
+    {
+        if (wantsJson()) {
+            jsonResponse(['success' => false, 'error' => $message], $status);
+            return;
+        }
+
+        setFlash('error', $message);
+        redirect('/admin/products/' . $productId . '/edit');
+    }
+
+    private function renderVariantPhotoGrid(int $productId, int $variantId): string
+    {
+        $images = getVariantImagesForAdmin($variantId);
+
+        ob_start();
+        include ROOT_PATH . '/src/Views/components/admin/variant-photo-grid.php';
+        return (string) ob_get_clean();
     }
 
     /**

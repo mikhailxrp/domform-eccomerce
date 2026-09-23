@@ -234,6 +234,26 @@ function requireCsrf(): void
     }
 }
 
+// ─── AJAX-ответы ────────────────────────────────────────────────────────
+
+/**
+ * Отличает fetch-запрос от обычной отправки `<form>` — JS всегда
+ * проставляет заголовок `X-Requested-With` сам (браузер этого не
+ * делает), чтобы Controller мог ответить JSON вместо `redirect()` и
+ * при этом сохранить рабочую форму без JS (`variant-photos.php`).
+ */
+function wantsJson(): bool
+{
+    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+}
+
+function jsonResponse(array $data, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+}
+
 // ─── Роли и текущий пользователь ────────────────────────────────────────
 // currentUser()/roleAllowed() читают только $_SESSION (id/name/role туда
 // кладутся при логине и авто-входе по remember-cookie) — без похода в БД,

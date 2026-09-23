@@ -30,6 +30,25 @@ function detectUploadedMime(string $tmpName): string
 }
 
 /**
+ * `[width, height]` загруженного файла до какой-либо декодировки через
+ * GD — `getimagesize()` читает только заголовок, не весь файл, поэтому
+ * безопасен даже для decompression bomb. `null`, если размер не
+ * определён (не изображение / повреждённый файл) — тот же случай, что
+ * `''` у `detectUploadedMime()`, дальше отфильтровывается
+ * `validateUploadedImage()`.
+ */
+function detectImageDimensions(string $tmpName): ?array
+{
+    if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+        return null;
+    }
+
+    $size = @getimagesize($tmpName);
+
+    return $size !== false ? [$size[0], $size[1]] : null;
+}
+
+/**
  * Сохраняет уже провалидированное фото (`validateUploadedImage()`
  * вызывается до этой функции, не внутри неё) в `UPLOAD_PRODUCTS_DIR` со
  * случайным именем — оригинальное имя файла никогда не используется как
@@ -60,7 +79,76 @@ function storeProductImage(array $file): ?string
         return null;
     }
 
+    resizeImageIfNeeded($destination, $mime, PRODUCT_IMAGE_MAX_DIMENSION);
+
     return '/uploads/products/' . $filename;
+}
+
+/**
+ * Уменьшает фото товара до `$maxDimension` по длинной стороне, если
+ * снимок крупнее (пропорции сохраняются, апскейл не делается).
+ * Требует GD — на части shared-хостингов расширение может быть
+ * отключено, поэтому при `!extension_loaded('gd')` или отсутствии
+ * нужной `imagecreatefrom*()`/`image*()` пары для конкретного MIME
+ * тихо ничего не делает: сам файл уже сохранён `move_uploaded_file()`
+ * до вызова этой функции, загрузка не должна падать из-за
+ * недоступного ресайза — просто фото останется в исходном размере.
+ */
+function resizeImageIfNeeded(string $path, string $mime, int $maxDimension): void
+{
+    if (!extension_loaded('gd')) {
+        return;
+    }
+
+    $decode = match ($mime) {
+        'image/jpeg' => function_exists('imagecreatefromjpeg') ? 'imagecreatefromjpeg' : null,
+        'image/png'  => function_exists('imagecreatefrompng') ? 'imagecreatefrompng' : null,
+        'image/webp' => function_exists('imagecreatefromwebp') ? 'imagecreatefromwebp' : null,
+        default      => null,
+    };
+    $encode = match ($mime) {
+        'image/jpeg' => function_exists('imagejpeg') ? 'imagejpeg' : null,
+        'image/png'  => function_exists('imagepng') ? 'imagepng' : null,
+        'image/webp' => function_exists('imagewebp') ? 'imagewebp' : null,
+        default      => null,
+    };
+
+    if ($decode === null || $encode === null) {
+        return;
+    }
+
+    $size = @getimagesize($path);
+    if ($size === false) {
+        return;
+    }
+
+    [$width, $height] = $size;
+    if ($width <= 0 || $height <= 0 || ($width <= $maxDimension && $height <= $maxDimension)) {
+        return;
+    }
+
+    $source = @$decode($path);
+    if ($source === false) {
+        return;
+    }
+
+    $ratio     = min($maxDimension / $width, $maxDimension / $height);
+    $newWidth  = max(1, (int) round($width * $ratio));
+    $newHeight = max(1, (int) round($height * $ratio));
+
+    $resized = imagecreatetruecolor($newWidth, $newHeight);
+
+    if ($mime === 'image/png' || $mime === 'image/webp') {
+        imagealphablending($resized, false);
+        imagesavealpha($resized, true);
+    }
+
+    imagecopyresampled($resized, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+
+    $mime === 'image/jpeg' ? $encode($resized, $path, 85) : $encode($resized, $path);
+
+    imagedestroy($source);
+    imagedestroy($resized);
 }
 
 /**

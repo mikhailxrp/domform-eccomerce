@@ -20,6 +20,24 @@ const UPLOAD_ALLOWED_MIME = [
     'image/webp' => 'webp',
 ];
 
+/**
+ * Максимальная сторона фото товара после ресайза (`FileUpload.php`,
+ * `resizeImageIfNeeded()`) — 1600px с запасом для полноэкранного показа
+ * на карточке Товара (`product/show.php`), не только миниатюры.
+ */
+const PRODUCT_IMAGE_MAX_DIMENSION = 1600;
+
+/**
+ * Максимальная сторона исходного загружаемого фото в пикселях —
+ * ограничивает файл, который декодирует GD в `resizeImageIfNeeded()`.
+ * Без этого предела вес файла (`UPLOAD_MAX_BYTES`) не защищает от
+ * decompression bomb: однотонный PNG/WEBP огромного разрешения весит
+ * несколько сотен КБ на диске, но при декодировании GD аллоцирует
+ * `ширина * высота * 4` байт в память — на shared-хостинге этого
+ * достаточно, чтобы упереться в `memory_limit` и уронить запрос.
+ */
+const UPLOAD_MAX_DIMENSION = 8000;
+
 function uploadExtensionForMime(string $mime): ?string
 {
     return UPLOAD_ALLOWED_MIME[$mime] ?? null;
@@ -28,9 +46,12 @@ function uploadExtensionForMime(string $mime): ?string
 /**
  * `$file` — элемент `$_FILES`. `$detectedMime` — результат `finfo` по
  * содержимому временного файла (не расширение и не `$file['type']`,
- * который присылает браузер и которому нельзя доверять).
+ * который присылает браузер и которому нельзя доверять). `$dimensions`
+ * — `[width, height]` из `getimagesize()` (`FileUpload.php`,
+ * `detectImageDimensions()`) либо `null`, если размер не определён —
+ * тем же приёмом, что и `$detectedMime`, чтение файла остаётся снаружи.
  */
-function validateUploadedImage(array $file, string $detectedMime): ?string
+function validateUploadedImage(array $file, string $detectedMime, ?array $dimensions = null): ?string
 {
     $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
 
@@ -49,6 +70,10 @@ function validateUploadedImage(array $file, string $detectedMime): ?string
 
     if (uploadExtensionForMime($detectedMime) === null) {
         return 'Недопустимый тип файла — только JPG, PNG или WEBP.';
+    }
+
+    if ($dimensions !== null && ($dimensions[0] > UPLOAD_MAX_DIMENSION || $dimensions[1] > UPLOAD_MAX_DIMENSION)) {
+        return 'Слишком большое разрешение фото (максимум ' . UPLOAD_MAX_DIMENSION . 'px по стороне).';
     }
 
     return null;
