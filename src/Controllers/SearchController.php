@@ -38,8 +38,20 @@ class SearchController
 
         $user = currentUser();
 
+        // Canonical/description строятся только от `q` — `sort` не
+        // меняет состав результатов, только порядок, поэтому разные
+        // сортировки одного запроса не должны индексироваться отдельно
+        // (та же логика, что `CatalogController` применяет к фильтрам
+        // категории, `tz.md` §13.1/§13.3).
+        $canonical   = rtrim(APP_URL, '/') . '/search' . ($q !== '' ? '?' . http_build_query(['q' => $q]) : '');
+        $description = $q !== ''
+            ? sprintf('Результаты поиска «%s» в каталоге мебели ДомФорм.', $q)
+            : 'Поиск по каталогу мебели на заказ в Краснодаре — сайт ДомФорм.';
+
         render('search/index', [
             'q'               => $q,
+            'description'     => $description,
+            'canonical'       => $canonical,
             'products'        => $products,
             'filters'         => ['sort' => $sort],
             'resetUrl'        => '/catalog',

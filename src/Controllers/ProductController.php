@@ -51,8 +51,15 @@ class ProductController
 
             return [
                 'id'                 => $variantId,
+                'sku'                => $variant['sku'],
                 'material'           => $variant['material'],
                 'mechanism_type'     => $variant['mechanism_type'],
+                // Сырая DECIMAL-строка из БД, только для schema.org
+                // (`buildProductSchema()`) — `data-variants` JS-блоку
+                // хватает `price_formatted`, но лишнее поле в уже
+                // существующем публичном JSON безопаснее, чем повторно
+                // выводить деньги через `formatPrice()` и парсить назад.
+                'price_raw'          => $variant['price'],
                 'price_formatted'    => formatPrice($variant['price']),
                 // Старая цена и процент скидки (`FR-DISC-002`, Таск 2
                 // Фазы 6) — `old_price` уже сырая цена Варианта
@@ -105,10 +112,28 @@ class ProductController
 
         $currentUserId = currentUser()['id'] ?? null;
 
+        $canonical = rtrim(APP_URL, '/') . '/product/' . $slug;
+
+        // Шаблон описания по `tz.md` §13.2: название, категория, краткая
+        // характеристика, упоминание Краснодара — первая строка
+        // характеристик (`$specs` уже отсортирована `sort_order` в
+        // Model), не весь список, чтобы уложиться в 160 символов.
+        $firstSpec     = $specs[0] ?? null;
+        $specFragment  = $firstSpec !== null ? sprintf('%s: %s. ', $firstSpec['name'], $firstSpec['value']) : '';
+        $description   = sprintf(
+            '%s — %s на заказ в Краснодаре. %sЦена, фото и характеристики на сайте ДомФорм.',
+            $product['name'],
+            $category['name'],
+            $specFragment,
+        );
+
         render('product/show', [
             'title'         => $product['name'],
             'product'       => $product,
             'breadcrumbs'   => $breadcrumbs,
+            'description'   => $description,
+            'canonical'     => $canonical,
+            'productSchema' => $this->buildProductSchema($product, $variantsData, $description, $canonical),
             'variants'      => $variantsData,
             'specs'         => $specs,
             'related'       => $related,
@@ -118,5 +143,50 @@ class ProductController
             'reviewErrors'  => $reviewErrors,
             'favoriteIds'   => $currentUserId !== null ? getFavoriteProductIds($currentUserId) : [],
         ]);
+    }
+
+    /**
+     * `schema.org/Product` (`tz.md` §13.3) — один `Offer` на Вариант, а
+     * не единая цена/наличие на Товар: у Вариантов разная цена и разный
+     * статус (выставочный образец готов сразу — `InStock`, остальное —
+     * `MadeToOrder`, обе даты — реальные значения `ItemAvailability`
+     * schema.org). Цена берётся из того же `$variantsData`, что уже
+     * показан покупателю (`price_raw`) — расхождение видимой цены и
+     * разметки здесь структурно невозможно, не только по факту данных.
+     */
+    private function buildProductSchema(array $product, array $variantsData, string $fallbackDescription, string $canonical): array
+    {
+        $offers = array_map(static function (array $variant) use ($canonical): array {
+            return [
+                '@type'         => 'Offer',
+                'sku'           => $variant['sku'],
+                'price'         => $variant['price_raw'],
+                'priceCurrency' => 'RUB',
+                'availability'  => $variant['is_showroom_sample']
+                    ? 'https://schema.org/InStock'
+                    : 'https://schema.org/MadeToOrder',
+                'url'           => $canonical,
+            ];
+        }, $variantsData);
+
+        $primaryImagePath = $variantsData[0]['images'][0]['path'] ?? null;
+        $productDescription = (string) ($product['description'] ?? '');
+
+        $schema = [
+            '@context'    => 'https://schema.org',
+            '@type'       => 'Product',
+            'name'        => $product['name'],
+            'description' => $productDescription !== '' ? $productDescription : $fallbackDescription,
+            'sku'         => $variantsData[0]['sku'] ?? null,
+            'category'    => $product['category_name'],
+            'url'         => $canonical,
+            'offers'      => $offers,
+        ];
+
+        if ($primaryImagePath !== null) {
+            $schema['image'] = rtrim(APP_URL, '/') . $primaryImagePath;
+        }
+
+        return $schema;
     }
 }

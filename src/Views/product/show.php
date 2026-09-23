@@ -13,6 +13,7 @@ declare(strict_types=1);
 /** @var array $reviewOld */
 /** @var array $reviewErrors */
 /** @var array<int,int> $favoriteIds id избранных Товаров текущего пользователя (Таск 6 Фазы 7); пусто для гостя */
+/** @var array $productSchema готовый массив для `schema.org/Product` (`ProductController::buildProductSchema()`) */
 
 include ROOT_PATH . '/src/Views/layout/header.php';
 
@@ -36,6 +37,8 @@ foreach ($firstVariant['images'] as $image) {
     $thumbnails[$key] = $image;
 }
 ?>
+
+<script type="application/ld+json"><?= json_encode($productSchema, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 
 <main>
     <?php include ROOT_PATH . '/src/Views/components/flash.php'; ?>

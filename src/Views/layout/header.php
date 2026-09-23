@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 /** @var string|null $title */
+/** @var string|null $description Текст под конкретную страницу (`tz.md` §13.2) — если не передан, используется общий текст сайта */
+/** @var string|null $canonical Абсолютный URL для `<link rel="canonical">` — если не передан, тег не выводится */
 
 require_once ROOT_PATH . '/src/Models/Category.php';
 require_once ROOT_PATH . '/src/Models/Favorite.php';
@@ -10,6 +12,8 @@ require_once ROOT_PATH . '/src/Models/Setting.php';
 require_once ROOT_PATH . '/src/Core/CatalogFilters.php';
 
 $pageTitle           = isset($title) && $title !== '' ? $title . ' — ДомФорм' : 'ДомФорм — мебель на заказ';
+$pageDescription     = metaDescription(isset($description) && $description !== '' ? $description : 'ДомФорм — мебель на заказ в Краснодаре и крае.');
+$pageCanonical       = isset($canonical) && $canonical !== '' ? $canonical : null;
 $isLoggedIn          = isAuthenticated();
 $userName            = $isLoggedIn ? (string) ($_SESSION['user_name'] ?? '') : '';
 $catalogCategories   = getCategoryTree();
@@ -24,7 +28,10 @@ $favoriteCount       = $isLoggedIn ? countFavorites((int) currentUser()['id']) :
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <title><?= e($pageTitle) ?></title>
-    <meta name="description" content="ДомФорм — мебель на заказ в Краснодаре и крае.">
+    <meta name="description" content="<?= e($pageDescription) ?>">
+    <?php if ($pageCanonical !== null): ?>
+    <link rel="canonical" href="<?= e($pageCanonical) ?>">
+    <?php endif; ?>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
 
