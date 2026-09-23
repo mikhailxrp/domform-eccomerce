@@ -165,6 +165,18 @@ function deleteCategory(int $id): bool
     }
 }
 
+/**
+ * Слаги всех Категорий для `sitemap.xml` — своего `is_active` у
+ * категорий нет (`database.md`), поэтому в отличие от Товаров здесь
+ * не нужен фильтр по активности.
+ */
+function getCategorySlugsForSitemap(): array
+{
+    $stmt = getPdo()->query('SELECT slug FROM categories ORDER BY slug');
+
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
 function getCategoryTree(): array
 {
     $stmt = getPdo()->query(

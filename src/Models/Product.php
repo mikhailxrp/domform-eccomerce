@@ -1071,6 +1071,22 @@ function updateProductWithVariants(int $id, array $product, array $variants, arr
 }
 
 /**
+ * Слаги активных Товаров для `sitemap.xml` — тот же критерий
+ * `is_active = 1`, что даёт `findProductBySlug()` 200 вместо 404,
+ * без дополнительного условия на активный Вариант: карточка
+ * рендерится и без него, так что это не должно исключать её из карты
+ * сайта.
+ */
+function getActiveProductSlugsForSitemap(): array
+{
+    $stmt = getPdo()->query(
+        'SELECT slug, updated_at FROM products WHERE is_active = 1 ORDER BY slug'
+    );
+
+    return $stmt->fetchAll();
+}
+
+/**
  * Товар для карточки — сразу с его primary-категорией (`is_primary = 1`,
  * ровно одна на Товар — гарантировано сидами Таска 1 Фазы 1): и
  * хлебные крошки, и «Похожие товары» нужна именно она. Неактивный

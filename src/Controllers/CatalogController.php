@@ -66,6 +66,23 @@ class CatalogController
 
         $user = currentUser();
 
+        // Canonical строится из slug Категории, не из query-параметров
+        // текущего запроса (`tz.md` §13.1/§13.3) — любая комбинация
+        // фильтров/сортировки одной Категории указывает на один и тот же
+        // базовый адрес, страница фильтра отдельно не индексируется.
+        $canonical = rtrim(APP_URL, '/') . $path;
+
+        if ($category !== null) {
+            $productCount = getCategoryProductCount($category['slug']);
+            $description  = sprintf(
+                '%s на заказ в Краснодаре — %s в каталоге ДомФорм. Цены, фото, характеристики.',
+                $category['name'],
+                $productCount > 0 ? pluralizeCount($productCount, 'модель', 'модели', 'моделей') : 'новые модели',
+            );
+        } else {
+            $description = 'Каталог мебели на заказ в Краснодаре: диваны, кровати, кухни, шкафы и другое. Цены и фото на сайте ДомФорм.';
+        }
+
         $viewData = [
             'category'        => $category,
             'products'        => $products,
@@ -86,6 +103,8 @@ class CatalogController
 
         render('catalog/index', array_merge($viewData, [
             'title'          => $category['name'] ?? 'Каталог',
+            'description'    => $description,
+            'canonical'      => $canonical,
             'breadcrumbs'    => $category !== null ? getCategoryPath($category) : [],
             'categoryTree'   => getCategoryTree(),
             'filterOptions'  => getFilterOptions($category !== null ? (int) $category['id'] : null),

@@ -10,6 +10,8 @@ declare(strict_types=1);
 return [
     'GET' => [
         '/'                        => ['HomeController', 'index'],
+        '/robots.txt'              => ['SeoController', 'robots'],
+        '/sitemap.xml'             => ['SeoController', 'sitemap'],
         '/catalog'                 => ['CatalogController', 'index'],
         '/catalog/{slug}'          => ['CatalogController', 'category'],
         '/product/{slug}'          => ['ProductController', 'show'],

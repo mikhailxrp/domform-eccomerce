@@ -54,6 +54,7 @@ class HomeController
 
         render('home', [
             'title'           => 'Главная',
+            'canonical'       => rtrim(APP_URL, '/') . '/',
             'banners'         => getActiveBanners(),
             'productTabs'     => $productTabs,
             'bestsellerTabs'  => $bestsellerTabs,

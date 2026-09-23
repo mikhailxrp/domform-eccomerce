@@ -44,9 +44,11 @@ class PageController
         }
 
         render('pages/show', [
-            'title'    => $page['title'],
-            'page'     => $page,
-            'bodyHtml' => renderContentBody((string) $page['body']),
+            'title'       => $page['title'],
+            'description' => defaultPageDescription($page['title']),
+            'canonical'   => rtrim(APP_URL, '/') . publicUrlForContentSlug($slug),
+            'page'        => $page,
+            'bodyHtml'    => renderContentBody((string) $page['body']),
         ]);
     }
 
@@ -71,6 +73,8 @@ class PageController
 
         render('pages/about', [
             'title'         => $page['title'],
+            'description'   => defaultPageDescription($page['title']),
+            'canonical'     => rtrim(APP_URL, '/') . '/about',
             'page'          => $page,
             'bodyHtml'      => renderContentBody((string) $page['body']),
             'galleryImages' => getAboutGalleryImages(),
@@ -92,9 +96,11 @@ class PageController
         }
 
         render('pages/showroom', [
-            'title'    => $page['title'],
-            'page'     => $page,
-            'bodyHtml' => renderContentBody((string) $page['body']),
+            'title'       => $page['title'],
+            'description' => defaultPageDescription($page['title']),
+            'canonical'   => rtrim(APP_URL, '/') . '/showroom',
+            'page'        => $page,
+            'bodyHtml'    => renderContentBody((string) $page['body']),
         ]);
     }
 
@@ -129,11 +135,13 @@ class PageController
         }
 
         render('pages/contacts', [
-            'title'    => $page['title'],
-            'page'     => $page,
-            'bodyHtml' => renderContentBody((string) $page['body']),
-            'old'      => $old,
-            'errors'   => $errors,
+            'title'       => $page['title'],
+            'description' => defaultPageDescription($page['title']),
+            'canonical'   => rtrim(APP_URL, '/') . '/contacts',
+            'page'        => $page,
+            'bodyHtml'    => renderContentBody((string) $page['body']),
+            'old'         => $old,
+            'errors'      => $errors,
         ]);
     }
 

@@ -150,6 +150,42 @@ function e(string $value): string
 }
 
 /**
+ * Единая точка нормализации `<meta name="description">` (`header.php`)
+ * — Controller передаёт сырой текст любой длины, обрезка и схлопывание
+ * пробелов происходят один раз здесь, а не в каждом Controller отдельно
+ * (`tz.md` §13.2: до 160 символов).
+ */
+function metaDescription(string $text, int $maxLength = 160): string
+{
+    $normalized = trim((string) preg_replace('/\s+/u', ' ', $text));
+
+    if (mb_strlen($normalized) <= $maxLength) {
+        return $normalized;
+    }
+
+    return mb_substr($normalized, 0, $maxLength - 1) . '…';
+}
+
+/**
+ * Число + правильная форма русского существительного («1 модель»,
+ * «2 модели», «5 моделей») — для описаний категорий (`tz.md` §13.2:
+ * «число моделей»).
+ */
+function pluralizeCount(int $number, string $one, string $few, string $many): string
+{
+    $mod10  = $number % 10;
+    $mod100 = $number % 100;
+
+    $form = match (true) {
+        $mod10 === 1 && $mod100 !== 11                                => $one,
+        in_array($mod10, [2, 3, 4], true) && !in_array($mod100, [12, 13, 14], true) => $few,
+        default                                                       => $many,
+    };
+
+    return $number . ' ' . $form;
+}
+
+/**
  * `$price` — строка DECIMAL из БД (PDO без emulated prepares отдаёт
  * DECIMAL как строку). Приведение к int — обычный string-to-int парсинг
  * PHP, не через float (`php.md`: деньги никогда не float).

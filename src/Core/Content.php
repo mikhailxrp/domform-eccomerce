@@ -64,6 +64,19 @@ function publicUrlForContentSlug(string $slug): string
     };
 }
 
+/**
+ * Описание для `<meta name="description">` статической страницы —
+ * `content_pages` не хранит отдельного поля под сниппет (`database.md`:
+ * только `title`/`body`), а `body` — маркетинговый текст произвольной
+ * длины/формата, не годится под 160 символов напрямую. Заголовок
+ * страницы уже сформулирован коротко Администратором, этого достаточно
+ * для устранения дубля описания между страницами (`/audit-seo`).
+ */
+function defaultPageDescription(string $title): string
+{
+    return $title . ' — ДомФорм, мебель на заказ в Краснодаре и крае.';
+}
+
 function renderContentBody(string $body): string
 {
     $normalized = str_replace(["\r\n", "\r"], "\n", $body);
