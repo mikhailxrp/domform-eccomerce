@@ -11,6 +11,12 @@ declare(strict_types=1);
  * HTTP-статусе вне 200–299 — вызывающий код (`Services/Ai/ai.php`)
  * обязан перехватывать её и превращать в `null`, не пробрасывать
  * дальше (`FR-AI-*`: недоступность провайдера не ломает сайт).
+ *
+ * `CURLOPT_USERAGENT` задан явно: без него PHP-curl не шлёт заголовок
+ * User-Agent вообще, а WAF провайдера (Cloudflare перед OpenRouter)
+ * молча режет такие запросы 403 `Access denied by security policy`
+ * ещё до роутинга на модель — найдено вживую после первого прод-деплоя
+ * на shared-хостинг (`dev-log.md`, 23.09.2026).
  */
 function aiHttpPostJson(string $url, array $headers, array $payload, int $timeoutSeconds): array
 {
@@ -26,6 +32,7 @@ function aiHttpPostJson(string $url, array $headers, array $payload, int $timeou
         CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
         CURLOPT_TIMEOUT        => $timeoutSeconds,
         CURLOPT_CONNECTTIMEOUT => $timeoutSeconds,
+        CURLOPT_USERAGENT      => 'DomForm/1.0 (+' . APP_URL . ')',
     ]);
 
     $body   = curl_exec($ch);

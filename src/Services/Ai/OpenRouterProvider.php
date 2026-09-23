@@ -36,7 +36,11 @@ final class OpenRouterProvider implements AiProvider
 
         $response = aiHttpPostJson(
             self::ENDPOINT,
-            ['Authorization: Bearer ' . $this->apiKey],
+            [
+                'Authorization: Bearer ' . $this->apiKey,
+                'HTTP-Referer: ' . APP_URL,
+                'X-Title: ДомФорм',
+            ],
             $payload,
             AI_TIMEOUT_SECONDS
         );
