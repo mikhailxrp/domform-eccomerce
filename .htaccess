@@ -2,6 +2,16 @@ Options -Indexes
 
 RewriteEngine On
 
+# Прод отдаёт Secure-куки сессии только при APP_ENV=production
+# (`ensureSessionStarted()`), поэтому HTTP без редиректа тихо ломает
+# логин/сессию (см. `php.md`). Локальные хосты (OSPanel/XAMPP) не
+# трогаем — они всегда по HTTP.
+RewriteCond %{HTTP_HOST} !^localhost($|:) [NC]
+RewriteCond %{HTTP_HOST} !\.local$ [NC]
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
 # Блокировать прямой доступ к служебным папкам и файлам
 RewriteRule ^(src|config|database|storage|\.docs|\.git|\.env)(/|$) - [F,L]
 
