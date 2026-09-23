@@ -5179,3 +5179,30 @@ WAF) и рекомендованные OpenRouter-заголовки `HTTP-Refer
 **Что следующее:** не запланировано.
 
 ---
+
+**Дата:** 23.09.2026
+**Что сделано:** По просьбе пользователя все три помощника переведены
+на YandexGPT (обход блокировки Cloudflare перед OpenRouter из
+предыдущей записи — Claude по классу `anonymous` больше не
+вызывается). Изменено только в `src/Services/Ai/ai.php`:
+`providerFor()` — обе ветки `match` (`AI_CLASS_ANONYMOUS` и
+`AI_CLASS_USER_INPUT`) теперь возвращают `createYandexGptProvider()`;
+`providerNameForClass()` — обе ветки возвращают `'yandexgpt'` (иначе
+`ai_requests`/`/admin/ai` продолжили бы подписывать «specs»/
+«description» как `openrouter`, хотя реально их обслуживает Yandex).
+`createOpenRouterProvider()` и класс `OpenRouterProvider` не удалены —
+рабочий код, при снятии блокировки (другой хостинг/выделенный IP)
+откат — вернуть одну строку в `providerFor()`. Заодно
+`src/Views/admin/ai/index.php`: подпись класса `anonymous` в
+`$classLabels` была `«Обезличенные данные (OpenRouter)»` — стала
+`«(YandexGPT)»`, иначе Панель управления показывала бы неверный
+провайдер. `composer test` — 516/516 без регрессий.
+**Залито на сервер (FTP, только изменённые файлы):**
+`src/Services/Ai/ai.php`, `src/Views/admin/ai/index.php`. Проверено
+вживую одноразовым диагностическим скриптом в `public/`
+(самоудалился после запуска): `aiComplete()` для `specs`/
+`description`/`consultant` — все три `provider: yandexgpt`, `ok: true`,
+реальный ответ модели по каждому.
+**Что следующее:** не запланировано.
+
+---

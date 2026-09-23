@@ -19,13 +19,17 @@ require_once __DIR__ . '/YandexGptProvider.php';
  * — читает конфигурацию только из `.env`. Ключ класса не задан → `null`
  * без исключения: запрос к провайдеру другого класса/юрисдикции не
  * уходит молча (`AC-06`, `phase-9.md` «Решения фазы»).
+ *
+ * Временно оба класса ведут на YandexGPT — Cloudflare перед
+ * `openrouter.ai` блокирует исходящий IP прод-хостинга (`dev-log.md`,
+ * 23.09.2026), `createOpenRouterProvider()` рабочий и оставлен как
+ * есть для отката, когда блокировка снимется (другой хостинг/IP).
  */
 function providerFor(string $taskClass): ?AiProvider
 {
     return match ($taskClass) {
-        AI_CLASS_ANONYMOUS  => createOpenRouterProvider(),
-        AI_CLASS_USER_INPUT => createYandexGptProvider(),
-        default             => null,
+        AI_CLASS_ANONYMOUS, AI_CLASS_USER_INPUT => createYandexGptProvider(),
+        default                                 => null,
     };
 }
 
@@ -81,9 +85,8 @@ function aiAssistantEnabled(string $assistant): bool
 function providerNameForClass(string $taskClass): string
 {
     return match ($taskClass) {
-        AI_CLASS_ANONYMOUS  => 'openrouter',
-        AI_CLASS_USER_INPUT => 'yandexgpt',
-        default             => 'unknown',
+        AI_CLASS_ANONYMOUS, AI_CLASS_USER_INPUT => 'yandexgpt',
+        default                                 => 'unknown',
     };
 }
 

@@ -19,7 +19,7 @@ $assistantLabels = [
 ];
 
 $classLabels = [
-    'anonymous'  => 'Обезличенные данные (OpenRouter)',
+    'anonymous'  => 'Обезличенные данные (YandexGPT)',
     'user_input' => 'Пользовательский ввод (YandexGPT)',
 ];
 ?>
