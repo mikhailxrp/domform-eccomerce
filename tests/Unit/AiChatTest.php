@@ -245,6 +245,32 @@ final class AiChatTest extends TestCase
         $this->assertStringContainsString((string) AI_CHAT_DEMO_LIMIT, $payload['message']);
     }
 
+    public function testLimitReachedPayloadUsesGivenLimit(): void
+    {
+        $payload = chatLimitReachedPayload(AI_API_CHAT_LIMIT);
+
+        $this->assertStringContainsString(AI_API_CHAT_LIMIT . ' из ' . AI_API_CHAT_LIMIT, $payload['message']);
+    }
+
+    // ─── apiChatLimitReached() ───────────────────────────────────────────────
+
+    public function testApiLimitIsFifteenQuestions(): void
+    {
+        $this->assertSame(15, AI_API_CHAT_LIMIT);
+    }
+
+    public function testApiLimitNotReachedBelowLimit(): void
+    {
+        $this->assertFalse(apiChatLimitReached(0));
+        $this->assertFalse(apiChatLimitReached(AI_API_CHAT_LIMIT - 1));
+    }
+
+    public function testApiLimitReachedAtAndAboveLimit(): void
+    {
+        $this->assertTrue(apiChatLimitReached(AI_API_CHAT_LIMIT));
+        $this->assertTrue(apiChatLimitReached(AI_API_CHAT_LIMIT + 5));
+    }
+
     // ─── buildDemoGreeting() ─────────────────────────────────────────────────
 
     public function testGreetingContainsModelNameAndLimit(): void

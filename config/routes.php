@@ -59,6 +59,7 @@ return [
         '/admin/sales-channels'    => ['AdminSalesChannelController', 'index'],
         '/admin/integrations'      => ['AdminIntegrationController', 'index'],
         '/admin/ai'                => ['AdminAiController', 'index'],
+        '/admin/api-clients'       => ['AdminApiClientController', 'index'],
         '/admin/ai/specs'          => ['AdminAiSpecController', 'index'],
         '/admin/ai/specs/{id}'     => ['AdminAiSpecController', 'review'],
         '/admin/users'             => ['AdminUserController', 'index'],
@@ -91,6 +92,9 @@ return [
         '/favorites/remove'        => ['FavoriteController', 'remove'],
         '/cart/move-to-favorites'  => ['CartController', 'moveToFavorites'],
         '/ai/consultant'           => ['AiChatController', 'consultant'],
+        '/api/v1/consultant'       => ['ApiConsultantController', 'consultant'],
+        '/admin/api-clients'       => ['AdminApiClientController', 'store'],
+        '/admin/api-clients/{id}/toggle' => ['AdminApiClientController', 'toggle'],
         '/admin/orders'                  => ['AdminOrderController', 'store'],
         '/admin/orders/{id}/transition'  => ['AdminOrderController', 'transition'],
         '/admin/orders/{id}/prepaid'     => ['AdminOrderController', 'markPrepaid'],
@@ -136,5 +140,8 @@ return [
         '/admin/settings'               => ['AdminSettingController', 'update'],
         '/admin/about-gallery'          => ['AdminAboutGalleryController', 'store'],
         '/admin/about-gallery/{id}/delete' => ['AdminAboutGalleryController', 'delete'],
+    ],
+    'OPTIONS' => [
+        '/api/v1/consultant'       => ['ApiConsultantController', 'preflight'],
     ],
 ];

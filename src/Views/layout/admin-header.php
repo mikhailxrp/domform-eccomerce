@@ -74,6 +74,7 @@ $adminNavItems = [
         'children' => [
             ['url' => '/admin/integrations', 'label' => 'Интеграции',   'icon' => 'bx bx-plug'],
             ['url' => '/admin/ai',           'label' => 'ИИ-помощники', 'icon' => 'bx bx-bot', 'roles' => ['admin']],
+            ['url' => '/admin/api-clients',  'label' => 'Внешние сайты', 'icon' => 'bx bx-code-alt', 'roles' => ['admin']],
             ['url' => '/admin/users',        'label' => 'Сотрудники',   'icon' => 'bx bx-user-check', 'roles' => ['admin']],
             ['url' => '/admin/settings',     'label' => 'Настройки',    'icon' => 'bx bx-cog', 'roles' => ['admin']],
         ],

@@ -271,13 +271,24 @@ function chatLimitReached(int $questionCount, bool $limitEnabled): bool
  * `chatFallbackPayload()` (временная недоступность провайдера):
  * лимит демо-версии исчерпан осознанно, это не сбой.
  */
-function chatLimitReachedPayload(): array
+function chatLimitReachedPayload(int $limit = AI_CHAT_DEMO_LIMIT): array
 {
     return [
         'limit_reached' => true,
-        'message'       => 'Лимит демо-версии консультанта исчерпан ('
-            . AI_CHAT_DEMO_LIMIT . ' из ' . AI_CHAT_DEMO_LIMIT . ' запросов в этом диалоге).',
+        'message'       => "Лимит демо-версии консультанта исчерпан ({$limit} из {$limit} запросов в этом диалоге).",
     ];
+}
+
+/**
+ * Лимит вопросов на диалог для внешних сайтов (`POST /api/v1/consultant`)
+ * — включён всегда, не зависит от `LIMIT_REQUESTS`: это рекламный показ
+ * консультанта на чужом сайте, каждый вопрос стоит денег.
+ */
+const AI_API_CHAT_LIMIT = 15;
+
+function apiChatLimitReached(int $questionCount): bool
+{
+    return $questionCount >= AI_API_CHAT_LIMIT;
 }
 
 /**

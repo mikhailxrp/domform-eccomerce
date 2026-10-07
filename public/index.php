@@ -30,8 +30,12 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
-ensureSessionStarted();
-attemptRememberLogin();
+// JSON API для внешних сайтов работает без сессии — чужой домен cookie
+// не передаёт, а Set-Cookie на каждом ответе API был бы лишним.
+if (!str_starts_with(requestPath(), '/api/')) {
+    ensureSessionStarted();
+    attemptRememberLogin();
+}
 
 $routes = loadRoutes(ROOT_PATH . '/config/routes.php');
 dispatch($routes);

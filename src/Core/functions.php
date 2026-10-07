@@ -504,7 +504,13 @@ function tooManyAttempts(string $action, int $maxAttempts, int $decaySeconds = 6
     return (int) $data['count'] >= $maxAttempts;
 }
 
-function hitRateLimit(string $action): void
+/**
+ * `$decaySeconds` — необязательный: если передан и прежнее окно уже
+ * истекло, счётчик начинается заново. Без него `first_at` не сбрасывается
+ * (старое поведение, на нём держатся существующие вызовы) — публичный
+ * платный эндпоинт `/api/v1/consultant` передаёт окно явно.
+ */
+function hitRateLimit(string $action, ?int $decaySeconds = null): void
 {
     $path = rateLimitStoragePath($action);
     $data = ['count' => 1, 'first_at' => time()];
@@ -512,8 +518,11 @@ function hitRateLimit(string $action): void
     if (is_file($path)) {
         $existing = json_decode((string) file_get_contents($path), true);
         if (is_array($existing) && isset($existing['count'], $existing['first_at'])) {
-            $data = $existing;
-            $data['count'] = (int) $data['count'] + 1;
+            $windowExpired = $decaySeconds !== null && time() - (int) $existing['first_at'] > $decaySeconds;
+            if (!$windowExpired) {
+                $data = $existing;
+                $data['count'] = (int) $data['count'] + 1;
+            }
         }
     }
 

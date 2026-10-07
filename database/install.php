@@ -782,6 +782,21 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ");
 
+// Внешние сайты с доступом к `POST /api/v1/consultant`
+// (`src/Core/ApiAuth.php`): публичный ключ + список доменов через
+// перевод строки. Ключ не секрет (лежит в `<script>` чужого сайта) —
+// защиту даёт привязка к домену и лимиты запросов.
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS api_clients (
+        id              INT AUTO_INCREMENT PRIMARY KEY,
+        name            VARCHAR(100) NOT NULL,
+        api_key         CHAR(36) NOT NULL UNIQUE,
+        allowed_origins TEXT NOT NULL,
+        is_active       TINYINT(1) NOT NULL DEFAULT 1,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
 // Добавляй свои таблицы здесь (после базовых, с учётом их FK):
 // $pdo->exec("CREATE TABLE IF NOT EXISTS ...");
 

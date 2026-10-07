@@ -811,6 +811,27 @@ URL встраиваемой карты — то, что раньше лежал
 > вставляет наш контроллер (`AiChatController`) после ответа
 > `aiComplete()`, а не сам провайдер.
 
+Строки пишут и `AiChatController` (сайт), и `ApiConsultantController`
+(внешние сайты). Для API эта таблица — ещё и хранилище истории и
+счётчика вопросов диалога (у API нет сессии): `getAiChatHistory()`,
+`countAiChatQuestions()` в `Models/AiChatLog.php`. Подробности —
+`.docs/modules/api-consultant.md`.
+
+---
+
+### `api_clients` _(новая — внешние сайты для API консультанта)_
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| id | INT PK AUTO_INCREMENT | |
+| name | VARCHAR(100) NOT NULL | название сайта для списка в Панели |
+| api_key | CHAR(36) NOT NULL UNIQUE | публичный ключ `dfk_` + 32 hex; лежит в `<script data-key>` чужого сайта, поэтому не секрет — доступ держится на `allowed_origins` |
+| allowed_origins | TEXT NOT NULL | разрешённые домены (`scheme://host[:port]`) через перевод строки, нормализуются `parseAllowedOrigins()` |
+| is_active | TINYINT(1) NOT NULL DEFAULT 1 | `0` — ключ отключён, API отвечает 403 |
+| created_at | TIMESTAMP DEFAULT NOW | |
+
+Управление — `/admin/api-clients`, только `admin`.
+
 ---
 
 ## Дополнительные таблицы (примеры для расширения)

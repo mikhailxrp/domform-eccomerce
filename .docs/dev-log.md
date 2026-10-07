@@ -5353,3 +5353,11 @@ Valex (воспроизводится уже на `/login`, до всякого 
 совпали).
 
 ---
+
+---
+
+**Дата:** 07.10.2026
+**Что сделано:** API консультанта для внешних сайтов — `POST /api/v1/consultant` + виджет `public/embed/consultant.js` (Shadow DOM, одна строка `<script data-key>`). Ядро ответа вынесено из `AiChatController` в `runConsultant()` (`src/Services/Ai/consultant.php`) — теперь его вызывают и чат на сайте, и API, логика не расходится (поведение чата на сайте не менялось). Доступ — публичный ключ клиента + проверка `Origin` по списку доменов (`api_clients`, `/admin/api-clients`, только `admin`); без сессии и CSRF (`index.php` пропускает сессию для `/api/*`); история и счётчик вопросов — в `ai_chat_logs` по `conversation_id`. Лимит 15 вопросов на диалог, всегда включён. `hitRateLimit()` получил необязательный `$decaySeconds` (сброс истёкшего окна) — API использует его; прежние вызовы без аргумента ведут себя как раньше, известный баг окна для них не исправлен.
+**Проверка:** `composer test` — 547/547 (+28: `ApiAuthTest`, лимит API в `AiChatTest`, окно в `RateLimitTest`); `php -l` по всем изменённым файлам, `node --check` виджета. Живой запрос к API и к БД не гонялся — `.env` окружения указывает на прод-БД Beget, а таблицы `api_clients` там ещё нет. Тест нашёл и исправил: `$` в регулярке формата ключа пропускал перевод строки в конце (`\z`).
+**Что следующее:** `php database/install.php` на проде, залить файлы, создать ключ в Панели, проверить виджет на тестовой странице другого домена (CORS, 403 на чужом домене, лимит 15).
+**Файлы:** `src/Core/ApiAuth.php`, `src/Core/AiChat.php`, `src/Core/functions.php`, `src/Models/ApiClient.php`, `src/Models/AiChatLog.php`, `src/Services/Ai/consultant.php`, `src/Controllers/ApiConsultantController.php`, `src/Controllers/AdminApiClientController.php`, `src/Controllers/AiChatController.php`, `src/Views/admin/api-clients/index.php`, `src/Views/layout/admin-header.php`, `config/routes.php`, `public/index.php`, `public/embed/consultant.js`, `database/install.php`, `tests/*`, `.docs/database.md`, `.docs/modules/api-consultant.md`.
